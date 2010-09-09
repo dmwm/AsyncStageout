@@ -19,7 +19,7 @@ from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
-from TransferWorker import TransferWorker
+from AsyncTransfer.TransferWorker import TransferWorker
 
 from multiprocessing import Pool
 
