@@ -123,7 +123,9 @@ if __name__ == '__main__':
     """
     Something temporary while I write the unit tests...
     """
-    config = loadConfigurationFile('../DefaultConfig.py')
+    import sys
+    cfg_file = sys.path[0].replace('AsyncTransfer', 'DefaultConfig.py')
+    config = loadConfigurationFile(cfg_file)
     
     d = TransferDaemon(config)
     #while True:

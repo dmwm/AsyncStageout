@@ -21,10 +21,10 @@ class TransferWorker:
         """
         self.user = user
         self.tfc_map = tfc_map 
-        self.config = config.AsyncTransfer
+        self.config = config
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
-        logging.basicConfig(level=config.AsyncTransfer.log_level)
+        logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker')
         self.logger.info('Worker loaded for %s' % user)
         
@@ -83,7 +83,6 @@ class TransferWorker:
                  'endkey':[self.user, site, {}]}
             
             active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
-            
             self.logger.info('%s has %s files' % (self.user, len(active_files)))
             
             # take these active files and make a pfn:id/lfn dictionary
@@ -94,6 +93,7 @@ class TransferWorker:
             pfn_lfn_map = dict(map(tfc_map, active_files))
             
             files = self.db.loadList('AsyncTransfer', 'ftscp', 'ftscp', query)
+
             # files is a list of 2 lfn's - temp and permanent
             jobs.append(self.create_ftscp_input(files))
             
