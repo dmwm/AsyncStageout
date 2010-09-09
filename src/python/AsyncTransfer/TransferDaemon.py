@@ -17,6 +17,7 @@ from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
+from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
 from TransferWorker import TransferWorker
 
@@ -30,17 +31,23 @@ def ftscp(user, tfc_map, config):
     return worker.run()
     
 
-class TransferDaemon:
-    def __init__(self, config, logger):
+class TransferDaemon(BaseWorkerThread):
+    def __init__(self, config):
+        BaseWorkerThread.__init__(self)
+
         self.config = config.AsyncTransfer
+        # self.logger is set up by the BaseWorkerThread, we just set it's level
+        self.logger.setLevel(self.config.log_level)
+        self.logger.debug('Configuration loaded')
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
-        self.logger = logger
+        self.logger.debug('Connected to CouchDB')
+
         self.phedex = PhEDEx(responseType='xml')
         
+    # Over riding setup() is optional, and not needed here
         
-        
-    def __call__(self):
+    def algorithm(self, parameters):
         """
         
         1. Get a list of users with files to transfer from the couchdb instance
@@ -58,14 +65,14 @@ class TransferDaemon:
         for site in sites:
             site_tfc_map[site] = self.get_tfc_rules(site)
             
-        print 'kicking off pool'
+        self.logger.debug('kicking off pool')
         pool = Pool(processes=self.config.pool_size)
-        r = [pool.apply_async(ftscp, (u, site_tfc_map, config)) for u in users]
+        r = [pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
         pool.close()
         pool.join()
         for result in r:
             if result.ready():
-                print result.get(1)
+                self.logger.info(result.get(1))
             
     def active_users(self, db):
         """
@@ -117,10 +124,7 @@ if __name__ == '__main__':
     Something temporary while I write the unit tests...
     """
     config = loadConfigurationFile('../DefaultConfig.py')
-    logging.basicConfig(level=config.AsyncTransfer.log_level)
-    logger = logging.getLogger('AsyncTransfer')
-    logger.info('Configuration loaded')
     
-    d = TransferDaemon(config,logger)
+    d = TransferDaemon(config)
     #while True:
-    d()
+    d.algorithm()
