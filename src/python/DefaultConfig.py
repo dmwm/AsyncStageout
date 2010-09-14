@@ -17,4 +17,7 @@ config.AsyncTransfer.max_files_per_transfer = 1000
 config.AsyncTransfer.pool_size = 2
 config.AsyncTransfer.log_level = logging.DEBUG
 config.AsyncTransfer.ftscp = '../test/python/AsyncTransfer/ftscp_fake'
-config.AsyncTransfer.defaultProxy = '/home/crab/gridcert/proxy.cert'
+config.AsyncTransfer.serviceCert = '/home/crab/service.cert'
+config.AsyncTransfer.map_FTSserver = { 'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' , 'UK' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' , 'FR' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' , 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' , 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' , 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' , 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' , 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
+# Complete for other special sites (India, russia...)
+

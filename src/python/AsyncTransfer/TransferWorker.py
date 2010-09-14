@@ -26,12 +26,13 @@ class TransferWorker:
         self.config = config
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
+        self.map_fts_servers = config.map_FTSserver
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker')
         self.logger.info('Worker loaded for %s' % user)
 
-        # To follow in ticket #202 
-        self.userProxy = config.defaultProxy     
+        # TODO: use proxy management to pick this up - ticket #202 
+        self.userProxy = config.serviceCert     
   
     def run(self):
         """
@@ -128,17 +129,9 @@ class TransferWorker:
         Parse site string to know the fts server to use 
         """
         indexSite = site.split('_')
-
-        if indexSite[1] == 'IT' or indexSite[2] == 'IT': return 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'UK' or indexSite[2] == 'UK': return 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'FR' or indexSite[2] == 'FR': return 'https://cclcgftsli01.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'CH' or indexSite[2] == 'CH': return 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'US' or indexSite[2] == 'US': return 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'ES' or indexSite[2] == 'ES': return 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'DE' or indexSite[2] == 'DE': return 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer'
-        if indexSite[1] == 'TW' or indexSite[2] == 'TW': return 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer'
-        # Complete for other special sites (India, russia...)
-
+        if indexSite[1] in self.map_fts_servers : return self.map_fts_servers[ indexSite[1] ]
+        #TODO: decide what to do if indexSite[0] == 'T1'
+        else: return self.map_fts_servers['defaultServer']
         
     def buildTransferFilesAndLists(self, files):
         """
