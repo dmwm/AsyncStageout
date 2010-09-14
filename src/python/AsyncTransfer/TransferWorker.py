@@ -13,8 +13,10 @@ from WMCore.Database.CMSCouch import CouchServer
 
 import time
 import logging
-
+import subprocess, os
+import tempfile
 class TransferWorker:
+
     def __init__(self, user, tfc_map, config):
         """
         store the user and tfc the worker 
@@ -27,8 +29,10 @@ class TransferWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker')
         self.logger.info('Worker loaded for %s' % user)
-        
-        
+
+        # To follow in ticket #202 
+        self.userProxy = config.defaultProxy     
+  
     def run(self):
         """
         a. makes the ftscp copyjob
@@ -36,12 +40,54 @@ class TransferWorker:
         c. deletes successfully transferred files
         """
         jobs, pfn_lfn_map = self.files_for_transfer()
-        
+
         for job in jobs:
             for task in job:
-                pfn = task.split(' ')[0].strip()
+                pfn = (task.split(' ')[0].strip()).split(':',1)[1]
                 assert pfn in pfn_lfn_map.keys() 
-        
+
+        filePathList, sortedLists, destList = self.buildTransferFilesAndLists(jobs)        
+ 
+        count = 0
+
+        # Loop on dest keys
+        # To move to command method
+
+        for filePath in filePathList:
+
+            ret = self.cleanSpace( destList[filePath] )
+
+            if not ret:
+
+
+                for copyJob in filePathList[filePath]:
+
+                    self.logger.info( "Running FTSCP command: %s %s %s from %s " %( filePathList[filePath][copyJob], self.getFTServer(filePath), jobs, sortedLists[filePath] ) )
+
+                    proc = subprocess.Popen(
+ 
+                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                stdin=subprocess.PIPE,
+
+                            )
+
+                    command = 'export X509_USER_PROXY=%s ; ftscp -copyjobfile=%s -server=%s -mode=single' %( self.userProxy, filePathList[filePath][copyJob], self.getFTServer(filePath) )
+                    proc.stdin.write(command)
+                    stdout, stderr = proc.communicate()
+                    rc = proc.returncode
+
+                    self.logger.info("Output %s" %stdout.split('\n'))
+                    self.logger.info("ret code %s" %rc)
+
+                    os.unlink( filePathList[filePath][copyJob] )
+
+                    # Call mark_good and mark_failed methods 
+
+
+        for job in jobs:
+ 
             transferred, failed = self.command(job, self.user)
             self.mark_failed(failed)
             self.mark_good(transferred)
@@ -49,7 +95,122 @@ class TransferWorker:
         self.logger.info('%s is sleeping for %s seconds' % (self.user, len(jobs))) 
         time.sleep(len(jobs))
         return 'Transfers completed for %s' % self.user
+
+    def cleanSpace(self, allPfn):
+        """
+        Remove all PFNs got in input.
+        """
+        for listPfn in allPfn:
+
+            for pfn in listPfn:
+
+                command = 'export X509_USER_PROXY=%s ; srmrm %s'  %( self.userProxy, pfn )
+                self.logger.info("Running remove command %s" %command)
+                proc = subprocess.Popen(
+
+                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                stdin=subprocess.PIPE,
+                            )
+                proc.stdin.write(command)
+                stdout, stderr = proc.communicate()
+                rc = proc.returncode
+
+                # return 1 if the remove fails
+                #if rc: return 1
+
+        return 0
+
+
+    def getFTServer(self, site):
+        """
+        Parse site string to know the fts server to use 
+        """
+        indexSite = site.split('_')
+
+        if indexSite[1] == 'IT' or indexSite[2] == 'IT': return 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'UK' or indexSite[2] == 'UK': return 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'FR' or indexSite[2] == 'FR': return 'https://cclcgftsli01.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'CH' or indexSite[2] == 'CH': return 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'US' or indexSite[2] == 'US': return 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'ES' or indexSite[2] == 'ES': return 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'DE' or indexSite[2] == 'DE': return 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer'
+        if indexSite[1] == 'TW' or indexSite[2] == 'TW': return 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer'
+        # Complete for other special sites (India, russia...)
+
         
+    def buildTransferFilesAndLists(self, files):
+        """
+        Order source/dest to create fts copy job file 
+        create the temporary copy job file
+        """
+        allPathLists = {}
+        sortedFile, listDest = self.orderFileAlgo(files)
+
+        for files in sortedFile:
+
+            filePathList = {}
+
+            for sites in sortedFile[files]:
+
+                f = tempfile.NamedTemporaryFile(delete=False)
+                for jobs in sites:
+                    f.write(jobs + "\n")
+
+                f.close()
+                filePathList[f] = f.name
+
+            allPathLists[files] = filePathList 
+
+        return allPathLists, sortedFile, listDest
+
+
+    def orderFileAlgo(self, listTuple):
+        """
+        Order file by source/destination to create copy job file. Return also a list of destination pfn
+        to clean pfn dest before the transfer and if the transfer will faild. 
+        If T2_CH_CAF is the destination then we will have:
+        ordredList = { 'T2_CH_CAF':[ [ job1FromSite1, job2FromSite1  ] , [ job3FromSite2, job4FromSite2 ] ] ... } 
+        """
+
+        ordredList = {}
+        listDest = {}
+        siteSource = {}
+        pfnDist = {}
+
+        for transfer in listTuple[0]:
+
+            destSite = transfer.split(' ')[1].split(':')[0]
+
+            if destSite not in ordredList:
+
+                ordredList[destSite] = []
+                listDest[destSite] = []
+
+        for sortByDest in ordredList:  
+
+            for sortBySource in listTuple[0]:
+               
+                destSite = sortBySource.split(' ')[1].split(':')[0]
+ 
+                if ( destSite == sortByDest ):
+
+                    sourceSite = sortBySource.split(' ')[0].split(':')[0]
+
+                    if sourceSite not in siteSource:  
+                        siteSource[sourceSite] = []
+                        pfnDist[sourceSite] = []
+
+                    siteSource[sourceSite].append( sortBySource.replace(sortByDest+':','').replace(sourceSite+':','') )
+                    pfnDist[sourceSite].append( sortBySource.split(' ')[1].replace(sortByDest+':','') )
+
+            for lists in siteSource:
+
+                ordredList[sortByDest].append( siteSource[lists] )
+                listDest[sortByDest].append( pfnDist[lists] )
+
+        return ordredList, listDest
     
     def destinations_by_user(self):
         """
@@ -117,8 +278,12 @@ class TransferWorker:
         def tfc_map(item):
             #print item, item.split(' ')
             source, dest = tuple(item.split(' '))
-            return "%s %s" % (self.apply_tfc(source), self.apply_tfc(dest))
-            
+
+            #return "%s %s" % (self.apply_tfc(source), self.apply_tfc(dest))
+
+            # give siteSource:PFN siteDestPFN to split different sources in different jobs later  
+            return "%s %s" % (source.split(':')[0]+':'+self.apply_tfc(source), dest.split(':')[0]+':'+self.apply_tfc(dest))
+ 
         files = files.strip().split('\n')
         return map(tfc_map, files) 
     

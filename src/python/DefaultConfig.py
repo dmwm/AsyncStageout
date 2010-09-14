@@ -17,3 +17,4 @@ config.AsyncTransfer.max_files_per_transfer = 1000
 config.AsyncTransfer.pool_size = 2
 config.AsyncTransfer.log_level = logging.DEBUG
 config.AsyncTransfer.ftscp = '../test/python/AsyncTransfer/ftscp_fake'
+config.AsyncTransfer.defaultProxy = '/home/crab/gridcert/proxy.cert'
