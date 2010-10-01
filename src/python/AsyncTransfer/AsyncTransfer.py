@@ -2,19 +2,20 @@
 """
 Checks for files to transfer
 """
-
 import logging
 import threading
 
 from WMCore.Agent.Harness import Harness
-from WMCore.WMFactory import WMFactory
 
-from AsyncTransfer.TransferDaemon import TransferDaemon
+from TransferDaemon import TransferDaemon
+from LFNSourceDuplicator import LFNSourceDuplicator 
 
 class AsyncTransfer(Harness):
     """
-    _FileTransfer_
-    
+    _AsyncTransfer_
+    AsyncTransfer main class. Call workers to do following work:
+    1- Duplicate lfn's from a source into the AsyncTransfer CouchDB
+    2- Transfer LFN in the local AsyncTransfer CouchDB 
     """
 
     def __init__(self, config):
@@ -30,6 +31,15 @@ class AsyncTransfer(Harness):
 
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
+
+        logging.debug("Setting poll interval to %s seconds" \
+                      %str(self.config.AsyncTransfer.pollViewsInterval) )
+
+
+        myThread.workerThreadManager.addWorker( \
+                              LFNSourceDuplicator(self.config), \
+                              self.config.AsyncTransfer.pollViewsInterval \
+                            )
 
         logging.debug("Setting poll interval to %s seconds" \
                       %str(self.config.AsyncTransfer.pollInterval) )
