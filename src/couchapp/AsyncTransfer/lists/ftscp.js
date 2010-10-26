@@ -1,7 +1,7 @@
 function(head, req) {
 	start({
     "headers": {
-      "Content-Type": "text/html"
+      "Content-Type": "text/plain"
      }
   });
   //send("<p>");

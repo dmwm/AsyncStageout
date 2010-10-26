@@ -22,10 +22,12 @@ sites = ['T2_AT_Vienna', 'T2_BE_IIHE', 'T2_BE_UCL', 'T2_BR_SPRACE',
          'T2_UK_SGrid_Bristol', 'T2_UK_SGrid_RALPP', 'T2_US_Caltech', 
          'T2_US_Florida', 'T2_US_MIT', 'T2_US_Nebraska', 'T2_US_Purdue', 
          'T2_US_UCSD', 'T2_US_Wisconsin']
-size = 20 #TODO: read from script input
+size = 2000 #TODO: read from script input
 i = 1
 
-lfn_base = '/store/temp/user/%s/store/temp/file-%s-%s.root' 
+# lfn_base has store/temp in it twice to make sure that
+# the temp->permananet lfn change is correct.
+lfn_base = '/store/temp/user/%s/my_cool_dataset/store/temp/file-%s-%s.root' 
 
 while i <= size:
     user = random.choice(users)

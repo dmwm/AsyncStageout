@@ -19,7 +19,7 @@ from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
-from AsyncTransfer.TransferWorker import TransferWorker
+from TransferWorker import TransferWorker
 
 from multiprocessing import Pool
 
@@ -28,17 +28,21 @@ import logging
 
 def ftscp(user, tfc_map, config):
     worker = TransferWorker(user, tfc_map, config)
-    return worker.run()
+    return worker()
     
 
 class TransferDaemon(BaseWorkerThread):
     def __init__(self, config):
+        #Need a better way to test this without turning off this next line
         BaseWorkerThread.__init__(self)
-
-        self.config = config.AsyncTransfer
+        #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
+        #self.logger = logging.getLogger()
         # self.logger is set up by the BaseWorkerThread, we just set it's level
         self.logger.setLevel(self.config.log_level)
+        
+        self.config = config.AsyncTransfer
         self.logger.debug('Configuration loaded')
+        
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
         self.logger.debug('Connected to CouchDB')
@@ -115,9 +119,6 @@ class TransferDaemon(BaseWorkerThread):
         tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
          
         return readTFC(tfc_file)
-   
-
-    
         
 if __name__ == '__main__':
     """
@@ -129,4 +130,4 @@ if __name__ == '__main__':
     
     d = TransferDaemon(config)
     #while True:
-    d.algorithm()
+    d.algorithm([])

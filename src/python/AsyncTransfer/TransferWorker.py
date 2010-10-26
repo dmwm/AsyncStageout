@@ -1,4 +1,4 @@
-'''
+no'''
 The TransferWorker does the following:
 
     a. make the ftscp copyjob
@@ -13,8 +13,11 @@ from WMCore.Database.CMSCouch import CouchServer
 
 import time
 import logging
-import subprocess, os
+import subprocess, os, errno
 import tempfile
+import datetime
+import traceback
+
 class TransferWorker:
 
     def __init__(self, user, tfc_map, config):
@@ -22,291 +25,299 @@ class TransferWorker:
         store the user and tfc the worker 
         """
         self.user = user
-        self.tfc_map = tfc_map 
+        self.tfc_map = tfc_map
         self.config = config
+        self.log_dir = '%s/logs/%s' % (self.config.componentDir, self.user)
+        
+        try:
+            os.makedirs(self.log_dir)
+        except OSError, e:
+            if e.errno == errno.EEXIST:
+                pass
+            else: raise
+            
+        
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
         self.map_fts_servers = config.map_FTSserver
+        # TODO: improve how the worker gets a log
         logging.basicConfig(level=config.log_level)
-        self.logger = logging.getLogger('AsyncTransfer-Worker')
-        self.logger.info('Worker loaded for %s' % user)
+        self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
 
         # TODO: use proxy management to pick this up - ticket #202 
         self.userProxy = config.serviceCert     
   
-    def run(self):
+    def __call__(self):
         """
         a. makes the ftscp copyjob
         b. submits ftscp
-        c. deletes successfully transferred files
+        c. deletes successfully transferred files from the DB
         """
-        jobs, pfn_lfn_map = self.files_for_transfer()
-
-        for job in jobs:
-            for task in job:
-                pfn = (task.split(' ')[0].strip()).split(':',1)[1]
-                assert pfn in pfn_lfn_map.keys() 
-
-        filePathList, sortedLists, destList = self.buildTransferFilesAndLists(jobs)        
+        
+        jobs = self.files_for_transfer()   
  
-        count = 0
-
-        # Loop on dest keys
-        # To move to command method
-
-        for filePath in filePathList:
-
-            ret = self.cleanSpace( destList[filePath] )
-
-            if not ret:
-
-
-                for copyJob in filePathList[filePath]:
-
-                    self.logger.info( "Running FTSCP command: %s %s %s from %s " %( filePathList[filePath][copyJob], self.getFTServer(filePath), jobs, sortedLists[filePath] ) )
-
-                    proc = subprocess.Popen(
- 
-                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                stdin=subprocess.PIPE,
-
-                            )
-
-                    command = 'export X509_USER_PROXY=%s ; ftscp -copyjobfile=%s -server=%s -mode=single' %( self.userProxy, filePathList[filePath][copyJob], self.getFTServer(filePath) )
-                    proc.stdin.write(command)
-                    stdout, stderr = proc.communicate()
-                    rc = proc.returncode
-
-                    self.logger.info("Output %s" %stdout.split('\n'))
-                    self.logger.info("ret code %s" %rc)
-
-                    os.unlink( filePathList[filePath][copyJob] )
-
-                    # Call mark_good and mark_failed methods 
-
-
-        for job in jobs:
- 
-            transferred, failed = self.command(job, self.user)
-            self.mark_failed(failed)
-            self.mark_good(transferred)
+        transferred, failed = self.command()
+        self.mark_failed(failed)
+        self.mark_good(transferred)
                 
-        self.logger.info('%s is sleeping for %s seconds' % (self.user, len(jobs))) 
-        time.sleep(len(jobs))
-        return 'Transfers completed for %s' % self.user
+        self.logger.info('Transfers completed')
+        return
 
-    def cleanSpace(self, allPfn):
+    def cleanSpace(self, copyjob):
         """
-        Remove all PFNs got in input.
+        Remove all __destination__ PFNs got in input. The delete can fail because of a file not found
+        so issue the command and hope for the best.
+        
+        TODO: better parsing of output
         """
-        for listPfn in allPfn:
-
-            for pfn in listPfn:
-
-                command = 'export X509_USER_PROXY=%s ; srmrm %s'  %( self.userProxy, pfn )
-                self.logger.info("Running remove command %s" %command)
-                proc = subprocess.Popen(
-
-                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                stdin=subprocess.PIPE,
-                            )
-                proc.stdin.write(command)
-                stdout, stderr = proc.communicate()
-                rc = proc.returncode
-
-                # return 1 if the remove fails
-                #if rc: return 1
-
-        return 0
+        for task in copyjob:
+            destination_pfn = task.split()[1]
+            command = 'export X509_USER_PROXY=%s ; srmrm %s'  %( self.userProxy, destination_pfn )
+            self.logger.debug("Running remove command %s" % command)
+            proc = subprocess.Popen(
+                    ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    stdin=subprocess.PIPE,
+            )
+            proc.stdin.write(command)
+            stdout, stderr = proc.communicate()
+            rc = proc.returncode
 
 
     def getFTServer(self, site):
         """
         Parse site string to know the fts server to use 
         """
-        indexSite = site.split('_')
-        if indexSite[1] in self.map_fts_servers : return self.map_fts_servers[ indexSite[1] ]
-        #TODO: decide what to do if indexSite[0] == 'T1'
-        else: return self.map_fts_servers['defaultServer']
-        
-    def buildTransferFilesAndLists(self, files):
-        """
-        Order source/dest to create fts copy job file 
-        create the temporary copy job file
-        """
-        allPathLists = {}
-        sortedFile, listDest = self.orderFileAlgo(files)
+        country = site.split('_')[1]
+        if country in self.map_fts_servers :
+            return self.map_fts_servers[country]
+        #TODO: decide what to do if site.split('_')[0] == 'T1'
+        else:
+            return self.map_fts_servers['defaultServer']
 
-        for files in sortedFile:
-
-            filePathList = {}
-
-            for sites in sortedFile[files]:
-
-                f = tempfile.NamedTemporaryFile(delete=False)
-                for jobs in sites:
-                    f.write(jobs + "\n")
-
-                f.close()
-                filePathList[f] = f.name
-
-            allPathLists[files] = filePathList 
-
-        return allPathLists, sortedFile, listDest
-
-
-    def orderFileAlgo(self, listTuple):
-        """
-        Order file by source/destination to create copy job file. Return also a list of destination pfn
-        to clean pfn dest before the transfer and if the transfer will faild. 
-        If T2_CH_CAF is the destination then we will have:
-        ordredList = { 'T2_CH_CAF':[ [ job1FromSite1, job2FromSite1  ] , [ job3FromSite2, job4FromSite2 ] ] ... } 
-        """
-
-        ordredList = {}
-        listDest = {}
-        siteSource = {}
-        pfnDist = {}
-
-        for transfer in listTuple[0]:
-
-            destSite = transfer.split(' ')[1].split(':')[0]
-
-            if destSite not in ordredList:
-
-                ordredList[destSite] = []
-                listDest[destSite] = []
-
-        for sortByDest in ordredList:  
-
-            for sortBySource in listTuple[0]:
-               
-                destSite = sortBySource.split(' ')[1].split(':')[0]
- 
-                if ( destSite == sortByDest ):
-
-                    sourceSite = sortBySource.split(' ')[0].split(':')[0]
-
-                    if sourceSite not in siteSource:  
-                        siteSource[sourceSite] = []
-                        pfnDist[sourceSite] = []
-
-                    siteSource[sourceSite].append( sortBySource.replace(sortByDest+':','').replace(sourceSite+':','') )
-                    pfnDist[sourceSite].append( sortBySource.split(' ')[1].replace(sortByDest+':','') )
-
-            for lists in siteSource:
-
-                ordredList[sortByDest].append( siteSource[lists] )
-                listDest[sortByDest].append( pfnDist[lists] )
-
-        return ordredList, listDest
-    
-    def destinations_by_user(self):
+    def source_destinations_by_user(self):
         """
         Get all the destinations for a user
         """
-        query = {'group': True, 'group_level':2,
-                 'startkey':[self.user], 'endkey':[self.user, {}]}
+        query = {'group': True, 
+                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         sites = self.db.loadView('AsyncTransfer', 'ftscp', query)
         
         def keys_map(dict):
-            return dict['key'][1]
+            return dict['key'][2], dict['key'][1]
         
         return map(keys_map, sites['rows'])
     
     
     def files_for_transfer(self):
         """
-        Process a queue of work per transfer destination for a user. Return one 
-        ftscp copyjob per destination. 
+        Process a queue of work per transfer source:destination for a user. Return one 
+        ftscp copyjob per source:destination. 
         """         
-        dests = self.destinations_by_user()
-        jobs = []
-        self.logger.debug('%s is transferring to %s' % (self.user, dests))
-        for site in dests:
-            # We could push applying the TFC into the list function, not sure if
-            # this would be faster, but might use up less memory. Probably more
-            # complicated, though. 
-            query = {'reduce':False,
-                 'limit': self.config.max_files_per_transfer,
-                 'startkey':[self.user, site], 
-                 'endkey':[self.user, site, {}]}
+        source_dests = self.source_destinations_by_user()
+        jobs = {}
+        self.logger.info('%s has %s links to transfer on' % (self.user, len(source_dests)))
+        try:        
+            for (source, destination) in source_dests:
+                # We could push applying the TFC into the list function, not sure if
+                # this would be faster, but might use up less memory. Probably more
+                # complicated, though. 
+                query = {'reduce':False,
+                     'limit': self.config.max_files_per_transfer,
+                     'key':[self.user, destination, source]}
             
-            active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
-            self.logger.info('%s has %s files' % (self.user, len(active_files)))
-            
-            # take these active files and make a pfn:id/lfn dictionary
-            def tfc_map(item):
-                pfn = self.apply_tfc('%s:%s' % (item['key'][2], item['value']))
-                return (pfn, item['id'])
-            
-            pfn_lfn_map = dict(map(tfc_map, active_files))
-            
-            files = self.db.loadList('AsyncTransfer', 'ftscp', 'ftscp', query)
+                active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+                self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files), source, destination))
+                new_job = []
+                # take these active files and make a copyjob entry
+                def tfc_map(item):
+                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
+                    destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'].replace('store/temp', 'store', 1)))
+                    new_job.append('%s %s' % (source_pfn, destination_pfn))
+                    
+                map(tfc_map, active_files)
 
-            # files is a list of 2 lfn's - temp and permanent
-            jobs.append(self.create_ftscp_input(files))
-            
-        self.logger.debug('ftscp input created for %s' % self.user)
-        return jobs, pfn_lfn_map
+                jobs[(source, destination)] = new_job
+            self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
+            return jobs
+        except:
+            self.logger.exception("fail")
         
         
-    def apply_tfc(self, file):
+    def apply_tfc_to_lfn(self, file):
         """
         Take a CMS_NAME:lfn string and make a pfn
         """
         site, lfn = tuple(file.split(':'))
         
         return self.tfc_map[site].matchLFN('srmv2', lfn)
-    
-    
-    def create_ftscp_input(self, files):
-        """
-        Apply the TFC to the ftscp input
-        """
-        def tfc_map(item):
-            #print item, item.split(' ')
-            source, dest = tuple(item.split(' '))
 
-            #return "%s %s" % (self.apply_tfc(source), self.apply_tfc(dest))
+    def apply_tfc_to_pfn(self, site, pfn):
+        """
+        Take a site and pfn and make an lfn
+        """
+        lfn = self.tfc_map[site].matchPFN('srmv2', pfn)
 
-            # give siteSource:PFN siteDestPFN to split different sources in different jobs later  
-            return "%s %s" % (source.split(':')[0]+':'+self.apply_tfc(source), dest.split(':')[0]+':'+self.apply_tfc(dest))
- 
-        files = files.strip().split('\n')
-        return map(tfc_map, files) 
+        #TODO: improve fix for wrong tfc on sites
+        try:
+            if lfn.split('store')[0] != '/':
+                self.logger.error('Broken tfc for file %s at site %s' % (pfn, site))
+                return None
+        except IndexError:
+            pass
+
+        return lfn
     
-    
-    def command(self, job, userProxy):
+    def command(self):
         """
-        A null TransferWrapper - This should be
-        overritten by subclasses. Return allFiles, transferred and failed transfers.
-          transferred: files has been transferred 
-          failed: the transfer has failed 
+        For each job the worker has to complete:
+           Delete files that have failed previously 
+           Create a temporary copyjob file
+           Submit the copyjob to the appropriate FTS server
+           Parse the output of the FTS transfer and return complete and failed files for recording
         """
-        return job, []
-    
-    
-    def mark_good(self, transferred):
+        jobs = self.files_for_transfer()   
+        transferred_files = []
+        failed_files = []
+        
+        #Loop through all the jobs for the links we have
+        for link, copyjob in jobs.items():
+            # Clean cruft files from previous transfer attempts
+            # TODO: check that the job has a retry count > 0 and only delete files if that is the case
+            self.cleanSpace( copyjob )
+            
+            tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
+            tmp_copyjob_file.write('\n'.join(copyjob))
+            tmp_copyjob_file.close()
+            
+            fts_server_for_transfer = self.getFTServer(link[1])
+            
+            logfile = open('%s/%s_%s-%s.ftslog' % (self.log_dir, self.user, link[0], link[1]), 'w')
+            
+            self.logger.debug("Running FTSCP command")
+            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
+            self.logger.debug("link: %s -> %s" % link)
+            self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
+            self.logger.debug("log file: %s" % logfile.name)
+
+            #TODO: Sending stdin/stdout/stderr can cause locks - should write to logfiles instead
+            proc = subprocess.Popen(
+                            ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                            stdout=logfile,
+                            stderr=logfile,
+                            stdin=subprocess.PIPE,
+                        )
+
+            command = 'export X509_USER_PROXY=%s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
+                             self.userProxy, 
+                             tmp_copyjob_file.name,
+                             fts_server_for_transfer )
+            proc.stdin.write(command)
+            
+            stdout, stderr = proc.communicate()
+            rc = proc.returncode
+            logfile.close()
+            
+            # now populate results by parsing the copy job's log file.
+            # results is a tuple of lists, 1st list is transferred files, second is failed
+            results = self.parse_ftscp_results(logfile.name, link[0])
+            
+            transferred_files.extend(results[0])
+            failed_files.extend(results[1])
+
+            # Clean up the temp copy job file
+            os.unlink( tmp_copyjob_file.name )
+            
+            # The ftscp log file is left for operators to clean up, as per PhEDEx
+            # TODO: recover from restarts by examining the log files, this would mean moving
+            # the ftscp log files to a done folder once parsed, and parsing all files in some
+            # work directory.
+                
+        return transferred_files, failed_files
+
+    def parse_ftscp_results(self, ftscp_logfile, siteSource):
         """
-        Mark the list as transferred in database.
+        parse_ftscp_results parses the output of ftscp to get a list of all files that the job tried to transfer
+        and adds the file to the appropriate list. This means that the lfn needs to be recreated from the __source__
+        pfn.
         """
-        pass
-       
-       
-    def mark_failed(self, failed):
+
+        transferred_files = []
+        failed_files = []
+        logfile = open(ftscp_logfile)
+
+        for line in logfile.readlines():
+
+            try:
+                if line.split(':')[0].strip() == 'Source':
+                   lfn = self.apply_tfc_to_pfn( siteSource, line.split('Source:')[1:][0].strip() )
+                   # Now we have the lfn, skip to the next line
+                   continue
+
+                if line.split(':')[0].strip() == 'State' and lfn:
+                   if line.split(':')[1].strip() == 'Finished':
+                       transferred_files.append(lfn)
+                   else:
+                       failed_files.append(lfn)
+
+            except IndexError, ex:
+
+                self.logger.debug("wrong log file! %s" %ex)
+                pass
+
+        logfile.close()
+
+        return (transferred_files, failed_files)
+
+    def mark_good(self, files=[]):
         """
-        mark the list as failed transfers in database.  
+        Mark the list of files as tranferred 
         """
-        pass
-    
-    
-    def record_stats(self, transferred, failed):
+        results = []
+
+        for i in files:
+
+           # TODO: Delete without loading first
+           try:
+
+               document = self.db.document(i)
+               self.db.queueDelete(document, viewlist=['AsyncTransfer/ftscp'])
+               self.db.commit()
+
+           except Exception, ex:
+
+               msg =  "Error in deleting document from couch"
+               msg += str(ex)
+               msg += str(traceback.format_exc())
+               self.logger.error(msg)
+
+    def mark_failed(self, files=[]):
         """
-        Record some statistics
+        Something failed for these files so increment the retry count
         """
-        pass
+        now = str(datetime.datetime.now())
+
+        for i in files:
+
+            # TODO: modify without loading first
+            try:
+                document = self.db.document(i)
+                document['state'] = 'acquired'
+                document['retry_count'].append(now)
+                self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
+
+            except Exception, ex:
+
+                msg =  "Error in updating document from couch"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
+        self.db.commit()
+                
+    def mark_incomplete(self, files=[]):
+        """
+        Mark the list of files as acquired
+        """
+        self.logger('Something called mark_incomplete which should never be called')

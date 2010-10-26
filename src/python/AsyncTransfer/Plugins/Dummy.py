@@ -6,18 +6,14 @@ Duplicate view from Dummy database
 """
 import logging
 import random
-from WMCore.Database.CMSCouch                 import CouchServer
+from Source import Source
 
-class DummySource:
+class Dummy(Source):
     """
     _DummySource_
     Create dummy data to be stored in couch by the LFNDuplicatorPoller.     
     """
-    def __init__( self ):
-
-        logging.debug('Dummy connection to CouchDB source')
-         
-    def getViewResult(self):
+    def __call__(self):
         """
         _getViewResults_
         Get the result of the view. 
@@ -47,8 +43,10 @@ class DummySource:
                                            i),
                         'source': random.choice(sites),
                         'destination': 'T2_IT_Pisa',
-                        'user': user
-            } )
+                        'task': random.randint(1, 100),
+                        'job_id': random.randint(1000, 9999),
+                        'user': user}
+            )
 
             i += 1
 

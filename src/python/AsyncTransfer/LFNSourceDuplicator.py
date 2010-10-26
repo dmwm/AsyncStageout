@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #pylint: disable-msg=C0103,W0613
 """
-_viewsDuplicatorPoller_t_
+_LFNSourceDuplicator_
 Duplicate view in Async. database
 """
 from WMCore.Database.CMSCouch                 import CouchServer
@@ -12,7 +12,7 @@ class LFNSourceDuplicator(BaseWorkerThread):
     """
     _LFNSourceDuplicator_
     Load plugin to get the result of the source database query.
-    Duplicates the result got in the local database.     
+    Duplicates the result got into the local database.     
     """
 
     def __init__(self, config):
@@ -24,7 +24,10 @@ class LFNSourceDuplicator(BaseWorkerThread):
         # self.logger is set up by the BaseWorkerThread, we just set it's level
         self.logger.setLevel(self.config.log_level)
         self.logger.debug('Configuration loaded')
-
+        
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
+        
         # Asynch db
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.couch_database)
@@ -38,25 +41,17 @@ class LFNSourceDuplicator(BaseWorkerThread):
         Load the plugin of a db source which load its view. 
         Duplicates the results got from the plugin in Async database.  
         """
-        self.logger.debug('Duplication algo begins')
-        to_duplicate = []
+        self.logger.debug('Duplication algorithm begins')
 
-        try:
- 
-            factory = WMFactory(\
- self.config.pluginDir, namespace = self.config.pluginDir )
-            duplicator = factory.loadObject(self.config.pluginName) 
-            to_duplicate = duplicator.getViewResult()
+        try:            
+            duplicator = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], getFromCache = True)
 
-        except ImportError,e :
-            
-            msg = "plugin \'%s\' unknown" \
-              % self.config.pluginName
+        except ImportError,e :            
+            msg = "plugin \'%s\' unknown" % self.config.pluginName
             self.logger.info(msg)
             self.logger.info(e)
 
-        for doc in to_duplicate:
-
+        for doc in duplicator():
             self.db.queue(doc, True, ['AsyncTransfer/ftscp'] )
             self.logger.debug("doc queued %s" %doc)
 
