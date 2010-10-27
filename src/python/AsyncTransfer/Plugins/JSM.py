@@ -6,7 +6,6 @@ Duplicate view from JSM database
 """
 from WMCore.Database.CMSCouch import CouchServer
 from Source import Source
-import logging
 
 class JSM(Source):
     """
@@ -24,26 +23,41 @@ class JSM(Source):
         viewSource = 'inputAsycStageOut' 
         designSource = 'JobDump' 
 
-        logging.debug('Connected to CouchDB source ')
+        self.logger.debug('Connected to CouchDB source ')
+        
+        result = []
+        
+        try:
+            # Get the time of the last record we're going to pull in
+            query = {'limit' : 1, 'descending': True}
+            endtime = dbSource.loadView(designSource, viewSource, query)['rows'][0]['key']
+            
+            # If the above throws an exception there's no files to process, so just move on
+            
+            # Get the files we want to process
+            self.logger.debug('Querying JSM for files added between %s and %s' % (self.since, endtime))
 
-        # Get the time of the last record we're going to pull in
-        query = {'limit' : 1, 'descending': True}
-        endtime = dbSource.loadView(designSource, viewSource, query)['rows']['key']
+            query = { 'startkey': self.since, 'endkey': endtime}
+            result = dbSource.loadView(designSource, viewSource, query)['rows']
+            
+            # Now record where we got up to so next iteration we'll continue from there
+            if result: 
+                # TODO: persist the value of self.since somewhere, so that the agent will work over restarts
+                self.since = endtime + 1
+        except IndexError:
+            self.logger.debug('No records to determine end time, waiting for next iteration')
+        except KeyError:
+            self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
+        except Exception, e:
+            self.logger.exception('A problem occured in the JSM Source __call__: %s' % e)
         
-        # Get the files we want to process
-        self.logger.debug('Querying JSM for files added between %s and %s' % (self.since, endtime))
-        
-        query = { 'startkey': self.since 'endkey': endtime}
-        result = dbSource.loadView(designSource, viewSource, query)['rows']
-
-        # Now record where we got up to so next iteration we'll continue from there
-        self.since = end_key
-        # TODO: persist the value of self.since somewhere, so that the agent will work over restarts
-        
+        # Little map function to pull out the data we need
         def pull_value(row):
             value = row['value']
-            value['source'] = self.phedexApi.getNodeNames( res["value"]['source'] )[0]
-            value['user'] = res["value"]["_id"].split('/')[3]
+            value['source'] = self.phedexApi.getNodeNames( value['source'] )[0]
+            value['user'] = value["_id"].split('/')[3]
+            value['retry_count'] = []
+            value['state'] = 'new'
             return value
             
-        return map(pull_value, result) 
+        return map(pull_value, result)

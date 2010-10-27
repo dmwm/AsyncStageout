@@ -44,7 +44,7 @@ class LFNSourceDuplicator(BaseWorkerThread):
         self.logger.debug('Duplication algorithm begins')
 
         try:            
-            duplicator = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], getFromCache = True)
+            duplicator = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], getFromCache = True, listFlag = True)
 
         except ImportError,e :            
             msg = "plugin \'%s\' unknown" % self.config.pluginName
