@@ -1,4 +1,4 @@
-no'''
+'''
 The TransferWorker does the following:
 
     a. make the ftscp copyjob
