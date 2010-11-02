@@ -274,7 +274,6 @@ class TransferWorker:
         """
         Mark the list of files as tranferred 
         """
-        results = []
 
         for i in files:
 
@@ -283,7 +282,6 @@ class TransferWorker:
 
                document = self.db.document(i)
                self.db.queueDelete(document, viewlist=['AsyncTransfer/ftscp'])
-               self.db.commit()
 
            except Exception, ex:
 
@@ -291,6 +289,8 @@ class TransferWorker:
                msg += str(ex)
                msg += str(traceback.format_exc())
                self.logger.error(msg)
+
+        self.db.commit()
 
     def mark_failed(self, files=[]):
         """
