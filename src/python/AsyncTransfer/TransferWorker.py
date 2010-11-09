@@ -165,7 +165,11 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (pfn, site))
                 return None
         except IndexError:
-            pass
+            self.logger.error('Broken tfc for file %s at site %s' % (pfn, site))
+            return None
+        except AttributeError:
+            self.logger.error('Broken tfc for file %s at site %s' % (pfn, site))
+            return None
 
         return lfn
     

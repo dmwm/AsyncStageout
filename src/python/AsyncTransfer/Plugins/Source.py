@@ -9,7 +9,7 @@ class Source:
         self.config = config
         self.logger = logger
         self.since = 0
-        self.phedexApi = PhEDEx( dict = {} )
+        self.phedexApi = PhEDEx( secure = True, dict = {} )
 
     def __call__(self):
         """
