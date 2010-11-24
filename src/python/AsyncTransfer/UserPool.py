@@ -9,7 +9,7 @@ class UserPool(Pool):
     def __init__(self, config, logger):
         self.config = config.CRABAsyncTransfer
         server = CouchServer(self.config.couch_instance)
-        self.db = server.connectDatabase(self.config.couch_database)
+        self.db = server.connectDatabase(self.config.files_database)
         self.logger = logger
         self.size = 
         self.result = []

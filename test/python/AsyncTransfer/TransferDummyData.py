@@ -3,13 +3,17 @@ from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Configuration import loadConfigurationFile
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
-import subprocess, os
+import subprocess, os, errno
+import logging
+import traceback
 
-config = loadConfigurationFile( os.environ.get('WMAGENT_CONFIG') )
-server = CouchServer(config.AsyncTransfer.couch_instance)
-db = server.connectDatabase(config.AsyncTransfer.couch_database)
-proxy = config.AsyncTransfer.serviceCert 
-emptyFile = config.AsyncTransfer.ftscp
+config = loadConfigurationFile( os.environ.get('WMAGENT_CONFIG') ).AsyncTransfer
+server = CouchServer(config.couch_instance)
+db = server.connectDatabase(config.files_database)
+proxy = config.serviceCert 
+emptyFile = config.ftscp
+logging.basicConfig(level=config.log_level)
+logger = logging.getLogger('AsyncTransfer-TransferDummyData')
 
 def apply_tfc(file, site_tfc_map, site):
     """
@@ -17,7 +21,6 @@ def apply_tfc(file, site_tfc_map, site):
     """
     site_tfc_map[site] = get_tfc_rules(site)
     site, lfn = tuple(file.split(':'))
-    print site_tfc_map[site].matchLFN('srmv2', lfn)
     return site_tfc_map[site].matchLFN('srmv2', lfn)
 
 def get_tfc_rules(site):
@@ -57,7 +60,7 @@ sites = ['T2_AT_Vienna', 'T2_BE_IIHE', 'T2_BE_UCL', 'T2_BR_SPRACE',
          'T2_US_UCSD', 'T2_US_Wisconsin']
 
 #TODO: read from script input
-size = 10 
+size = 3 
 site_tfc_map = {}
 i = 1
 
@@ -74,25 +77,53 @@ while i <= size:
                 'user': user    
     }
 
-    pfn = apply_tfc(file_doc['source']+':'+file_doc['_id'], site_tfc_map, file_doc['source']) 
+    try:
+
+        pfn = apply_tfc(file_doc['source']+':'+file_doc['_id'], site_tfc_map, file_doc['source']) 
+
+    except Exception, ex:
+
+        logger.info("Exception raised when applying TFC: \n" + str(ex) + "\n")
+        logger.info( str(traceback.format_exc()) )
+
+    if not pfn:
+        continue
+
     command = 'export X509_USER_PROXY=' + proxy +'; srmcp -debug=true file:///'+emptyFile+' '+pfn+' -2'      
-    print command
+
+    log_dir = '%s/logs/%s' % (os.environ['PWD'], user)
+
+    try:
+       os.makedirs(log_dir)
+    except OSError, e:
+       if e.errno == errno.EEXIST:
+           pass
+       else: raise
+
+    stdout_log = open('%s/%s.srmcp_out_log' % (log_dir, file_doc['source']), 'w')
+    stderr_log = open('%s/%s.srmcp_err_log' % (log_dir, file_doc['source']), 'w')
+
+    logger.debug( command )
+
     proc = subprocess.Popen(
                     ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=stdout_log,
+                    stderr=stderr_log,
                     stdin=subprocess.PIPE,
                         )
+
     proc.stdin.write(command)
     stdout, stderr = proc.communicate()
-    print stdout
     rc = proc.returncode
 
-    print rc
+    stdout_log.close()
+    stderr_log.close()
+
+    logger.info("Transfer completed with return code %s, detailed logs in %s and %s" % (rc, stdout_log, stderr_log))
 
     if not rc: 
+
         db.queue(file_doc, True, ['AsyncTransfer/ftscp'])
-    i += 1
+        i += 1
 
 db.commit(viewlist=['AsyncTransfer/ftscp'])
-

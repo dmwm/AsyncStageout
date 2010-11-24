@@ -30,7 +30,7 @@ class LFNSourceDuplicator(BaseWorkerThread):
         
         # Asynch db
         server = CouchServer(self.config.couch_instance)
-        self.db = server.connectDatabase(self.config.couch_database)
+        self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
 
         return 
