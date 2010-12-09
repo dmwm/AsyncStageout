@@ -40,6 +40,7 @@ class TransferWorker:
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
         self.map_fts_servers = config.map_FTSserver
+        self.max_retry = config.max_retry
         # TODO: improve how the worker gets a log
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
@@ -140,6 +141,7 @@ class TransferWorker:
 
                 jobs[(source, destination)] = new_job
             self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
+ 
             return jobs
         except:
             self.logger.exception("fail")
@@ -249,11 +251,13 @@ class TransferWorker:
 
         transferred_files = []
         failed_files = []
+
         logfile = open(ftscp_logfile)
 
         for line in logfile.readlines():
 
             try:
+
                 if line.split(':')[0].strip() == 'Source':
                    lfn = self.apply_tfc_to_pfn( siteSource, line.split('Source:')[1:][0].strip() )
                    # Now we have the lfn, skip to the next line
@@ -269,7 +273,7 @@ class TransferWorker:
 
                 self.logger.debug("wrong log file! %s" %ex)
                 pass
-
+        
         logfile.close()
 
         return (transferred_files, failed_files)
@@ -306,14 +310,33 @@ class TransferWorker:
 
             # TODO: modify without loading first
             try:
+
                 document = self.db.document(i)
-                document['state'] = 'acquired'
-                document['retry_count'].append(now)
+
+            except Exception, ex:
+
+                msg =  "Error loading document from couch"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
+            document['retry_count'].append(now)
+
+            if len(document['retry_count']) > self.max_retry: 
+
+                document['state'] = 'failed'
+
+            else:
+
+                document['state'] = 'acquired' 
+
+            try:
+
                 self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
 
             except Exception, ex:
 
-                msg =  "Error in updating document from couch"
+                msg =  "Error when queuing document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)

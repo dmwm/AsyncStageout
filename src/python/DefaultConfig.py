@@ -20,6 +20,7 @@ config.AsyncTransfer.pluginDir = "AsyncTransfer.Plugins"
 config.AsyncTransfer.pluginName = "DummySource"
 config.AsyncTransfer.pollViewsInterval = 10
 config.AsyncTransfer.max_files_per_transfer = 1000
+config.AsyncTransfer.max_retry = 10
 config.AsyncTransfer.pool_size = 2
 config.AsyncTransfer.log_level = logging.INFO
 config.AsyncTransfer.ftscp = '../test/python/AsyncTransfer/ftscp_fake'
