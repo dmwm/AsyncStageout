@@ -215,7 +215,7 @@ class TransferWorker:
 
             fts_server_for_transfer = self.getFTServer(link[1])
 
-            logfile = open('%s/%s_%s-%s.ftslog' % (self.log_dir, self.user, link[0], link[1]), 'w')
+            logfile = open('%s/%s_%s-%s_%s.ftslog' % ( self.log_dir, self.user, link[0], link[1], str(time.time()) ), 'w')
 
             self.logger.debug("Running FTSCP command")
             self.logger.debug("FTS server: %s" % fts_server_for_transfer)
