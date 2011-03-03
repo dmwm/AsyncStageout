@@ -1,0 +1,115 @@
+/* add styles here */
+
+body {
+  font-family: Arial,Helvetica,sans-serif;
+  font-size: 1em;
+  padding:4px;
+}
+
+h1 {
+  margin-top:0;
+}
+
+
+
+#login {
+  float:right;
+}
+
+#head {
+  border:4px solid #dde;
+  background:#eef;
+  padding:8px;
+  margin-bottom:8px;
+  height: 88px;
+}
+
+#head div {position: absolute; width: 100%; top: 15px; left: 15px; height: 80px;}
+#head img {
+  height:80px;
+}
+
+#items {
+  border:4px;
+  padding:8px;
+  float: right;
+  font-size:0.8em;
+  width: 75%;
+
+}
+
+#head h1 {
+  text-align: left;
+  margin-top: 20px;
+}
+
+
+#items li {
+  border:4px solid #f5f5ff;
+  background:#fff;
+  padding:8px;
+  margin:4px 0;
+}
+
+
+#items table.view td{
+  padding:4px;
+  border: 1px solid black;
+}
+
+.label{
+  background-color:#E8E8E8;
+  font-weight: bold;
+
+}
+
+div#main {
+
+  width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+
+}
+
+
+#sidebar {
+  border:4px solid #dde;
+  background:#eef;
+  padding:8px;
+  float:left;
+  width: 20%;
+  font-size:0.8em;
+
+}
+
+form {
+  padding:4px;
+  margin:6px;
+  background-color:#ddd;  
+}
+
+div.avatar {
+  padding:2px;
+  padding-bottom:0;
+  margin-right:4px;
+  float:left;
+  font-size:0.78em;
+  width : 60px;
+  height : 60px;
+  text-align: center;
+}
+
+div.avatar .name {
+  padding-top:2px;
+}
+
+div.avatar img {
+  margin:0 auto;
+  padding:0;
+  width : 40px;
+  height : 40px;
+}
+
+ul {
+  list-style: none;
+}
