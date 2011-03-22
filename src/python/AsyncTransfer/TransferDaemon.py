@@ -1,3 +1,5 @@
+#pylint: disable=C0103,W0105
+
 """
 Here's the algorithm
 
@@ -11,8 +13,6 @@ Here's the algorithm
     c. deletes successfully transferred files
 """
 
-from WMCore.Agent.Daemon.Create import createDaemon
-from WMCore.Agent.Daemon.Details import Details
 from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
@@ -24,15 +24,20 @@ from TransferWorker import TransferWorker
 from multiprocessing import Pool
 
 import random
-import logging
 
 def ftscp(user, tfc_map, config):
+    """
+    Each worker executes this function.
+    """
     worker = TransferWorker(user, tfc_map, config)
     return worker()
 
 
 class TransferDaemon(BaseWorkerThread):
     def __init__(self, config):
+        """
+        Initialise class members
+        """
         #Need a better way to test this without turning off this next line
         BaseWorkerThread.__init__(self)
         #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
@@ -46,6 +51,7 @@ class TransferDaemon(BaseWorkerThread):
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
+        self.pool = Pool(processes=self.config.pool_size)
 
         self.phedex = PhEDEx(responseType='xml')
 
@@ -70,13 +76,9 @@ class TransferDaemon(BaseWorkerThread):
             site_tfc_map[site] = self.get_tfc_rules(site)
 
         self.logger.debug('kicking off pool')
-        pool = Pool(processes=self.config.pool_size)
-        r = [pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
-        pool.close()
-        pool.join()
+        r = [self.pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
         for result in r:
-            if result.ready():
-                self.logger.info(result.get(1))
+            self.logger.info(result.get())
 
     def active_users(self, db):
         """
@@ -94,8 +96,11 @@ class TransferDaemon(BaseWorkerThread):
             #TODO: have a plugin algorithm here...
             active_users = random.sample(users['rows'], self.config.pool_size)
 
-        def keys_map(dict):
-            return dict['key'][0]
+        def keys_map(inputDict):
+            """
+            Map function.
+            """
+            return inputDict['key'][0]
 
         return map(keys_map, active_users)
 
@@ -106,8 +111,11 @@ class TransferDaemon(BaseWorkerThread):
         query = {'group': True}
         sites = self.db.loadView('AsyncTransfer', 'sites', query)
 
-        def keys_map(dict):
-            return dict['key']
+        def keys_map(inputDict):
+            """
+            Map function.
+            """
+            return inputDict['key']
 
         return map(keys_map, sites['rows'])
 
@@ -119,6 +127,13 @@ class TransferDaemon(BaseWorkerThread):
         tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
 
         return readTFC(tfc_file)
+
+    def terminate(self, parameters = None):
+        """
+        Called when thread is being terminated.
+        """
+        self.pool.close()
+        self.pool.join()
 
 if __name__ == '__main__':
     """

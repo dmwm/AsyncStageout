@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+#pylint: disable=C0103,E1103
 """
 AsyncTransfer test
 """
@@ -8,17 +8,18 @@ import os
 import logging
 import unittest
 import time
-
-from WMCore.Agent.Configuration import loadConfigurationFile, Configuration
+import threading
 
 from WMQuality.TestInit   import TestInit
 
 from AsyncTransfer.TransferDaemon import TransferDaemon
 from AsyncTransfer.LFNSourceDuplicator import LFNSourceDuplicator
-
 from WMCore.Database.CMSCouch import CouchServer
 
-class AsyncTransferTest(unittest.TestCase):
+from fakeDaemon import fakeDaemon
+from AsyncTransferTest import AsyncTransferTest
+
+class AsyncTransfer_t(unittest.TestCase):
     """
     TestCase for TestAsyncTransfer module
     """
@@ -30,9 +31,6 @@ class AsyncTransferTest(unittest.TestCase):
         self.testInit = TestInit(__file__)
         self.testInit.setLogging()
         self.testInit.setDatabaseConnection()
-        self.testInit.setSchema(customModules = ["WMCore.MsgService", "WMCore.ThreadPool"],
-                                useDefault = False)
-
 
         self.docsInFilesDB = []
         self.docsInDBSource = []
@@ -40,6 +38,7 @@ class AsyncTransferTest(unittest.TestCase):
         self.testDir = self.testInit.generateWorkDir(deleteOnDestruction = False)
 
         self.config = self.getConfig()
+        self.testConfig = self.getTestConfig()
 
         # Connect to files db
         server = CouchServer(self.config.AsyncTransfer.couch_instance)
@@ -57,16 +56,14 @@ class AsyncTransferTest(unittest.TestCase):
         """
         Database deletion
         """
-
-        self.testInit.clearDatabase(modules = ["WMCore.MsgService", "WMCore.ThreadPool"])
         self.testInit.delWorkDir()
 
         # Remove test docs in couchDB
         for doc in self.docsInFilesDB:
-           self.DeleteTestDocinFilesDB(doc)
+            self.DeleteTestDocinFilesDB(doc)
 
         for doc in self.docsInDBSource:
-           self.DeleteTestDocinDBSource(doc)
+            self.DeleteTestDocinDBSource(doc)
 
         return
 
@@ -77,7 +74,7 @@ class AsyncTransferTest(unittest.TestCase):
 
         General config file
         """
-        config = Configuration()
+        config = self.testInit.getConfiguration()
 
         #First the general stuff
         config.section_("General")
@@ -87,6 +84,7 @@ class AsyncTransferTest(unittest.TestCase):
         config.section_("CoreDatabase")
         config.CoreDatabase.connectUrl = os.getenv("DATABASE")
         config.CoreDatabase.socket     = os.getenv("DBSOCK")
+        config.CoreDatabase.dialect = os.getenv("DIALECT")
 
         config.component_("AsyncTransfer")
         config.AsyncTransfer.couch_instance = 'http://user:pass@crab.pg.infn.it:5984'
@@ -98,15 +96,75 @@ class AsyncTransferTest(unittest.TestCase):
         config.AsyncTransfer.pluginDir = "AsyncTransfer.Plugins"
         config.AsyncTransfer.max_files_per_transfer = 10
         config.AsyncTransfer.pool_size = 3
-        config.AsyncTransfer.max_retry = 3
+        config.AsyncTransfer.max_retry = 1000
+        config.AsyncTransfer.pollInterval = 10
         config.AsyncTransfer.serviceCert = os.getenv('X509_USER_PROXY')
-        config.AsyncTransfer.map_FTSserver = { 'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' , 'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' , 'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' , 'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' , 'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer' , 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' , 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' , 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' , 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' , 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
+        config.AsyncTransfer.map_FTSserver = {\
+'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
 
         config.AsyncTransfer.logDir                = os.path.join(self.testDir, 'logs')
         config.AsyncTransfer.componentDir          = os.getcwd()
 
         return config
 
+
+    def getTestConfig(self):
+        """
+        _createConfig_
+
+        General config file
+        """
+        config = self.testInit.getConfiguration()
+
+        #First the general stuff
+        config.section_("General")
+        config.General.workDir = os.getenv("TESTDIR", os.getcwd())
+
+        #Now the CoreDatabase information
+        config.section_("CoreDatabase")
+        config.section_("CoreDatabase")
+        config.CoreDatabase.connectUrl = os.getenv("DATABASE")
+        config.CoreDatabase.socket     = os.getenv("DBSOCK")
+        config.CoreDatabase.dialect = os.getenv("DIALECT")
+
+        config.component_("AsyncTransferTest")
+        config.AsyncTransferTest.couch_instance = 'http://user:pass@crab.pg.infn.it:5984'
+        config.AsyncTransferTest.files_database = 'asynctransfer_unitest'
+        config.AsyncTransferTest.data_source = 'http://user:pass@crab.pg.infn.it:5984'
+        config.AsyncTransferTest.jsm_db = 'wmagent_test'
+        config.AsyncTransferTest.log_level = logging.DEBUG
+        config.AsyncTransferTest.pluginName = "JSM"
+        config.AsyncTransferTest.pluginDir = "AsyncTransfer.Plugins"
+        config.AsyncTransferTest.max_files_per_transfer = 10
+        config.AsyncTransferTest.pool_size = 3
+        config.AsyncTransferTest.max_retry = 1000
+        config.AsyncTransferTest.pollInterval = 10
+        config.AsyncTransferTest.serviceCert = os.getenv('X509_USER_PROXY')
+        config.AsyncTransferTest.map_FTSserver = \
+{ 'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+ 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
+
+        config.AsyncTransferTest.logDir                = os.path.join(self.testDir, 'logs')
+        config.AsyncTransferTest.componentDir          = os.getcwd()
+
+        return config
 
     def createTestDocinFilesDB(self):
         """
@@ -117,7 +175,7 @@ class AsyncTransferTest(unittest.TestCase):
 
         doc['_id'] = "/this/is/a/lfnA"
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
-        doc['workflow'] ='someWorkflow'
+        doc['workflow'] = 'someWorkflow'
         doc['jobid'] = '1'
         doc['retry_count'] = []
         doc['source'] = 'T2_IT_Bari'
@@ -246,7 +304,9 @@ class AsyncTransferTest(unittest.TestCase):
                                "applicationVersion": "CMSSW_3_6_1_patch7",\
                                "dataTier": "USER",\
                            },\
-"InputPFN": "/home/cmsint/globus-tmp.fermi11.13080.0/https_3a_2f_2fcert-rb-01.cnaf.infn.it_3a9000_2frYxxZQTCljEAG6Q6-QgmhQ/job/WMTaskSpace/cmsRun1/output.root",\
+"InputPFN": "/home/cmsint/globus-tmp.fermi11.13080.0/\
+https_3a_2f_2fcert-rb-01.cnaf.infn.it_3a9000_2frYxxZQTCljEAG6Q6-QgmhQ/job/\
+WMTaskSpace/cmsRun1/output.root",\
                            "checksums": {\
                                "adler32": "fc729f97",\
                                "cksum": "2529793973"\
@@ -346,7 +406,7 @@ class AsyncTransferTest(unittest.TestCase):
 
     def testB_DuplicateDataFromJSM_BasicFunctionTest(self):
         """
-        _SpeedTest_
+        _DuplicateDataFromJSM_BasicFunctionTest_
 
         Tests the components: gets data from DB source and duplicate
         it in files_db and see if the component can process it.
@@ -361,6 +421,50 @@ class AsyncTransferTest(unittest.TestCase):
 
         Transfer_1 = TransferDaemon(config = self.config)
         Transfer_1.algorithm( )
+
+        return
+
+    def testC_BasicPoolWorkers_FunctionTest(self):
+        """
+        _BasicPoolWorkers_FunctionTest_
+
+        Tests the class used by the component, by seeing if it can spawn process
+        using the multiprocessing without problems
+        """
+        self.createTestDocinFilesDB()
+
+        Transfer = fakeDaemon(config = self.testConfig)
+        counter = 0
+
+        while ( counter < 10 ):
+
+            Transfer.algorithm( )
+            counter += 1
+
+    def testC_PoolWorkersFromAgent_FunctionTest(self):
+        """
+        _BasicPoolWorkers_FunctionTest_
+
+        Tests the components, by seeing if it can spawn process
+        using the multiprocessing without problems
+        """
+        myThread = threading.currentThread()
+
+        self.createTestDocinFilesDB()
+        Transfer = AsyncTransferTest(config = self.testConfig)
+
+        Transfer.prepareToStart()
+
+        # Set sleep time to 3 days and you will reproduce the
+        # problem described in #1196
+        time.sleep(30)
+
+        myThread.workerThreadManager.terminateWorkers()
+
+        while threading.activeCount() > 1:
+            print('Currently: '+str(threading.activeCount())+\
+                ' Threads. Wait until all our threads have finished')
+            time.sleep(1)
 
         return
 
