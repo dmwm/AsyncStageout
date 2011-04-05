@@ -23,7 +23,7 @@ class JSM(Source):
         sourceServer = CouchServer(self.config.data_source)
         dbSource = sourceServer.connectDatabase(self.config.jsm_db)
         viewSource = 'inputAsycStageOut'
-        designSource = 'JobDump'
+        designSource = 'FWJRDump' 
 
         self.logger.debug('Connected to CouchDB source ')
 
