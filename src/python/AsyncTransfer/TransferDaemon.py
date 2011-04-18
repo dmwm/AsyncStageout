@@ -45,7 +45,13 @@ class TransferDaemon(BaseWorkerThread):
         # self.logger is set up by the BaseWorkerThread, we just set it's level
 
         self.config = config.AsyncTransfer
-        self.logger.setLevel(self.config.log_level)
+        try:
+            self.logger.setLevel(self.config.log_level)
+        except:
+            import logging
+            self.logger = logging.getLogger()
+            self.logger.setLevel(self.config.log_level)
+
         self.logger.debug('Configuration loaded')
 
         server = CouchServer(self.config.couch_instance)

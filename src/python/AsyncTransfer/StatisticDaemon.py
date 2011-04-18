@@ -6,7 +6,6 @@ Delete older finished job from Async. database
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
-import logging
 import datetime
 import traceback
 
@@ -15,7 +14,14 @@ class StatisticDaemon(BaseWorkerThread):
     def __init__(self, config):
         BaseWorkerThread.__init__(self)
         self.config = config.AsyncTransfer
-        self.logger.setLevel(self.config.log_level)
+
+        try:
+            self.logger.setLevel(self.config.log_level)
+        except:
+            import logging
+            self.logger = logging.getLogger()
+            self.logger.setLevel(self.config.log_level)
+
         self.logger.debug('Configuration loaded')
 
         self.map_fts_servers = self.config.map_FTSserver
@@ -39,10 +45,10 @@ class StatisticDaemon(BaseWorkerThread):
             a. retrives job document
             b. update the stat db
             c. delete documente
-        """ 
+        """
         oldJob = self.getOldJob()
         self.logger.debug('%d jobs to delete' % len(oldJob) )
-    
+
         for doc in oldJob:
 
             try:
@@ -55,22 +61,22 @@ class StatisticDaemon(BaseWorkerThread):
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-            
-            
+
+
             try:
                 self.db.queueDelete(jobDoc)
 
             except Exception, ex:
-            
+
                 msg =  "Error queuing document for delete in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
-                self.logger.error(msg)  
-            
+                self.logger.error(msg)
+
 
         self.db.commit()
-            
-        
+
+
     def getFTServer(self, site):
         """
         Parse site string to know the fts server to use
@@ -86,7 +92,7 @@ class StatisticDaemon(BaseWorkerThread):
         """
         Get the list of finished jobs older than the exptime.
         """
-        
+
         query = {'reduce': False,
                  'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}
         oldJob = self.db.loadView('monitor', 'endedByTime', query)['rows']
@@ -116,7 +122,7 @@ class StatisticDaemon(BaseWorkerThread):
             self.createServerDocument(ftserver, document)
         else:
             self.updateServerDocument(ftserver, document)
-        
+
         self.statdb.commit()
 
     def createServerDocument(self, fts, document):
@@ -170,19 +176,19 @@ class StatisticDaemon(BaseWorkerThread):
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def q(self, fts, document):
+    def updateServerDocument(self, fts, document):
         """
         Update the FTServer statistics document according to the job document data
         """
         startTime = datetime.datetime.strptime(document['start_time'], "%Y-%m-%d %H:%M:%S.%f")
         endTime = datetime.datetime.strptime(document['end_time'], "%Y-%m-%d %H:%M:%S.%f")
         jobDuration = (endTime - startTime).seconds / 60
-        
+
         try:
             serverDoc = self.statdb.document("%s_%s" % (fts, startTime.date().isoformat()))
             self.logger.debug('FTS = %s' % serverDoc['fts'])
             server_users = serverDoc['users']
-    
+
             if server_users.has_key(document['user']):
                 #user already in users list
                 user_entry = server_users[document['user']]
@@ -196,7 +202,7 @@ class StatisticDaemon(BaseWorkerThread):
                 user_entry = [document['task']]
                 server_users[document['user']] = user_entry
                 serverDoc['users'] = server_users
-    
+
             #add destination site to sites_served dict if not already there
             if document['destination'] in serverDoc['sites_served']:
                 if (document['state'] == 'done'):
@@ -210,20 +216,20 @@ class StatisticDaemon(BaseWorkerThread):
                 else:
                     serverDoc['sites_served'][document['destination']] = {'success': 0,
                                                                           'failed': 1}
-                
-                
+
+
             ntransfer = sum(serverDoc['success'].values())+serverDoc['failed']
-    
+
             #update max, min duration time
             if(jobDuration > int(serverDoc['timing']['max_transfer_duration']) ):
                 serverDoc['timing']['max_transfer_duration'] = jobDuration
             if(jobDuration < int(serverDoc['timing']['min_transfer_duration']) ):
                 serverDoc['timing']['min_transfer_duration'] = jobDuration
-                
+
             avgTime = serverDoc['timing']['avg_transfer_duration']
             avgTime = avgTime * (ntransfer / float(ntransfer+1)) + jobDuration / float(ntransfer+1)
             serverDoc['timing']['avg_transfer_duration'] = int(avgTime)
-        
+
             if(document['state'] == 'done'):
                 nretry = "%s_retry" % len(document['retry_count'])
                 if(serverDoc['success'].has_key(nretry)):
@@ -232,20 +238,20 @@ class StatisticDaemon(BaseWorkerThread):
                     serverDoc['success'][nretry] = 1
             else:
                 serverDoc['failed'] += 1
-                
+
             serverDoc['avg_size'] = int(serverDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
-        
+
         except Exception, ex:
 
             msg =  "Error when retriving document from couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-            
+
         try:
-            
+
             self.statdb.queue(serverDoc)
-        
+
         except Exception, ex:
 
             msg =  "Error when queuing document in couch"

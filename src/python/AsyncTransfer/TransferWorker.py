@@ -18,6 +18,28 @@ import tempfile
 import datetime
 import traceback
 
+from WMCore.Credential.Proxy import Proxy
+
+def getProxy(userdn, defaultDelegation, logger):
+    """
+    _getProxy_
+    """
+
+    logger.debug("Retrieving proxy for %s" % userdn)
+    config = defaultDelegation
+    config['userDN'] = userdn
+    proxy = Proxy(defaultDelegation)
+    proxyPath = proxy.getProxyFilename( True )
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 3600:
+        return (True, proxyPath)
+    proxyPath = proxy.logonRenewMyProxy()
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 0:
+        return (True, proxyPath)
+    return (False, None)
+
+
 class TransferWorker:
 
     def __init__(self, user, tfc_map, config):
@@ -46,8 +68,41 @@ class TransferWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
 
-        # TODO: use proxy management to pick this up - ticket #202
-        self.userProxy = config.serviceCert
+        query = {'group': True,
+                 'startkey':[user], 'endkey':[user, {}, {}]}
+        self.userDN = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][3]
+        defaultDelegation = {
+                                  'logger': self.logger,
+                                  'credServerPath' : \
+                                      self.config.credentialDir,
+                                  # It will be moved to be getfrom couchDB
+                                  'myProxySvr': 'myproxy.cern.ch',
+                                  'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
+                                  'serverDN' : self.config.serverDN,
+                                  'setupScript' : getattr(self.config, 'UISetupScript', None)
+                            }
+        valid = False
+        try:
+
+            valid, proxy = getProxy(self.userDN, defaultDelegation, self.logger)
+
+        except Exception, ex:
+
+            msg =  "Error getting the user proxy"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+
+        if valid:
+
+            self.userProxy = proxy
+
+        else:
+
+            # Use the operator's proxy when the user proxy in invalid.
+            # This will be moved soon
+            self.userProxy = config.serviceCert
+
 
     def __call__(self):
         """
@@ -127,7 +182,7 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, destination, source]}
+                     'key':[self.user, destination, source, self.userDN]}
 
                 active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files), source, destination))

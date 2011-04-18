@@ -1,3 +1,10 @@
+"""
+Create and write dummy data into an SE and make the corresponding records in
+the AsyncTransfer database to transfer. 
+
+WARNING: this will create files in you user area and transfer them with FTS.
+"""
+
 import random
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Configuration import loadConfigurationFile
@@ -6,21 +13,23 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 import subprocess, os, errno
 import logging
 import traceback
+import datetime
 
 config = loadConfigurationFile( os.environ.get('WMAGENT_CONFIG') ).AsyncTransfer
 server = CouchServer(config.couch_instance)
 db = server.connectDatabase(config.files_database)
-proxy = config.serviceCert 
+proxy = config.serviceCert
 emptyFile = config.ftscp
 logging.basicConfig(level=config.log_level)
 logger = logging.getLogger('AsyncTransfer-TransferDummyData')
 
-def apply_tfc(file, site_tfc_map, site):
+def apply_tfc(site_file, site_tfc_map, site):
     """
     Take a CMS_NAME:lfn string and make a pfn
     """
     site_tfc_map[site] = get_tfc_rules(site)
-    site, lfn = tuple(file.split(':'))
+    site, lfn = tuple(site_file.split(':'))
+
     return site_tfc_map[site].matchLFN('srmv2', lfn)
 
 def get_tfc_rules(site):
@@ -60,26 +69,34 @@ sites = ['T2_AT_Vienna', 'T2_BE_IIHE', 'T2_BE_UCL', 'T2_BR_SPRACE',
          'T2_US_UCSD', 'T2_US_Wisconsin']
 
 #TODO: read from script input
-size = 3 
+size = 3
 site_tfc_map = {}
 i = 1
 
-lfn_base = '/store/temp/riahi/user/%s/store/temp/file-%s-%s.root' 
+lfn_base = '/store/temp/riahi/user/%s/store/temp/file-%s-%s.root'
+now = str(datetime.datetime.now())
 
 while i <= size:
 
     user = random.choice(users)
-    file_doc = {'_id': lfn_base % (user, 
+    file_doc = {'_id': lfn_base % (user,
                                    random.randint(1000, 9999),
                                    i),
                 'source': random.choice(sites),
-                'destination': 'T2_IT_Pisa',
-                'user': user    
+                'destination': random.choice(sites),
+                'start_time' : now,
+                'end_time' : now,
+                'state' : random.choice(state),
+                'dbSource_update' : now,
+                'task': '/CmsRunAnalysis/Analysis-%s' %(random.randint(1,3)),
+                'retry_count': [],
+                'user': user,
+                'size': random.randint(1, 9999)
     }
 
     try:
 
-        pfn = apply_tfc(file_doc['source']+':'+file_doc['_id'], site_tfc_map, file_doc['source']) 
+        pfn = apply_tfc(file_doc['source']+':'+file_doc['_id'], site_tfc_map, file_doc['source'])
 
     except Exception, ex:
 
@@ -89,16 +106,16 @@ while i <= size:
     if not pfn:
         continue
 
-    command = 'export X509_USER_PROXY=' + proxy +'; srmcp -debug=true file:///'+emptyFile+' '+pfn+' -2'      
+    command = 'export X509_USER_PROXY=' + proxy +'; srmcp -debug=true file:///'+emptyFile+' '+pfn+' -2'
 
     log_dir = '%s/logs/%s' % (os.environ['PWD'], user)
 
     try:
-       os.makedirs(log_dir)
+        os.makedirs(log_dir)
     except OSError, e:
-       if e.errno == errno.EEXIST:
-           pass
-       else: raise
+        if e.errno == errno.EEXIST:
+            pass
+        else: raise
 
     stdout_log = open('%s/%s.srmcp_out_log' % (log_dir, file_doc['source']), 'w')
     stderr_log = open('%s/%s.srmcp_err_log' % (log_dir, file_doc['source']), 'w')
@@ -121,7 +138,7 @@ while i <= size:
 
     logger.info("Transfer completed with return code %s, detailed logs in %s and %s" % (rc, stdout_log, stderr_log))
 
-    if not rc: 
+    if not rc:
 
         db.queue(file_doc, True, ['AsyncTransfer/ftscp'])
         i += 1
