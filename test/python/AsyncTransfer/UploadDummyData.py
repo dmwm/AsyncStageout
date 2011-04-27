@@ -1,6 +1,6 @@
 """
 Create and write dummy data into an SE and make the corresponding records in
-the AsyncTransfer database to transfer. 
+the AsyncTransfer database to transfer.
 
 WARNING: this will create files in you user area and transfer them with FTS.
 """
@@ -86,7 +86,7 @@ while i <= size:
                 'destination': random.choice(sites),
                 'start_time' : now,
                 'end_time' : now,
-                'state' : random.choice(state),
+                'state' : 'new',
                 'dbSource_update' : now,
                 'task': '/CmsRunAnalysis/Analysis-%s' %(random.randint(1,3)),
                 'retry_count': [],
