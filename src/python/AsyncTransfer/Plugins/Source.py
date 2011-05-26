@@ -40,3 +40,10 @@ class Source:
         __call__ should be over written by subclasses such that useful results are returned
         """
         return []
+
+    def updateSource(self, inputDict):
+        """
+        UpdateSource should be over written by subclasses to make a specific update in the source 
+        """
+        return []
+

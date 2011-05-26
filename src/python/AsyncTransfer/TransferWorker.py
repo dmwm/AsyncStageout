@@ -1,3 +1,5 @@
+#!/usr/bin/env
+#pylint: disable-msg=C0103
 '''
 The TransferWorker does the following:
 
@@ -17,6 +19,7 @@ import subprocess, os, errno
 import tempfile
 import datetime
 import traceback
+from WMCore.WMFactory import WMFactory
 
 from WMCore.Credential.Proxy import Proxy
 
@@ -102,6 +105,9 @@ class TransferWorker:
             # Use the operator's proxy when the user proxy in invalid.
             # This will be moved soon
             self.userProxy = config.serviceCert
+
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
 
 
     def __call__(self):
@@ -338,19 +344,19 @@ class TransferWorker:
             try:
 
                 if line.strip() == 'Too many errors from status update, cancelling transfer':
-                   self.logger.debug("Problem to contact the FTS server!")
-                   break
+                    self.logger.debug("Problem to contact the FTS server!")
+                    break
 
                 if line.split(':')[0].strip() == 'Source':
-                   lfn = self.get_lfn_from_pfn( siteSource, line.split('Source:')[1:][0].strip() )
-                   # Now we have the lfn, skip to the next line
-                   continue
+                    lfn = self.get_lfn_from_pfn( siteSource, line.split('Source:')[1:][0].strip() )
+                    # Now we have the lfn, skip to the next line
+                    continue
 
                 if line.split(':')[0].strip() == 'State' and lfn:
-                   if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done':
-                       transferred_files.append(lfn)
-                   else:
-                       failed_files.append(lfn)
+                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done':
+                        transferred_files.append(lfn)
+                    else:
+                        failed_files.append(lfn)
 
             except IndexError, ex:
 
@@ -368,21 +374,25 @@ class TransferWorker:
 
         for i in files:
 
-           # TODO: Delete without loading first
-           try:
+            # TODO: Delete without loading first
+            try:
 
-               document = self.db.document(i)
-               document['end_time'] = str(datetime.datetime.now())
+                document = self.db.document(i)
+                document['end_time'] = str(datetime.datetime.now())
 
-               self.db.queueDelete(document, viewlist=['AsyncTransfer/ftscp'])
+                self.db.queueDelete(document, viewlist=['AsyncTransfer/ftscp'])
 
 
-           except Exception, ex:
+            except Exception, ex:
 
-               msg =  "Error in deleting document from couch"
-               msg += str(ex)
-               msg += str(traceback.format_exc())
-               self.logger.error(msg)
+                msg =  "Error in deleting document from couch"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
+            pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
+            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
+                          'location': document['destination'], 'lfn': document['_id'] })
 
         self.db.commit()
 
