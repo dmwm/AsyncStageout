@@ -189,7 +189,7 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
         doc['dbSource_update'] = str(time.time())
-
+        doc['dbSource_url'] = 'someUrl'
 
         self.db.queue(doc, True)
         self.db.commit()
@@ -215,7 +215,7 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
         doc['dbSource_update'] = str(time.time())
-
+        doc['dbSource_url'] = 'someUrl'
 
         self.db.queue(doc, True)
         self.db.commit()
@@ -246,7 +246,7 @@ str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3))
 replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2], \
 str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 2))
         doc['dbSource_update'] = str(time.time())
-
+        doc['dbSource_url'] = 'someUrl'
 
         self.db.queue(doc, True)
         self.db.commit()
@@ -626,7 +626,7 @@ WMTaskSpace/cmsRun1/output.root",\
         query = {'reduce':False}
         files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
 
-        # Get files acuired 
+        # Get files acuired
         document = self.db.document(files_acquired[0]['id'])
 
         # Mark the document as good
