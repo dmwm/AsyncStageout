@@ -52,7 +52,8 @@ class TransferWorker:
         self.user = user
         self.tfc_map = tfc_map
         self.config = config
-        self.log_dir = '%s/logs/%s' % (self.config.componentDir, self.user)
+        self.log_dir = '%s/logs/%s/%s/%s' % ( self.config.componentDir, \
+ str(datetime.datetime.now().month), str(datetime.datetime.now().year), self.user)
         self.pfn_to_lfn_mapping = {}
 
         try:
@@ -126,7 +127,7 @@ class TransferWorker:
         self.logger.info('Transfers completed')
         return
 
-    def cleanSpace(self, copyjob):
+    def cleanSpace(self, copyjob, source_site):
         """
         Remove all __destination__ PFNs got in input. The delete can fail because of a file not found
         so issue the command and hope for the best.
@@ -134,19 +135,24 @@ class TransferWorker:
         TODO: better parsing of output
         """
         for task in copyjob:
+
             destination_pfn = task.split()[1]
-            command = 'export X509_USER_PROXY=%s ; srmrm %s'  %( self.userProxy, destination_pfn )
+
+            logfile = open('%s/%s_%s.srmrmlog' % ( self.log_dir, source_site, str(time.time()) ), 'w')
+
+            command = 'export X509_USER_PROXY=%s ; srmrm %s'  % ( self.userProxy, destination_pfn )
             self.logger.debug("Running remove command %s" % command)
+
             proc = subprocess.Popen(
                     ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=logfile,
+                    stderr=logfile,
                     stdin=subprocess.PIPE,
             )
             proc.stdin.write(command)
             stdout, stderr = proc.communicate()
             rc = proc.returncode
-
+            logfile.close()
 
     def getFTServer(self, site):
         """
@@ -268,7 +274,7 @@ class TransferWorker:
 
             # Clean cruft files from previous transfer attempts
             # TODO: check that the job has a retry count > 0 and only delete files if that is the case
-            self.cleanSpace( copyjob )
+            self.cleanSpace( copyjob, link[0] )
 
             tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
             tmp_copyjob_file.write('\n'.join(copyjob))
@@ -276,7 +282,7 @@ class TransferWorker:
 
             fts_server_for_transfer = self.getFTServer(link[1])
 
-            logfile = open('%s/%s_%s-%s_%s.ftslog' % ( self.log_dir, self.user, link[0], link[1], str(time.time()) ), 'w')
+            logfile = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
 
             self.logger.debug("Running FTSCP command")
             self.logger.debug("FTS server: %s" % fts_server_for_transfer)
