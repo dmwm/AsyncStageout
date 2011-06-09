@@ -596,6 +596,35 @@ WMTaskSpace/cmsRun1/output.root",\
         active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
         assert len(active_files) == 0
 
+    def testD_StatWork_testNumberOfDocsPerIteration(self):
+        """
+
+        _StatWork_testNumberOfDocsPerIteration_
+        Test if the stat daemon creates a new document per iteration  
+        """
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.statitics_database, self.config.AsyncTransfer.couch_statinstance)
+        harness.create()
+        harness.pushCouchapps(self.stat_couchapp)
+
+        harness1 = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness1.create()
+        harness1.pushCouchapps(self.async_couchapp, self.monitor_couchapp)
+
+        doc = self.createTestFileFinishedYesterdayinFilesDB(config = self.config.AsyncTransfer)
+
+        statWorker = StatisticDaemon(config = self.config)
+        statWorker.algorithm( )
+
+        doc1 = self.createTestFileFinishedYesterdayinFilesDB(config = self.config.AsyncTransfer)
+
+        statWorker = StatisticDaemon(config = self.config)
+        statWorker.algorithm( )
+
+        query = {}
+        serverRows = self.dbStat.loadView('stat', 'ftservers', query)['rows']
+
+        assert len(serverRows) == 2
+
     def testD_InteractionWithTheSource_testUpdateFWJR(self):
         """
         _testD_InteractionWithTheSource_testUpdateFWJR_

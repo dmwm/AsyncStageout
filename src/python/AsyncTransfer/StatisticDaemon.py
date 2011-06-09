@@ -1,3 +1,5 @@
+#!/usr/bin/env
+#pylint: disable-msg=W0613,C0103
 """
 StatisticDeamon
 Update Async. statistics database on couch
@@ -43,9 +45,11 @@ class StatisticDaemon(BaseWorkerThread):
         1. Get the list of finished jobs older than N days (N is from config)
         2. For each old job:
             a. retrives job document
-            b. update the stat db
-            c. delete documente
+            b. update the document 
+            c. delete documents
+            d. update the stat db
         """
+        self.iteration_docs = []
         oldJob = self.getOldJob()
         self.logger.debug('%d jobs to delete' % len(oldJob) )
 
@@ -73,7 +77,19 @@ class StatisticDaemon(BaseWorkerThread):
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
+        for newDoc in self.iteration_docs:
+            try:
 
+                self.statdb.queue(newDoc)
+
+            except Exception, ex:
+
+                msg =  "Error queuing document in statDB"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
+        self.statdb.commit()
         self.db.commit()
 
 
@@ -107,27 +123,20 @@ class StatisticDaemon(BaseWorkerThread):
     def updateStat(self, document):
 
         """
-        Update the statistics db on couch according to the job document
-        1. Look for an existing stat document for the destination FTServer
-        2. Create a new stat document if it doesn't allready exists
-        3. Retrive the stat document and update it if exists
+        Update the stat documents list.
         """
-
         ftserver = self.getFTServer(document['destination'])
-        startTime = datetime.datetime.strptime(document['start_time'], "%Y-%m-%d %H:%M:%S.%f")
-        query = {'key': [ftserver, startTime.date().isoformat()]}
-        serverRows = self.statdb.loadView('stat', 'ftservers', query)['rows']
 
-        if(len(serverRows) == 0):
-            self.createServerDocument(ftserver, document)
-        else:
-            self.updateServerDocument(ftserver, document)
-
-        self.statdb.commit()
+        for oldDoc in self.iteration_docs:
+            if oldDoc['fts'] == ftserver:
+                self.updateServerDocument(oldDoc, document)
+                return
+        self.createServerDocument(ftserver, document)
+        return
 
     def createServerDocument(self, fts, document):
         """
-        Create a new document for te FTServer statistics according to the job document data
+        Create a new document for the FTServer statistics according to the job document data
         """
         startTime = datetime.datetime.strptime(document['start_time'], "%Y-%m-%d %H:%M:%S.%f")
         endTime = datetime.datetime.strptime(document['end_time'], "%Y-%m-%d %H:%M:%S.%f")
@@ -135,9 +144,8 @@ class StatisticDaemon(BaseWorkerThread):
 
         if document['state'] == 'done':
             nretry = "%s_retry" % len(document['retry_count'])
-            serverDoc = {'_id': "%s_%s" % (fts, startTime.date().isoformat()),
-                         'fts': fts,
-                         'day': startTime.date().isoformat(),
+            self.iteration_docs.append({'fts': fts,
+                          'day': startTime.date().isoformat(),
                           'sites_served': {document['destination']: {'success': 1,
                                                                      'failed': 0}
                                             },
@@ -148,11 +156,10 @@ class StatisticDaemon(BaseWorkerThread):
                           'success': {nretry : 1},
                           'failed' : 0,
                           'avg_size' : document['size']
-                          }
-        elif document['state'] == 'false':
-            serverDoc = {'_id': "%s_%s" % (fts, startTime.date().isoformat()),
-                         'fts': fts,
-                         'day': startTime.date().isoformat(),
+                          })
+        elif document['state'] == 'failed':
+            self.iteration_docs.append({'fts': fts,
+                          'day': startTime.date().isoformat(),
                           'sites_served': {document['destination']: {'success': 0,
                                                                      'failed': 1}
                                             },
@@ -163,20 +170,10 @@ class StatisticDaemon(BaseWorkerThread):
                           'success': {},
                           'failed' : 1,
                           'avg_size' : document['size']
-                          }
+                          })
 
-        try:
 
-            self.statdb.queue(serverDoc)
-
-        except Exception, ex:
-
-            msg =  "Error when queuing document in couch"
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-
-    def updateServerDocument(self, fts, document):
+    def updateServerDocument(self, oldDoc, document):
         """
         Update the FTServer statistics document according to the job document data
         """
@@ -185,9 +182,8 @@ class StatisticDaemon(BaseWorkerThread):
         jobDuration = (endTime - startTime).seconds / 60
 
         try:
-            serverDoc = self.statdb.document("%s_%s" % (fts, startTime.date().isoformat()))
-            self.logger.debug('FTS = %s' % serverDoc['fts'])
-            server_users = serverDoc['users']
+            self.logger.debug('FTS = %s' % oldDoc['fts'])
+            server_users = oldDoc['users']
 
             if server_users.has_key(document['user']):
                 #user already in users list
@@ -196,65 +192,54 @@ class StatisticDaemon(BaseWorkerThread):
                 #add workflow to user
                     user_entry.append(document['task'])
                     server_users[document['user']] = user_entry
-                    serverDoc['users'] = server_users
+                    oldDoc['users'] = server_users
             else:
                 #add user to users list with workflow
                 user_entry = [document['task']]
                 server_users[document['user']] = user_entry
-                serverDoc['users'] = server_users
+                oldDoc['users'] = server_users
 
             #add destination site to sites_served dict if not already there
-            if document['destination'] in serverDoc['sites_served']:
+            if document['destination'] in oldDoc['sites_served']:
                 if (document['state'] == 'done'):
-                    serverDoc['sites_served'][document['destination']]['success'] += 1
+                    oldDoc['sites_served'][document['destination']]['success'] += 1
                 else:
-                    serverDoc['sites_served'][document['destination']]['failed'] += 1
+                    oldDoc['sites_served'][document['destination']]['failed'] += 1
             else:
                 if(document['state'] == 'done'):
-                    serverDoc['sites_served'][document['destination']] = {'success': 1,
+                    oldDoc['sites_served'][document['destination']] = {'success': 1,
                                                                           'failed': 0}
                 else:
-                    serverDoc['sites_served'][document['destination']] = {'success': 0,
+                    oldDoc['sites_served'][document['destination']] = {'success': 0,
                                                                           'failed': 1}
 
 
-            ntransfer = sum(serverDoc['success'].values())+serverDoc['failed']
+            ntransfer = sum(oldDoc['success'].values())+oldDoc['failed']
 
             #update max, min duration time
-            if(jobDuration > int(serverDoc['timing']['max_transfer_duration']) ):
-                serverDoc['timing']['max_transfer_duration'] = jobDuration
-            if(jobDuration < int(serverDoc['timing']['min_transfer_duration']) ):
-                serverDoc['timing']['min_transfer_duration'] = jobDuration
+            if(jobDuration > int(oldDoc['timing']['max_transfer_duration']) ):
+                oldDoc['timing']['max_transfer_duration'] = jobDuration
+            if(jobDuration < int(oldDoc['timing']['min_transfer_duration']) ):
+                oldDoc['timing']['min_transfer_duration'] = jobDuration
 
-            avgTime = serverDoc['timing']['avg_transfer_duration']
+            avgTime = oldDoc['timing']['avg_transfer_duration']
             avgTime = avgTime * (ntransfer / float(ntransfer+1)) + jobDuration / float(ntransfer+1)
-            serverDoc['timing']['avg_transfer_duration'] = int(avgTime)
+            oldDoc['timing']['avg_transfer_duration'] = int(avgTime)
 
             if(document['state'] == 'done'):
                 nretry = "%s_retry" % len(document['retry_count'])
-                if(serverDoc['success'].has_key(nretry)):
-                    serverDoc['success'][nretry] += 1
+                if(oldDoc['success'].has_key(nretry)):
+                    oldDoc['success'][nretry] += 1
                 else:
-                    serverDoc['success'][nretry] = 1
+                    oldDoc['success'][nretry] = 1
             else:
-                serverDoc['failed'] += 1
+                oldDoc['failed'] += 1
 
-            serverDoc['avg_size'] = int(serverDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
+            oldDoc['avg_size'] = int(oldDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
 
         except Exception, ex:
 
             msg =  "Error when retriving document from couch"
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-
-        try:
-
-            self.statdb.queue(serverDoc)
-
-        except Exception, ex:
-
-            msg =  "Error when queuing document in couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
