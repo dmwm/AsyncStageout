@@ -1,9 +1,11 @@
 #!/usr/bin/env
 #pylint: disable-msg=W0613,C0103
 """
-StatisticDeamon
-Update Async. statistics database on couch
-Delete older finished job from Async. database
+It populates Async. statistics database
+with transfers details from old documents
+in runtime database. It creates a document
+per fts server per iteration and removes
+old documents from runtime database.
 """
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
@@ -12,7 +14,11 @@ import datetime
 import traceback
 
 class StatisticDaemon(BaseWorkerThread):
-
+    """
+    _StatisticDeamon_
+    Update Async. statistics database on couch
+    Delete older finished job from files_database
+    """
     def __init__(self, config):
         BaseWorkerThread.__init__(self)
         self.config = config.AsyncTransfer
@@ -44,16 +50,16 @@ class StatisticDaemon(BaseWorkerThread):
         """
         1. Get the list of finished jobs older than N days (N is from config)
         2. For each old job:
-            a. retrives job document
-            b. update the document 
-            c. delete documents
-            d. update the stat db
+            a. retrive job document
+            b. update the fts server documents for this iteration
+            c. delete the document from files_database
+            d. update the stat_db by adding the fts servers documents for this iteration
         """
         self.iteration_docs = []
-        oldJob = self.getOldJob()
-        self.logger.debug('%d jobs to delete' % len(oldJob) )
+        oldJobs = self.getOldJobs()
+        self.logger.debug('%d jobs to delete' % len(oldJobs) )
 
-        for doc in oldJob:
+        for doc in oldJobs:
 
             try:
                 jobDoc = self.db.document(doc)
@@ -89,8 +95,21 @@ class StatisticDaemon(BaseWorkerThread):
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
-        self.statdb.commit()
-        self.db.commit()
+        try:
+            self.statdb.commit()
+        except Exception, ex:
+            msg =  "Error commiting documents in statdb"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+
+        try:
+            self.db.commit()
+        except Exception, ex:
+            msg =  "Error commiting documents in files_db"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
 
 
     def getFTServer(self, site):
@@ -103,7 +122,7 @@ class StatisticDaemon(BaseWorkerThread):
         else:
             return self.map_fts_servers['defaultServer']
 
-    def getOldJob(self):
+    def getOldJobs(self):
 
         """
         Get the list of finished jobs older than the exptime.
@@ -111,14 +130,14 @@ class StatisticDaemon(BaseWorkerThread):
 
         query = {'reduce': False,
                  'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}
-        oldJob = self.db.loadView('monitor', 'endedByTime', query)['rows']
+        oldJobs = self.db.loadView('monitor', 'endedByTime', query)['rows']
 
         def docIdMap(row):
             return row['id']
 
-        oldJob = map(docIdMap, oldJob)
+        oldJobs = map(docIdMap, oldJobs)
 
-        return oldJob
+        return oldJobs
 
     def updateStat(self, document):
 
@@ -142,36 +161,27 @@ class StatisticDaemon(BaseWorkerThread):
         endTime = datetime.datetime.strptime(document['end_time'], "%Y-%m-%d %H:%M:%S.%f")
         jobDuration = (endTime - startTime).seconds / 60
 
-        if document['state'] == 'done':
-            nretry = "%s_retry" % len(document['retry_count'])
-            self.iteration_docs.append({'fts': fts,
+        nretry = "%s_retry" % len(document['retry_count'])
+
+        # Init the document
+        serverDocument = {'fts': fts,
                           'day': startTime.date().isoformat(),
-                          'sites_served': {document['destination']: {'success': 1,
+                          'sites_served': {document['destination']: {'done': 0,
                                                                      'failed': 0}
                                             },
                           'users': { document['user']: [document['task']]},
                           'timing': {'min_transfer_duration': jobDuration,
                                      'max_transfer_duration': jobDuration,
                                      'avg_transfer_duration': jobDuration},
-                          'success': {nretry : 1},
-                          'failed' : 0,
+                          'done': {},
+                          'failed' : {},
                           'avg_size' : document['size']
-                          })
-        elif document['state'] == 'failed':
-            self.iteration_docs.append({'fts': fts,
-                          'day': startTime.date().isoformat(),
-                          'sites_served': {document['destination']: {'success': 0,
-                                                                     'failed': 1}
-                                            },
-                          'users': { document['user']: [document['task']]},
-                          'timing': {'min_transfer_duration': jobDuration,
-                                     'max_transfer_duration': jobDuration,
-                                     'avg_transfer_duration': jobDuration},
-                          'success': {},
-                          'failed' : 1,
-                          'avg_size' : document['size']
-                          })
+                           }
 
+        serverDocument['sites_served'][document['destination']][document['state']] = 1
+        serverDocument[document['state']][nretry] = 1
+
+        self.iteration_docs.append(serverDocument)
 
     def updateServerDocument(self, oldDoc, document):
         """
@@ -202,19 +212,19 @@ class StatisticDaemon(BaseWorkerThread):
             #add destination site to sites_served dict if not already there
             if document['destination'] in oldDoc['sites_served']:
                 if (document['state'] == 'done'):
-                    oldDoc['sites_served'][document['destination']]['success'] += 1
+                    oldDoc['sites_served'][document['destination']]['done'] += 1
                 else:
                     oldDoc['sites_served'][document['destination']]['failed'] += 1
             else:
                 if(document['state'] == 'done'):
-                    oldDoc['sites_served'][document['destination']] = {'success': 1,
+                    oldDoc['sites_served'][document['destination']] = {'done': 1,
                                                                           'failed': 0}
                 else:
-                    oldDoc['sites_served'][document['destination']] = {'success': 0,
+                    oldDoc['sites_served'][document['destination']] = {'done': 0,
                                                                           'failed': 1}
 
 
-            ntransfer = sum(oldDoc['success'].values())+oldDoc['failed']
+            ntransfer = sum(oldDoc['done'].values()) + sum(oldDoc['failed'].values())
 
             #update max, min duration time
             if(jobDuration > int(oldDoc['timing']['max_transfer_duration']) ):
@@ -226,14 +236,12 @@ class StatisticDaemon(BaseWorkerThread):
             avgTime = avgTime * (ntransfer / float(ntransfer+1)) + jobDuration / float(ntransfer+1)
             oldDoc['timing']['avg_transfer_duration'] = int(avgTime)
 
-            if(document['state'] == 'done'):
-                nretry = "%s_retry" % len(document['retry_count'])
-                if(oldDoc['success'].has_key(nretry)):
-                    oldDoc['success'][nretry] += 1
-                else:
-                    oldDoc['success'][nretry] = 1
+            nretry = "%s_retry" % len(document['retry_count'])
+
+            if(oldDoc[document['state']].has_key(nretry)):
+                oldDoc[document['state']][nretry] += 1
             else:
-                oldDoc['failed'] += 1
+                oldDoc[document['state']][nretry] = 1
 
             oldDoc['avg_size'] = int(oldDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
 
