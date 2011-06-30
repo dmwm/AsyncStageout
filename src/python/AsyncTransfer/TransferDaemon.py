@@ -20,7 +20,8 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
 from TransferWorker import TransferWorker
-
+import time, datetime
+import subprocess, os, errno
 from multiprocessing import Pool
 
 import random
@@ -31,6 +32,23 @@ def ftscp(user, tfc_map, config):
     """
     worker = TransferWorker(user, tfc_map, config)
     return worker()
+
+def execute_command(command):
+    """
+    _execute_command_
+    Function to manage commands.
+    """
+    proc = subprocess.Popen(
+           ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+           stdout=subprocess.PIPE,
+           stderr=subprocess.PIPE,
+           stdin=subprocess.PIPE,
+    )
+    proc.stdin.write(command)
+    stdout, stderr = proc.communicate()
+    rc = proc.returncode
+
+    return stdout, stderr, rc
 
 
 class TransferDaemon(BaseWorkerThread):
@@ -53,6 +71,31 @@ class TransferDaemon(BaseWorkerThread):
             self.logger.setLevel(self.config.log_level)
 
         self.logger.debug('Configuration loaded')
+
+        self.logger.info('Archiving logs')
+
+        # Archiving logs
+        log_dir = '%s/logs' % self.config.componentDir
+        if os.path.exists(log_dir):
+
+            archive_dir = '%s/archive/%s/%s/%s' % ( self.config.componentDir, \
+str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datetime.datetime.now().day) )
+            try:
+                os.makedirs(archive_dir)
+            except OSError, e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else: raise
+
+            command = 'tar -czf %s/logs_%s.tar.gz %s/*' % ( archive_dir, str(time.time()), log_dir )
+
+            self.logger.debug( "tarring logs using %s" %command )
+            out, error, retcode = execute_command(command)
+
+            if retcode != 0 :
+                msg = "Error when archiving %s : %s"\
+                       % (log_dir, error)
+                raise Exception(msg)
 
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
