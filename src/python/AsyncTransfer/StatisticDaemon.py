@@ -42,10 +42,6 @@ class StatisticDaemon(BaseWorkerThread):
         self.statdb = statserver.connectDatabase(self.config.statitics_database)
         self.logger.debug('Connected to Stat CouchDB')
 
-        expdays = datetime.timedelta(days = self.config.expiration_days)
-        self.exptime = datetime.datetime.now() - expdays
-        self.logger.debug('Deleting Jobs ended before %s' %str(self.exptime) )
-
     def algorithm(self, parameters = None):
         """
         1. Get the list of finished jobs older than N days (N is from config)
@@ -55,6 +51,11 @@ class StatisticDaemon(BaseWorkerThread):
             c. delete the document from files_database
             d. update the stat_db by adding the fts servers documents for this iteration
         """
+
+        expdays = datetime.timedelta(days = self.config.expiration_days)
+        self.exptime = datetime.datetime.now() - expdays
+        self.logger.debug('Deleting Jobs ended before %s' %str(self.exptime) )
+
         self.iteration_docs = []
         oldJobs = self.getOldJobs()
         self.logger.debug('%d jobs to delete' % len(oldJobs) )
