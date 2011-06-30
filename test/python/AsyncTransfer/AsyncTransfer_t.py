@@ -14,10 +14,13 @@ from WMQuality.TestInit   import TestInit
 
 from AsyncTransfer.TransferDaemon import TransferDaemon
 from AsyncTransfer.LFNSourceDuplicator import LFNSourceDuplicator
+from AsyncTransfer.StatisticDaemon import StatisticDaemon
+from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
 
 from fakeDaemon import fakeDaemon
 from AsyncTransferTest import AsyncTransferTest
+import datetime
 
 class AsyncTransfer_t(unittest.TestCase):
     """
@@ -31,9 +34,13 @@ class AsyncTransfer_t(unittest.TestCase):
         self.testInit = TestInit(__file__)
         self.testInit.setLogging()
         self.testInit.setDatabaseConnection()
+        self.testInit.setSchema(customModules = ["WMCore.MsgService", "WMCore.ThreadPool","WMCore.Agent.Database"],
+                                useDefault = False)
+
 
         self.docsInFilesDB = []
         self.docsInDBSource = []
+        self.docsInStatDB = []
 
         self.testDir = self.testInit.generateWorkDir(deleteOnDestruction = False)
 
@@ -48,7 +55,12 @@ class AsyncTransfer_t(unittest.TestCase):
         # Connect to couchDB source
         server = CouchServer(self.config.AsyncTransfer.data_source)
         self.dbSource = server.connectDatabase(self.config.AsyncTransfer.jsm_db)
-        print('Connected to CouchDB source')
+        print('Connected to couchDB source')
+
+        # Connect to statDB
+        server = CouchServer(self.config.AsyncTransfer.couch_statinstance)
+        self.dbStat = server.connectDatabase(self.config.AsyncTransfer.statitics_database)
+        print('Connected to statDB')
 
         return
 
@@ -56,6 +68,7 @@ class AsyncTransfer_t(unittest.TestCase):
         """
         Database deletion
         """
+        self.testInit.clearDatabase(modules = ["WMCore.MsgService", "WMCore.ThreadPool","WMCore.Agent.Database"])
         self.testInit.delWorkDir()
 
         # Remove test docs in couchDB
@@ -64,6 +77,9 @@ class AsyncTransfer_t(unittest.TestCase):
 
         for doc in self.docsInDBSource:
             self.DeleteTestDocinDBSource(doc)
+
+        for doc in self.docsInStatDB:
+            self.DeleteTestDocinDBStat(doc)
 
         return
 
@@ -76,8 +92,9 @@ class AsyncTransfer_t(unittest.TestCase):
         """
         config = self.testInit.getConfiguration()
 
+        config = loadConfigurationFile('../../../src/python/DefaultConfig.py')
+
         #First the general stuff
-        config.section_("General")
         config.General.workDir = os.getenv("TESTDIR", os.getcwd())
 
         #Now the CoreDatabase information
@@ -86,31 +103,8 @@ class AsyncTransfer_t(unittest.TestCase):
         config.CoreDatabase.socket     = os.getenv("DBSOCK")
         config.CoreDatabase.dialect = os.getenv("DIALECT")
 
-        config.component_("AsyncTransfer")
-        config.AsyncTransfer.couch_instance = 'http://user:pass@crab.pg.infn.it:5984'
-        config.AsyncTransfer.files_database = 'asynctransfer_unitest'
-        config.AsyncTransfer.data_source = 'http://user:pass@crab.pg.infn.it:5984'
-        config.AsyncTransfer.jsm_db = 'wmagent_test'
-        config.AsyncTransfer.log_level = logging.DEBUG
-        config.AsyncTransfer.pluginName = "JSM"
-        config.AsyncTransfer.pluginDir = "AsyncTransfer.Plugins"
-        config.AsyncTransfer.max_files_per_transfer = 10
-        config.AsyncTransfer.pool_size = 3
-        config.AsyncTransfer.max_retry = 1000
-        config.AsyncTransfer.pollInterval = 10
+        #Now the AsyncTransfer stuff
         config.AsyncTransfer.serviceCert = os.getenv('X509_USER_PROXY')
-        config.AsyncTransfer.map_FTSserver = {\
-'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
-'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
-'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' ,\
-'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' ,\
-'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer' ,\
- 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' ,\
- 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' ,\
- 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' ,\
- 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' ,\
- 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
-
         config.AsyncTransfer.logDir                = os.path.join(self.testDir, 'logs')
         config.AsyncTransfer.componentDir          = os.getcwd()
 
@@ -125,25 +119,25 @@ class AsyncTransfer_t(unittest.TestCase):
         """
         config = self.testInit.getConfiguration()
 
+        config = loadConfigurationFile('../../../src/python/DefaultConfig.py')
+
         #First the general stuff
-        config.section_("General")
         config.General.workDir = os.getenv("TESTDIR", os.getcwd())
 
         #Now the CoreDatabase information
-        config.section_("CoreDatabase")
         config.section_("CoreDatabase")
         config.CoreDatabase.connectUrl = os.getenv("DATABASE")
         config.CoreDatabase.socket     = os.getenv("DBSOCK")
         config.CoreDatabase.dialect = os.getenv("DIALECT")
 
         config.component_("AsyncTransferTest")
-        config.AsyncTransferTest.couch_instance = 'http://user:pass@crab.pg.infn.it:5984'
-        config.AsyncTransferTest.files_database = 'asynctransfer_unitest'
-        config.AsyncTransferTest.data_source = 'http://user:pass@crab.pg.infn.it:5984'
-        config.AsyncTransferTest.jsm_db = 'wmagent_test'
+        config.AsyncTransferTest.couch_instance = config.AsyncTransfer.couch_instance
+        config.AsyncTransferTest.files_database = config.AsyncTransfer.files_database
+        config.AsyncTransferTest.data_source = config.AsyncTransfer.data_source
+        config.AsyncTransferTest.jsm_db = config.AsyncTransfer.jsm_db
         config.AsyncTransferTest.log_level = logging.DEBUG
-        config.AsyncTransferTest.pluginName = "JSM"
-        config.AsyncTransferTest.pluginDir = "AsyncTransfer.Plugins"
+        config.AsyncTransferTest.pluginName = config.AsyncTransfer.pluginName
+        config.AsyncTransferTest.pluginDir = config.AsyncTransfer.pluginDir
         config.AsyncTransferTest.max_files_per_transfer = 10
         config.AsyncTransferTest.pool_size = 3
         config.AsyncTransferTest.max_retry = 1000
@@ -166,12 +160,11 @@ class AsyncTransfer_t(unittest.TestCase):
 
         return config
 
-    def createTestDocinFilesDB(self):
+    def createTestDocinFilesDB(self, doc = {} ):
         """
         Creates a test document in files_db
 
         """
-        doc = {}
 
         doc['_id'] = "/this/is/a/lfnA"
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
@@ -182,7 +175,8 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['destination'] = "T2_IT_Pisa"
         doc['user'] = 'riahi'
         doc['state'] = 'new'
-        doc['start_time'] = str(time.time())
+        doc['start_time'] = str(datetime.datetime.now())
+        doc['end_time'] = str(time.time())
         doc['dbSource_update'] = str(time.time())
 
 
@@ -195,6 +189,35 @@ class AsyncTransfer_t(unittest.TestCase):
 
         return
 
+    def createTestFileFinishedYesterdayinFilesDB(self, config = None, doc = {} ):
+        """
+        Creates a test document in files_db
+
+        """
+
+        doc['_id'] = "/this/is/a/lfnA"
+        doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
+        doc['task'] = 'someWorkflow'
+        doc['size'] = 999999
+        doc['jobid'] = '1'
+        doc['retry_count'] = []
+        doc['source'] = 'T2_IT_Bari'
+        doc['destination'] = "T2_IT_Pisa"
+        doc['user'] = 'riahi'
+        doc['state'] = 'done'
+        doc['start_time'] = str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3))
+        doc['end_time'] = str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 2))
+        doc['dbSource_update'] = str(time.time())
+
+
+        self.db.queue(doc, True)
+        self.db.commit()
+
+        self.docsInStatDB.append( config.map_FTSserver[ doc['destination'].split("_")[1] ]+"_"+str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3)).split(" ")[0] )
+
+        return
+
+
     def DeleteTestDocinFilesDB(self, doc):
         """
         Remove the test documents in files_db
@@ -204,6 +227,18 @@ class AsyncTransfer_t(unittest.TestCase):
         self.db.commit()
 
         print('deleted %s' %doc)
+
+        return
+
+    def DeleteTestDocinDBStat(self, doc):
+        """
+        Remove the test documents from statdb
+        """
+        document = self.dbStat.document( doc )
+        self.db.queueDelete(document)
+        self.db.commit()
+
+        print('deleted %s from stat' %doc)
 
         return
 
@@ -465,6 +500,20 @@ WMTaskSpace/cmsRun1/output.root",\
             print('Currently: '+str(threading.activeCount())+\
                 ' Threads. Wait until all our threads have finished')
             time.sleep(1)
+
+        return
+
+    def testD_StatWork_BasicFunctionTest(self):
+        """
+        _StatWork_BasicFunctionTest_
+        Test statisticWorker, by seeing if it can remove a doc more than expire time
+        old from runtimeDB and create a new stat doc in statDB
+        """
+
+        self.createTestFileFinishedYesterdayinFilesDB(config = self.config.AsyncTransfer)
+
+        statWorker = StatisticDaemon(config = self.config)
+        statWorker.algorithm( )
 
         return
 
