@@ -8,14 +8,15 @@ import threading
 from WMCore.Agent.Harness import Harness
 
 from TransferDaemon import TransferDaemon
-from LFNSourceDuplicator import LFNSourceDuplicator 
+from LFNSourceDuplicator import LFNSourceDuplicator
+from StatisticDaemon import StatisticDaemon
 
 class AsyncTransfer(Harness):
     """
     _AsyncTransfer_
     AsyncTransfer main class. Call workers to do following work:
     1- Duplicate lfn's from a source into the AsyncTransfer CouchDB
-    2- Transfer LFN in the local AsyncTransfer CouchDB 
+    2- Transfer LFN in the local AsyncTransfer CouchDB
     """
 
     def __init__(self, config):
@@ -32,7 +33,7 @@ class AsyncTransfer(Harness):
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
 
-        logging.debug("Setting poll interval to %s seconds" \
+        logging.debug("Setting DB source poll interval to %s seconds" \
                       %str(self.config.AsyncTransfer.pollViewsInterval) )
 
 
@@ -50,6 +51,14 @@ class AsyncTransfer(Harness):
                               self.config.AsyncTransfer.pollInterval \
                             )
 
+        logging.debug("Setting poll statistic interval to %s seconds" \
+                       %str(self.config.AsyncTransfer.pollStatInterval) )
 
-        return  
+        myThread.workerThreadManager.addWorker( \
+                              StatisticDaemon(self.config), \
+                              self.config.AsyncTransfer.pollStatInterval \
+                            )
+
+
+        return
 
