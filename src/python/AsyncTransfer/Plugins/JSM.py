@@ -40,7 +40,7 @@ class JSM(Source):
         try:
             # Get the time of the last record we're going to pull in
             query = {'limit' : 1, 'descending': True}
-            endtime = dbSource.loadView(designSource, viewSource, query)['rows'][0]['key']
+            endtime = self.dbSource.loadView(self.designSource, self.viewSource, query)['rows'][0]['key']
 
             # If the above throws an exception there's no files to process, so just move on
 
@@ -48,7 +48,7 @@ class JSM(Source):
             self.logger.debug('Querying JSM for files added between %s and %s' % (self.since, endtime))
 
             query = { 'startkey': self.since, 'endkey': endtime }
-            result = dbSource.loadView(designSource, viewSource, query)['rows']
+            result = self.dbSource.loadView(self.designSource, self.viewSource, query)['rows']
 
             # Now record where we got up to so next iteration we'll continue from there
             if result:
@@ -73,7 +73,7 @@ class JSM(Source):
             value['state'] = 'new'
             value['start_time'] = now
             value['dbSource_update'] = row['key']
-            value['dbSource_url] = self.config.data_source
+            value['dbSource_url'] = self.config.data_source
             return value
 
         return map(pull_value, result)
