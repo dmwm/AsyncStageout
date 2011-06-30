@@ -385,7 +385,7 @@ class TransferWorker:
 
                 document = self.db.document(i)
                 document['end_time'] = str(datetime.datetime.now())
-               self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
+                self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
 
             except Exception, ex:
 
@@ -398,7 +398,13 @@ class TransferWorker:
             pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
                           'location': document['destination'], 'lfn': document['_id'] })
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception, ex:
+            msg =  "Error commiting documents in couch"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
 
     def mark_failed(self, files=[]):
         """
@@ -444,8 +450,13 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception, ex:
+            msg =  "Error commiting documents in couch"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
 
     def mark_incomplete(self, files=[]):
         """
