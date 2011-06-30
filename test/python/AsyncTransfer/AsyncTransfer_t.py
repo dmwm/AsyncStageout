@@ -596,7 +596,51 @@ WMTaskSpace/cmsRun1/output.root",\
         active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
         assert len(active_files) == 0
 
-    def testD_FixBug1196_BasicPoolWorkers_FunctionTest(self):
+    def testD_InteractionWithTheSource_testUpdateFWJR(self):
+        """
+        _testD_InteractionWithTheSource_testUpdateFWJR_
+
+        Tests the components: gets data from DB source and duplicate
+        them in files_db and see if the component can update the fwjr when the transfer is done.
+        """
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness.create()
+        harness.pushCouchapps(self.async_couchapp, self.monitor_couchapp)
+
+        harness1 = CouchAppTestHarness(self.config.AsyncTransfer.jsm_db, self.config.AsyncTransfer.data_source)
+        harness1.create()
+        harness1.pushCouchapps(self.jsm_couchapp)
+
+        self.createTestDocinDBSource()
+
+
+        LFNDuplicator = LFNSourceDuplicator(config = self.config)
+        LFNDuplicator.algorithm( )
+
+        time.sleep(10)
+
+        # Run the daemon
+        Transfer = TransferDaemon(config = self.config)
+        Transfer.algorithm( )
+
+        query = {'reduce':False}
+        files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
+
+        # Get files acuired 
+        document = self.db.document(files_acquired[0]['id'])
+
+        # Mark the document as good
+        worker = TransferWorker(document['user'], None, self.config.AsyncTransfer)
+        worker.mark_good([document['_id']])
+
+        query = { 'reduce':False, 'key':[ document['jobid'] , document['dbSource_update'] ] }
+        result = self.dbSource.loadView('FWJRDump', 'fwjrsByJobID', query)['rows']
+
+        docSource = self.dbSource.document(result[0]['id'])
+
+        assert docSource['fwjr']['steps'].has_key('asynStageOut1') == True
+
+    def testE_FixBug1196_BasicPoolWorkers_FunctionTest(self):
         """
         _BasicPoolWorkers_FunctionTest_
 
@@ -615,7 +659,7 @@ WMTaskSpace/cmsRun1/output.root",\
 
             counter += 1
 
-    def testD_FixBug1196_PoolWorkersFromAgent_FunctionTest(self):
+    def testE_FixBug1196_PoolWorkersFromAgent_FunctionTest(self):
         """
         _BasicPoolWorkers_FunctionTest_
 

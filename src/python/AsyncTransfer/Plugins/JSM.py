@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#pylint: disable-msg=C0103
+#pylint: disable=C0103
 """
 _JSM_t_
 Duplicate view from JSM database
@@ -13,19 +13,27 @@ class JSM(Source):
     _JSM_
     JSM plugins to query JSM DBs.
     """
+    def __init__(self, config, logger):
+        """
+        Initialise class members
+        """
+        Source.__init__(self, config, logger)
+
+        # input db
+
+        self.sourceServer = CouchServer(self.config.data_source)
+        self.dbSource = self.sourceServer.connectDatabase(self.config.jsm_db)
+        self.viewSource = 'inputAsycStageOut'
+        self.fwjrsID = 'fwjrByJobIDTimestamp'
+        self.designSource = 'FWJRDump' 
+
+        self.logger.debug('Connected to CouchDB source')
+
     def __call__(self):
         """
         _call_
         Get the result of viewSource from JSM db.
         """
-        # input db
-
-        sourceServer = CouchServer(self.config.data_source)
-        dbSource = sourceServer.connectDatabase(self.config.jsm_db)
-        viewSource = 'inputAsycStageOut'
-        designSource = 'FWJRDump' 
-
-        self.logger.debug('Connected to CouchDB source ')
 
         result = []
 
@@ -68,3 +76,20 @@ class JSM(Source):
             return value
 
         return map(pull_value, result)
+
+    def updateSource(self, inputDict):
+        """
+        Update FWJR DB by adding an AsyncStageOut step. 
+        """
+        query = { 'reduce':False, 'key':[ inputDict['jobid'] , inputDict['timestamp'] ] }
+
+        couchDocID = self.dbSource.loadView(self.designSource, self.fwjrsID, query)['rows'][0]['id']
+
+        updateUri = "/" + self.dbSource.name + "/_design/" + self.designSource + "/_update/addAsyncStageOutStep/" + couchDocID
+        updateUri += "?location=%s&lfn=%s" % ( inputDict['location'], inputDict['lfn'] )
+
+        self.dbSource.makeRequest(uri = updateUri, type = "PUT", decode = False)
+
+        self.dbSource.commit()
+        return []
+
