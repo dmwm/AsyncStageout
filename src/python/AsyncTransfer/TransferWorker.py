@@ -379,9 +379,7 @@ class TransferWorker:
 
                 document = self.db.document(i)
                 document['end_time'] = str(datetime.datetime.now())
-
-                self.db.queueDelete(document, viewlist=['AsyncTransfer/ftscp'])
-
+               self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
 
             except Exception, ex:
 
