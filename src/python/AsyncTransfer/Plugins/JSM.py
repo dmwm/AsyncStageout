@@ -73,7 +73,11 @@ class JSM(Source):
             value['state'] = 'new'
             value['start_time'] = now
             value['dbSource_update'] = row['key']
-            value['dbSource_url'] = self.config.data_source
+            try:
+                value['dbSource_url'] = self.config.data_source.replace((self.config.data_source.split("@")[0]).split("//")[1]+"@", "")
+            except
+                value['dbSource_url'] = self.config.data_source
+
             return value
 
         return map(pull_value, result)
