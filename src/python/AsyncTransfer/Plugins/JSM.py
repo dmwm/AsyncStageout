@@ -25,7 +25,7 @@ class JSM(Source):
         self.dbSource = self.sourceServer.connectDatabase(self.config.jsm_db)
         self.viewSource = 'inputAsycStageOut'
         self.fwjrsID = 'fwjrByJobIDTimestamp'
-        self.designSource = 'FWJRDump' 
+        self.designSource = 'FWJRDump'
 
         self.logger.debug('Connected to CouchDB source')
 
@@ -73,13 +73,14 @@ class JSM(Source):
             value['state'] = 'new'
             value['start_time'] = now
             value['dbSource_update'] = row['key']
+            value['dbSource_url] = self.config.data_source
             return value
 
         return map(pull_value, result)
 
     def updateSource(self, inputDict):
         """
-        Update FWJR DB by adding an AsyncStageOut step. 
+        Update FWJR DB by adding an AsyncStageOut step.
         """
         query = { 'reduce':False, 'key':[ inputDict['jobid'] , inputDict['timestamp'] ] }
 
