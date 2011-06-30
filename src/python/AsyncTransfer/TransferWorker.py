@@ -20,7 +20,7 @@ import tempfile
 import datetime
 import traceback
 from WMCore.WMFactory import WMFactory
-
+import urllib
 from WMCore.Credential.Proxy import Proxy
 
 def getProxy(userdn, defaultDelegation, logger):
@@ -378,18 +378,20 @@ class TransferWorker:
         Mark the list of files as tranferred
         """
 
-        for i in files:
+        for docId in files:
 
-            # TODO: Delete without loading first
             try:
 
-                document = self.db.document(i)
-                document['end_time'] = str(datetime.datetime.now())
-                self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
+                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + urllib.quote_plus(docId)
+                data = {}
+                data['end_time'] = str(datetime.datetime.now())
+                data['state'] = 'done'
+                updateUri += "?" + urllib.urlencode(data)
+                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
 
             except Exception, ex:
 
-                msg =  "Error in deleting document from couch"
+                msg =  "Error in updating document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
@@ -412,12 +414,12 @@ class TransferWorker:
         """
         now = str(datetime.datetime.now())
 
-        for i in files:
+        for docId in files:
 
             # TODO: modify without loading first
             try:
 
-                document = self.db.document(i)
+                document = self.db.document(docId)
 
             except Exception, ex:
 
@@ -426,10 +428,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
-            if document.has_key('retry_count'):
-                document['retry_count'].append(now)
-            else:
-                document['retry_count'] = [now]
+            document['retry_count'].append(now)
 
             if len(document['retry_count']) > self.max_retry:
 
