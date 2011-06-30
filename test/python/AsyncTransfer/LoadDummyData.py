@@ -11,7 +11,7 @@ config = loadConfigurationFile('../../../src/python/DefaultConfig.py')
 
 server = CouchServer(config.AsyncTransfer.couch_instance)
 
-db = server.connectDatabase(config.AsyncTransfer.couch_database)
+db = server.connectDatabase(config.AsyncTransfer.files_database)
 
 users = ['fred', 'barney', 'wilma', 'betty']
 sites = ['T2_AT_Vienna', 'T2_BE_IIHE', 'T2_BE_UCL', 'T2_BR_SPRACE',

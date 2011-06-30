@@ -17,10 +17,14 @@ from AsyncTransfer.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncTransfer.StatisticDaemon import StatisticDaemon
 from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
+from WMQuality.TestInitCouchApp import CouchAppTestHarness
 
+from WMCore.WMInit import getWMBASE
 from fakeDaemon import fakeDaemon
 from AsyncTransferTest import AsyncTransferTest
 import datetime
+
+import random
 
 class AsyncTransfer_t(unittest.TestCase):
     """
@@ -37,30 +41,47 @@ class AsyncTransfer_t(unittest.TestCase):
         self.testInit.setSchema(customModules = ["WMCore.MsgService", "WMCore.ThreadPool","WMCore.Agent.Database"],
                                 useDefault = False)
 
-
-        self.docsInFilesDB = []
-        self.docsInDBSource = []
-        self.docsInStatDB = []
-
         self.testDir = self.testInit.generateWorkDir(deleteOnDestruction = False)
 
         self.config = self.getConfig()
         self.testConfig = self.getTestConfig()
 
         # Connect to files db
-        server = CouchServer(self.config.AsyncTransfer.couch_instance)
-        self.db = server.connectDatabase(self.config.AsyncTransfer.files_database)
-        print('Connected to async couchDB')
+        self.server_filesdb = CouchServer(self.config.AsyncTransfer.couch_instance)
+        self.server_filesdb.createDatabase(self.config.AsyncTransfer.files_database)
+        self.db = self.server_filesdb.connectDatabase(self.config.AsyncTransfer.files_database)
 
         # Connect to couchDB source
-        server = CouchServer(self.config.AsyncTransfer.data_source)
-        self.dbSource = server.connectDatabase(self.config.AsyncTransfer.jsm_db)
-        print('Connected to couchDB source')
+        self.server_jsmdb = CouchServer(self.config.AsyncTransfer.data_source)
+        self.server_jsmdb.createDatabase(self.config.AsyncTransfer.jsm_db)
+        self.dbSource = self.server_jsmdb.connectDatabase(self.config.AsyncTransfer.jsm_db)
 
         # Connect to statDB
-        server = CouchServer(self.config.AsyncTransfer.couch_statinstance)
-        self.dbStat = server.connectDatabase(self.config.AsyncTransfer.statitics_database)
-        print('Connected to statDB')
+        self.server_statdb = CouchServer(self.config.AsyncTransfer.couch_statinstance)
+        self.server_statdb.createDatabase(self.config.AsyncTransfer.statitics_database)
+        self.dbStat = self.server_statdb.connectDatabase(self.config.AsyncTransfer.statitics_database)
+
+
+        couchapps = "../../../src/couchapp"
+        couchapps_jsm = "%s/src/couchapps" % getWMBASE()
+
+        self.async_couchapp = "%s/AsyncTransfer" % couchapps
+        self.monitor_couchapp = "%s/monitor" % couchapps
+        self.jsm_couchapp = "%s/FWJRDump" % couchapps_jsm
+        self.stat_couchapp = "%s/stat" % couchapps
+
+        self.users = ['fred', 'barney', 'wilma', 'betty']
+        self.sites = ['T2_CH_CAF', 'T2_CH_CSCS', 'T2_DE_DESY',
+                      'T2_DE_RWTH', 'T2_ES_CIEMAT', 'T2_ES_IFCA',
+                      'T2_FI_HIP', 'T2_FR_CCIN2P3', 'T2_FR_GRIF_IRFU',
+                      'T2_FR_IPHC', 'T2_IT_Bari', 'T2_FR_GRIF_LLR',
+                      'T2_IT_Legnaro', 'T2_IT_Pisa', 'T2_IT_Rome',
+                      'T2_UK_London_Brunel', 'T2_UK_London_IC', 'T2_TW_Taiwan',
+                      'T2_UK_SGrid_Bristol', 'T2_UK_SGrid_RALPP', 'T2_US_Caltech',
+                      'T2_US_Florida', 'T2_US_MIT', 'T2_US_Nebraska',
+                      'T2_US_UCSD', 'T2_US_Wisconsin', 'T2_US_Purdue']
+
+        self.lfn = ['/this/is/a/lfnA', '/this/is/a/lfnB', '/this/is/a/lfnC', '/this/is/a/lfnD', '/this/is/a/lfnE']
 
         return
 
@@ -71,18 +92,9 @@ class AsyncTransfer_t(unittest.TestCase):
         self.testInit.clearDatabase(modules = ["WMCore.MsgService", "WMCore.ThreadPool","WMCore.Agent.Database"])
         self.testInit.delWorkDir()
 
-        # Remove test docs in couchDB
-        for doc in self.docsInFilesDB:
-            self.DeleteTestDocinFilesDB(doc)
-
-        for doc in self.docsInDBSource:
-            self.DeleteTestDocinDBSource(doc)
-
-        for doc in self.docsInStatDB:
-            self.DeleteTestDocinDBStat(doc)
-
-        return
-
+        self.server_filesdb.deleteDatabase(self.config.AsyncTransfer.files_database)
+        self.server_jsmdb.deleteDatabase(self.config.AsyncTransfer.jsm_db)
+        self.server_statdb.deleteDatabase(self.config.AsyncTransfer.statitics_database)
 
     def getConfig(self):
         """
@@ -144,7 +156,7 @@ class AsyncTransfer_t(unittest.TestCase):
         config.AsyncTransferTest.pollInterval = 10
         config.AsyncTransferTest.serviceCert = os.getenv('X509_USER_PROXY')
         config.AsyncTransferTest.map_FTSserver = \
-{ 'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
+{'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
  'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' ,\
  'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' ,\
  'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' ,\
@@ -160,40 +172,62 @@ class AsyncTransfer_t(unittest.TestCase):
 
         return config
 
-    def createTestDocinFilesDB(self, doc = {} ):
+    def createTestDocinFilesDB(self):
         """
         Creates a test document in files_db
 
         """
-
-        doc['_id'] = "/this/is/a/lfnA"
+        doc = {}
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
         doc['workflow'] = 'someWorkflow'
         doc['jobid'] = '1'
         doc['retry_count'] = []
-        doc['source'] = 'T2_IT_Bari'
-        doc['destination'] = "T2_IT_Pisa"
-        doc['user'] = 'riahi'
+        doc['source'] = random.choice(self.sites)
+        doc['destination'] = random.choice(self.sites)
+        doc['user'] = random.choice(self.users)
         doc['state'] = 'new'
         doc['start_time'] = str(datetime.datetime.now())
-        doc['end_time'] = str(time.time())
+        doc['end_time'] = str(datetime.datetime.now())
         doc['dbSource_update'] = str(time.time())
 
 
         self.db.queue(doc, True)
         self.db.commit()
 
-        print('new doc added')
+        return doc
 
-        self.docsInFilesDB.append( doc['_id'] )
-
-        return
-
-    def createTestFileFinishedYesterdayinFilesDB(self, config = None, doc = {} ):
+    def createFileDocinFilesDB(self, doc_id = '' ):
         """
         Creates a test document in files_db
 
         """
+        doc = {}
+
+        doc['_id'] = random.choice(self.lfn) + doc_id
+        doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
+        doc['workflow'] = 'someWorkflow'
+        doc['jobid'] = '1'
+        doc['retry_count'] = []
+        doc['source'] = random.choice(self.sites)
+        doc['destination'] = random.choice(self.sites)
+        doc['user'] = random.choice(self.users)
+        doc['state'] = 'new'
+        doc['start_time'] = str(datetime.datetime.now())
+        doc['end_time'] = str(datetime.datetime.now())
+        doc['dbSource_update'] = str(time.time())
+
+
+        self.db.queue(doc, True)
+        self.db.commit()
+
+        return doc
+
+    def createTestFileFinishedYesterdayinFilesDB( self ):
+        """
+        Creates a test document in files_db
+
+        """
+        doc = {}
 
         doc['_id'] = "/this/is/a/lfnA"
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
@@ -201,21 +235,23 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['size'] = 999999
         doc['jobid'] = '1'
         doc['retry_count'] = []
-        doc['source'] = 'T2_IT_Bari'
-        doc['destination'] = "T2_IT_Pisa"
-        doc['user'] = 'riahi'
+        doc['source'] = random.choice(self.sites)
+        doc['destination'] = random.choice(self.sites)
+        doc['user'] = random.choice(self.users)
         doc['state'] = 'done'
-        doc['start_time'] = str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3))
-        doc['end_time'] = str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 2))
+        doc['start_time'] = str(datetime.datetime.now()).\
+replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2], \
+str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3))
+        doc['end_time'] = str(datetime.datetime.now()).\
+replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2], \
+str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 2))
         doc['dbSource_update'] = str(time.time())
 
 
         self.db.queue(doc, True)
         self.db.commit()
 
-        self.docsInStatDB.append( config.map_FTSserver[ doc['destination'].split("_")[1] ]+"_"+str(datetime.datetime.now()).replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2],str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3)).split(" ")[0] )
-
-        return
+        return doc
 
 
     def DeleteTestDocinFilesDB(self, doc):
@@ -225,8 +261,6 @@ class AsyncTransfer_t(unittest.TestCase):
         document = self.db.document( doc )
         self.db.queueDelete(document)
         self.db.commit()
-
-        print('deleted %s' %doc)
 
         return
 
@@ -238,18 +272,15 @@ class AsyncTransfer_t(unittest.TestCase):
         self.db.queueDelete(document)
         self.db.commit()
 
-        print('deleted %s from stat' %doc)
-
         return
 
 
-    def createTestDocinDBSource(self):
+    def createTestDocinDBSource(self, doc_id = ''):
         """
         Creates a JSM document
         """
 
         doc = {\
-   "_id": "12345",\
    "timestamp": time.time(),\
    "jobid": 7,\
    "retrycount": 0,\
@@ -279,7 +310,7 @@ class AsyncTransfer_t(unittest.TestCase):
                        {\
                            "runs": {\
                            },\
-"lfn": "/store/user/riahi/lfnB",\
+"lfn": "/store/user/riahi/lfnB"+doc_id,\
 "pfn": "srm://this/is/a/pfnB",\
                            "module_label": "logArchive",\
                            "location": "gridse3.pg.infn.it",\
@@ -311,7 +342,7 @@ class AsyncTransfer_t(unittest.TestCase):
                            },\
                            "input_source_class": "PoolSource",\
                            "input_type": "primaryFiles",\
-                           "lfn": "/store/user/riahi/lfnB",\
+                           "lfn": "/store/user/riahi/lfnB"+doc_id,\
                            "pfn": "file:/this/is/a/pfnB",\
                            "module_label": "source",\
                            "guid": "D005BB56-CA2B-DF11-BA08-0030487C60AE",\
@@ -333,7 +364,7 @@ class AsyncTransfer_t(unittest.TestCase):
                        {\
                            "branch_hash": "8dbc25d29c96c171aa2700e3c3249274",\
                            "user_dn": "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi",\
-                           "lfn": "/store/user/riahi/lfnB",\
+                           "lfn": "/store/user/riahi/lfnB"+doc_id,\
                            "dataset": {\
                                "applicationName": "cmsRun",\
                                "applicationVersion": "CMSSW_3_6_1_patch7",\
@@ -404,12 +435,8 @@ WMTaskSpace/cmsRun1/output.root",\
 
         self.dbSource.queue(doc)
         self.dbSource.commit()
-        print('Duplication done')
 
-        self.docsInDBSource.append( doc['_id'] )
-        self.docsInFilesDB.append( '/store/user/riahi/lfnB' )
-
-        return
+        return doc
 
 
     def DeleteTestDocinDBSource(self, doc):
@@ -421,31 +448,78 @@ WMTaskSpace/cmsRun1/output.root",\
         self.dbSource.queueDelete( document )
         self.dbSource.commit()
 
-        print('deleted %s' %doc)
         return
 
+    def testA_BasicTest_testLoadFtscpView(self):
+        """
+       _BasicFunctionTest_
+        Tests the components, by seeing if the AsyncTransfer view load correctly files from couch.
+        """
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness.create()
+        harness.pushCouchapps(self.async_couchapp)
 
-    def testA_BasicFunctionTest(self):
+        doc = self.createTestDocinFilesDB()
+        query = {'reduce':False,
+         'key':[doc['user'], doc['destination'], doc['source'], doc['dn'] ] }
+
+        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+        assert len(active_files) == 1
+
+        for i in range(1, 5):
+            self.createTestDocinFilesDB()
+
+        query = {'reduce':False}
+        all_active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+
+        assert len(all_active_files) == 5
+
+    def testA_BasicTest_testFileTransfer(self):
         """
         _BasicFunctionTest_
-
-        Tests the components, by seeing if they can process a simple document
+        Tests the components, by seeing if they can process documents.
         """
-        self.createTestDocinFilesDB()
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness.create()
+        harness.pushCouchapps(self.async_couchapp, self.monitor_couchapp)
 
+        self.createFileDocinFilesDB()
         Transfer = TransferDaemon(config = self.config)
         Transfer.algorithm( )
 
-        return
+        query = {'reduce':False}
+        files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
 
+        query = {'reduce':False}
+        files_new = self.db.loadView('monitor', 'filesNew', query)['rows']
 
-    def testB_DuplicateDataFromJSM_BasicFunctionTest(self):
+        assert ( len(files_acquired) + len(files_new) ) == 1
+
+        for i in range(1, 5):
+            self.createFileDocinFilesDB( str(i) )
+
+        query = {'reduce':False}
+        files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
+
+        query = {'reduce':False}
+        files_new = self.db.loadView('monitor', 'filesNew', query)['rows']
+
+        assert ( len(files_acquired) + len(files_new) ) == 5
+
+    def testB_InteractionWithTheSource_testDocumentDuplicationAndThenTransfer(self):
         """
-        _DuplicateDataFromJSM_BasicFunctionTest_
+        _testB_InteractionWithTheSource_testDocumentDuplication_
 
         Tests the components: gets data from DB source and duplicate
-        it in files_db and see if the component can process it.
+        them in files_db and see if the component can process them.
         """
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness.create()
+        harness.pushCouchapps(self.async_couchapp, self.monitor_couchapp)
+
+        harness1 = CouchAppTestHarness(self.config.AsyncTransfer.jsm_db, self.config.AsyncTransfer.data_source)
+        harness1.create()
+        harness1.pushCouchapps(self.jsm_couchapp)
 
         self.createTestDocinDBSource()
 
@@ -454,12 +528,75 @@ WMTaskSpace/cmsRun1/output.root",\
 
         time.sleep(10)
 
+        query = { 'reduce':False }
+        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+
+        assert len(active_files) == 1
+
+
+        Transfer = TransferDaemon(config = self.config)
+        Transfer.algorithm( )
+
+        query = {'reduce':False}
+        files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
+
+        query = {'reduce':False}
+        files_new = self.db.loadView('monitor', 'filesNew', query)['rows']
+
+        assert ( len(files_acquired) + len(files_new) ) == 1
+
+
+        for i in range(1, 5):
+            self.createTestDocinDBSource( str(i) )
+
+        LFNDuplicator_1 = LFNSourceDuplicator(config = self.config)
+        LFNDuplicator_1.algorithm( )
+
+        time.sleep(20)
+
+        query = {'reduce':False }
+        active1_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+
+        assert len(active1_files) == 5
+
+
         Transfer_1 = TransferDaemon(config = self.config)
         Transfer_1.algorithm( )
 
-        return
+        query = {'reduce':False}
+        files_acquired = self.db.loadView('monitor', 'filesAcquired', query)['rows']
 
-    def testC_BasicPoolWorkers_FunctionTest(self):
+        query = {'reduce':False}
+        files_new = self.db.loadView('monitor', 'filesNew', query)['rows']
+
+        assert ( len(files_acquired) + len(files_new) ) == 5
+
+    def testC_StatWork_testDocRemovalFromRuntimeDB(self):
+        """
+
+        _StatWork_BasicFunctionTest_
+        Test statisticWorker, by seeing if it can remove an expired doc from runtimeDB.
+        """
+        harness = CouchAppTestHarness(self.config.AsyncTransfer.statitics_database, self.config.AsyncTransfer.couch_statinstance)
+        harness.create()
+        harness.pushCouchapps(self.stat_couchapp)
+
+        harness1 = CouchAppTestHarness(self.config.AsyncTransfer.files_database, self.config.AsyncTransfer.couch_instance)
+        harness1.create()
+        harness1.pushCouchapps(self.async_couchapp, self.monitor_couchapp)
+
+        doc = self.createTestFileFinishedYesterdayinFilesDB( )
+
+        statWorker = StatisticDaemon(config = self.config)
+        statWorker.algorithm( )
+
+        query = {'reduce':False,
+         'key':[doc['user'], doc['destination'], doc['source'], doc['dn'] ] }
+
+        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+        assert len(active_files) == 0
+
+    def testD_FixBug1196_BasicPoolWorkers_FunctionTest(self):
         """
         _BasicPoolWorkers_FunctionTest_
 
@@ -473,10 +610,12 @@ WMTaskSpace/cmsRun1/output.root",\
 
         while ( counter < 10 ):
 
-            Transfer.algorithm( )
+            result = Transfer.algorithm( )
+            assert len(result) == 1
+
             counter += 1
 
-    def testC_PoolWorkersFromAgent_FunctionTest(self):
+    def testD_FixBug1196_PoolWorkersFromAgent_FunctionTest(self):
         """
         _BasicPoolWorkers_FunctionTest_
 
@@ -490,33 +629,14 @@ WMTaskSpace/cmsRun1/output.root",\
 
         Transfer.prepareToStart()
 
-        # Set sleep time to 3 days and you will reproduce the
-        # problem described in #1196
+       # Set sleep time to 3 days and you will reproduce the
+       # problem described in #1196
         time.sleep(30)
 
         myThread.workerThreadManager.terminateWorkers()
 
         while threading.activeCount() > 1:
-            print('Currently: '+str(threading.activeCount())+\
-                ' Threads. Wait until all our threads have finished')
             time.sleep(1)
-
-        return
-
-    def testD_StatWork_BasicFunctionTest(self):
-        """
-        _StatWork_BasicFunctionTest_
-        Test statisticWorker, by seeing if it can remove a doc more than expire time
-        old from runtimeDB and create a new stat doc in statDB
-        """
-
-        self.createTestFileFinishedYesterdayinFilesDB(config = self.config.AsyncTransfer)
-
-        statWorker = StatisticDaemon(config = self.config)
-        statWorker.algorithm( )
-
-        return
-
 
 if __name__ == '__main__':
     unittest.main()
