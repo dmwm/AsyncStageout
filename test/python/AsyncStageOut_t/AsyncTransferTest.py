@@ -7,7 +7,7 @@ import threading
 
 from WMCore.Agent.Harness import Harness
 
-from fakeDaemon import fakeDaemon
+from AsyncStageOut_t.fakeDaemon import fakeDaemon
 
 class AsyncTransferTest(Harness):
     """

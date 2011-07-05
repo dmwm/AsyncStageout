@@ -12,16 +12,16 @@ import threading
 
 from WMQuality.TestInit   import TestInit
 
-from AsyncTransfer.TransferDaemon import TransferDaemon
-from AsyncTransfer.LFNSourceDuplicator import LFNSourceDuplicator
-from AsyncTransfer.StatisticDaemon import StatisticDaemon
+from AsyncStageOut.TransferDaemon import TransferDaemon
+from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
+from AsyncStageOut.StatisticDaemon import StatisticDaemon
 from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
 from WMQuality.TestInitCouchApp import CouchAppTestHarness
 
 from WMCore.WMInit import getWMBASE
-from fakeDaemon import fakeDaemon
-from AsyncTransferTest import AsyncTransferTest
+from AsyncStageOut_t.fakeDaemon import fakeDaemon
+from AsyncStageOut_t.AsyncTransferTest import AsyncTransferTest
 import datetime
 
 import random
@@ -600,7 +600,7 @@ WMTaskSpace/cmsRun1/output.root",\
         """
 
         _StatWork_testNumberOfDocsPerIteration_
-        Test if the stat daemon creates a new document per iteration  
+        Test if the stat daemon creates a new document per iteration
         """
         harness = CouchAppTestHarness(self.config.AsyncTransfer.statitics_database, self.config.AsyncTransfer.couch_statinstance)
         harness.create()

@@ -43,7 +43,7 @@ class Source:
 
     def updateSource(self, inputDict):
         """
-        UpdateSource should be over written by subclasses to make a specific update in the source 
+        UpdateSource should be over written by subclasses to make a specific update in the source
         """
         return []
 

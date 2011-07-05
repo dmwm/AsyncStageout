@@ -5,7 +5,7 @@ _JSM_t_
 Duplicate view from JSM database
 """
 from WMCore.Database.CMSCouch import CouchServer
-from Source import Source
+from AsyncStageOut.Plugins.Source import Source
 import datetime
 
 class JSM(Source):
@@ -74,8 +74,8 @@ class JSM(Source):
             value['start_time'] = now
             value['dbSource_update'] = row['key']
             try:
-                value['dbSource_url'] = self.config.data_source.replace((self.config.data_source.split("@")[0]).split("//")[1]+"@", "")
-            except
+                value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1]+"@", "")
+            except:
                 value['dbSource_url'] = self.config.data_source
 
             return value

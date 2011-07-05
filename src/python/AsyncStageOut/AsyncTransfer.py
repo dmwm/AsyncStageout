@@ -7,9 +7,9 @@ import threading
 
 from WMCore.Agent.Harness import Harness
 
-from TransferDaemon import TransferDaemon
-from LFNSourceDuplicator import LFNSourceDuplicator
-from StatisticDaemon import StatisticDaemon
+from AsyncStageOut.TransferDaemon import TransferDaemon
+from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
+from AsyncStageOut.StatisticDaemon import StatisticDaemon
 
 class AsyncTransfer(Harness):
     """
