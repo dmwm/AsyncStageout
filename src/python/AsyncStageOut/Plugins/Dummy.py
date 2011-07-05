@@ -6,17 +6,17 @@ Duplicate view from Dummy database
 """
 import logging
 import random
-from Source import Source
+from AsyncStageOut.Plugins.Source import Source
 
 class Dummy(Source):
     """
     _DummySource_
-    Create dummy data to be stored in couch by the LFNDuplicatorPoller.     
+    Create dummy data to be stored in couch by the LFNDuplicatorPoller.
     """
     def __call__(self):
         """
         _getViewResults_
-        Get the result of the view. 
+        Get the result of the view.
         """
         sites = ['T2_IT_Rome', 'T2_CH_CAF', 'T2_DE_DESY']
         numberUsers = 5
