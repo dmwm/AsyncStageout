@@ -37,9 +37,9 @@ class TransferWrapper:
         """
         Mark the list as transferred in database.
         """
-        for
+        pass 
 
-    def mark_failed(self, failed):
+    def mark_failed(self, failed, force_fail):
         """
         mark the list as failed transfers in database.
         """

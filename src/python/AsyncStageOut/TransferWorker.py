@@ -121,38 +121,100 @@ class TransferWorker:
         jobs = self.files_for_transfer()
 
         transferred, failed = self.command()
-        self.mark_failed(failed)
-        self.mark_good(transferred)
+
+        self.mark_failed( failed )
+        self.mark_good( transferred )
 
         self.logger.info('Transfers completed')
         return
 
-    def cleanSpace(self, copyjob, source_site):
+    def cleanSpace(self, copyjob, site_to_clean, force_delete = False ):
         """
         Remove all __destination__ PFNs got in input. The delete can fail because of a file not found
         so issue the command and hope for the best.
 
         TODO: better parsing of output
         """
-        for task in copyjob:
+        if copyjob:
 
-            destination_pfn = task.split()[1]
+            for task in copyjob:
 
-            logfile = open('%s/%s_%s.srmrmlog' % ( self.log_dir, source_site, str(time.time()) ), 'w')
+                # Decomment this if we want to clean before 
+                # the beginning of the transfer in the future 
+                #    destination_path = task.split()[1]
+                destination_path = task
+ 
+                destination_pfn = self.apply_tfc_to_lfn( '%s:%s' % ( site_to_clean, destination_path ) )
+                logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
 
-            command = 'export X509_USER_PROXY=%s ; srmrm %s'  % ( self.userProxy, destination_pfn )
-            self.logger.debug("Running remove command %s" % command)
+                command = 'export X509_USER_PROXY=%s ; lcg-del -l %s'  % ( self.userProxy, destination_pfn )
+                self.logger.debug("Running remove command %s" % command)
+                self.logger.debug("log file: %s" % logfile.name)
 
-            proc = subprocess.Popen(
-                    ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                    stdout=logfile,
-                    stderr=logfile,
-                    stdin=subprocess.PIPE,
-            )
-            proc.stdin.write(command)
-            stdout, stderr = proc.communicate()
-            rc = proc.returncode
-            logfile.close()
+                proc = subprocess.Popen(
+                        ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                        stdout=logfile,
+                        stderr=logfile,
+                        stdin=subprocess.PIPE,
+                )
+                proc.stdin.write(command)
+                stdout, stderr = proc.communicate()
+
+                rc = proc.returncode
+                logfile.close()
+
+         
+                if force_delete:
+ 
+                    ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
+
+                    # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
+                    # the srmrm log and parse it  
+                    commandLs = 'export X509_USER_PROXY=%s ; lcg-ls %s'  % ( self.userProxy, destination_pfn )
+                    self.logger.debug("Running list command %s" % commandLs)
+                    self.logger.debug("log file: %s" % ls_logfile.name)
+
+                    procLs = subprocess.Popen(
+                            ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                            stdout=ls_logfile,
+                            stderr=ls_logfile,
+                            stdin=subprocess.PIPE,
+                    )
+                    procLs.stdin.write(commandLs)
+                    stdout, stderr = procLs.communicate()
+                    rcLs = procLs.returncode
+                    ls_logfile.close()
+
+                    # rcLs = 0 file exists while rcLs = 1 it doesn't
+                    # Fallback to srmrm if the file still exists
+                    if not rcLs:
+
+                        rm_logfile = open('%s/%s_%s.srmrm.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
+                        commandRm = 'export X509_USER_PROXY=%s ; srmrm %s'  % ( self.userProxy, destination_pfn )
+                        self.logger.debug("Running rm command %s" % commandRm)
+                        self.logger.debug("log file: %s" % rm_logfile.name)
+
+
+                        procRm = subprocess.Popen(
+                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                                stdout=rm_logfile,
+                                stderr=rm_logfile,
+                                stdin=subprocess.PIPE,
+                        )
+                        procRm.stdin.write(commandRm)
+                        stdout, stderr = procRm.communicate()
+                        rcRm = procRm.returncode
+                        rm_logfile.close()
+
+                        # rcRm = 0 the remove was succeeding. 
+                        if rcRm:
+
+                            copyjob.remove(task)
+                            # Force file failure   
+                            self.mark_failed( [task], True )
+
+
+        return copyjob                                     
 
     def getFTServer(self, site):
         """
@@ -274,7 +336,7 @@ class TransferWorker:
 
             # Clean cruft files from previous transfer attempts
             # TODO: check that the job has a retry count > 0 and only delete files if that is the case
-            self.cleanSpace( copyjob, link[0] )
+            #self.cleanSpace( copyjob, link[1] )
 
             tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
             tmp_copyjob_file.write('\n'.join(copyjob))
@@ -312,8 +374,9 @@ class TransferWorker:
             # results is a tuple of lists, 1st list is transferred files, second is failed
             results = self.parse_ftscp_results(logfile.name, link[0])
 
-            transferred_files.extend(results[0])
-            failed_files.extend(results[1])
+            # Removing lfn from the source if the transfer succeeded else from the destination
+            transferred_files.extend( self.cleanSpace( results[0], link[0] ) )
+            failed_files.extend( self.cleanSpace( results[1], link[1], force_delete = True ) )
 
             # Clean up the temp copy job file
             os.unlink( tmp_copyjob_file.name )
@@ -377,7 +440,6 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
-
         for docId in files:
 
             try:
@@ -396,6 +458,17 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
+            try:
+
+                document = self.db.document(docId)
+
+            except Exception, ex:
+
+                msg =  "Error loading document from couch"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
             pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
             pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
                           'location': document['destination'], 'lfn': document['_id'] })
@@ -408,7 +481,7 @@ class TransferWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def mark_failed(self, files=[]):
+    def mark_failed(self, files=[], force_fail = False ):
         """
         Something failed for these files so increment the retry count
         """
@@ -430,7 +503,7 @@ class TransferWorker:
 
             document['retry_count'].append(now)
 
-            if len(document['retry_count']) > self.max_retry:
+            if force_fail or len(document['retry_count']) > self.max_retry:
 
                 document['state'] = 'failed'
                 document['end_time'] = now
