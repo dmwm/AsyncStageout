@@ -67,7 +67,7 @@ class JSM(Source):
 
             value = row['value']
             value['source'] = self.phedexApi.getNodeNames( value['source'] )[0]
-            value['user'] = value["_id"].split('/')[3]
+            value['user'] = value["_id"].split('/')[4]
             value['size'] = value['size']
             value['retry_count'] = []
             value['state'] = 'new'
