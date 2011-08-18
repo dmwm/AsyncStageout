@@ -22,6 +22,7 @@ import traceback
 from WMCore.WMFactory import WMFactory
 import urllib
 from WMCore.Credential.Proxy import Proxy
+from AsyncStageOut import getHashLfn
 
 def getProxy(userdn, defaultDelegation, logger):
     """
@@ -139,11 +140,11 @@ class TransferWorker:
 
             for task in copyjob:
 
-                # Decomment this if we want to clean before 
-                # the beginning of the transfer in the future 
+                # Decomment this if we want to clean before
+                # the beginning of the transfer in the future
                 #    destination_path = task.split()[1]
                 destination_path = task
- 
+
                 destination_pfn = self.apply_tfc_to_lfn( '%s:%s' % ( site_to_clean, destination_path ) )
                 logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
 
@@ -163,13 +164,13 @@ class TransferWorker:
                 rc = proc.returncode
                 logfile.close()
 
-         
+
                 if force_delete:
- 
+
                     ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
 
                     # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
-                    # the srmrm log and parse it  
+                    # the srmrm log and parse it
                     commandLs = 'export X509_USER_PROXY=%s ; lcg-ls %s'  % ( self.userProxy, destination_pfn )
                     self.logger.debug("Running list command %s" % commandLs)
                     self.logger.debug("log file: %s" % ls_logfile.name)
@@ -206,15 +207,15 @@ class TransferWorker:
                         rcRm = procRm.returncode
                         rm_logfile.close()
 
-                        # rcRm = 0 the remove was succeeding. 
+                        # rcRm = 0 the remove was succeeding.
                         if rcRm:
 
                             copyjob.remove(task)
-                            # Force file failure   
+                            # Force file failure
                             self.mark_failed( [task], True )
 
 
-        return copyjob                                     
+        return copyjob
 
     def getFTServer(self, site):
         """
@@ -440,11 +441,11 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
-        for docId in files:
+        for lfn in files:
 
             try:
 
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + urllib.quote_plus(docId)
+                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
                 data = {}
                 data['end_time'] = str(datetime.datetime.now())
                 data['state'] = 'done'
@@ -460,7 +461,7 @@ class TransferWorker:
 
             try:
 
-                document = self.db.document(docId)
+                document = self.db.document( getHashLfn(lfn) )
 
             except Exception, ex:
 
@@ -471,7 +472,7 @@ class TransferWorker:
 
             pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
             pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
-                          'location': document['destination'], 'lfn': document['_id'] })
+                          'location': document['destination'], 'lfn': document['lfn'] })
 
         try:
             self.db.commit()
@@ -487,12 +488,13 @@ class TransferWorker:
         """
         now = str(datetime.datetime.now())
 
-        for docId in files:
+        for lfn in files:
 
             # TODO: modify without loading first
             try:
 
-                document = self.db.document(docId)
+
+                document = self.db.document( getHashLfn(lfn) )
 
             except Exception, ex:
 

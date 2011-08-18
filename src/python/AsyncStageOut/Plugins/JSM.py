@@ -7,6 +7,7 @@ Duplicate view from JSM database
 from WMCore.Database.CMSCouch import CouchServer
 from AsyncStageOut.Plugins.Source import Source
 import datetime
+from AsyncStageOut import getHashLfn
 
 class JSM(Source):
     """
@@ -65,9 +66,12 @@ class JSM(Source):
         def pull_value(row):
             now = str(datetime.datetime.now())
 
+            # Prepare the files_db document
             value = row['value']
             value['source'] = self.phedexApi.getNodeNames( value['source'] )[0]
+            value['lfn'] = value["_id"]
             value['user'] = value["_id"].split('/')[4]
+            value['_id'] = getHashLfn( value["_id"] )
             value['size'] = value['size']
             value['retry_count'] = []
             value['state'] = 'new'
@@ -97,4 +101,3 @@ class JSM(Source):
 
         self.dbSource.commit()
         return []
-

@@ -22,7 +22,9 @@ from WMQuality.TestInitCouchApp import CouchAppTestHarness
 from WMCore.WMInit import getWMBASE
 from AsyncStageOut_t.fakeDaemon import fakeDaemon
 from AsyncStageOut_t.AsyncTransferTest import AsyncTransferTest
+from AsyncStageOut import getHashLfn
 import datetime
+import hashlib
 
 import random
 
@@ -710,6 +712,17 @@ WMTaskSpace/cmsRun1/output.root",\
 
         while threading.activeCount() > 1:
             time.sleep(1)
+
+
+    def testF_TestIfgetHashLfnHashCorrectlyLFNs(self):
+        """
+        _testF_TestIfgetHashLfnHashCorrectlyLFNs
+
+        Tests if the getHashLfn function of the AsyncStageOut module module hashs correctly LFNs.
+        """
+        lfn = "/My/lfn/path"
+        hashedLfn = getHashLfn(lfn)
+        assert hashlib.sha224(lfn).hexdigest() == hashedLfn
 
 if __name__ == '__main__':
     unittest.main()
