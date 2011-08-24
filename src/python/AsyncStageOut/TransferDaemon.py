@@ -87,7 +87,7 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
                     pass
                 else: raise
 
-            command = 'tar -czf %s/logs_%s.tar.gz %s/*' % ( archive_dir, str(time.time()), log_dir )
+            command = 'tar -czf %s/logs_%s.tar.gz %s/* ; rm -rf %s/*' % ( archive_dir, str(time.time()), log_dir, log_dir )
 
             self.logger.debug( "tarring logs using %s" %command )
             out, error, retcode = execute_command(command)
