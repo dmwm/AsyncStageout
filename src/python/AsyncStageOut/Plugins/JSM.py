@@ -95,7 +95,7 @@ class JSM(Source):
         couchDocID = self.dbSource.loadView(self.designSource, self.fwjrsID, query)['rows'][0]['id']
 
         updateUri = "/" + self.dbSource.name + "/_design/" + self.designSource + "/_update/addAsyncStageOutStep/" + couchDocID
-        updateUri += "?location=%s&lfn=%s" % ( inputDict['location'], inputDict['lfn'] )
+        updateUri += "?location=%s&lfn=%s" % ( inputDict['location'], inputDict['lfn'].replace('store/temp', 'store', 1) )
 
         self.dbSource.makeRequest(uri = updateUri, type = "PUT", decode = False)
 
