@@ -46,9 +46,9 @@ class JSM(Source):
             # If the above throws an exception there's no files to process, so just move on
 
             # Get the files we want to process
-            self.logger.debug('Querying JSM for files added between %s and %s' % (self.since, endtime))
+            self.logger.debug('Querying JSM for files added between %s and %s' % (self.since, endtime + 1))
 
-            query = { 'startkey': self.since, 'endkey': endtime }
+            query = { 'startkey': self.since, 'endkey': endtime + 1 }
             result = self.dbSource.loadView(self.designSource, self.viewSource, query)['rows']
 
             # Now record where we got up to so next iteration we'll continue from there
