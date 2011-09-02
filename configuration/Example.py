@@ -5,6 +5,7 @@ Example configuration for AsyncStageOut
 
 from WMCore.WMInit import getWMBASE
 from WMCore.Configuration import Configuration
+import logging
 
 serverHostName = "HOST_NAME"
 hostDN = "Your host DN"
@@ -23,7 +24,6 @@ agentName = "Agent name"
 teamName = "Your team name"
 
 config = Configuration()
-
 config.section_('General')
 config.General.workDir = workDirectory
 config.section_("CoreDatabase")
@@ -36,6 +36,7 @@ config.Agent.hostName = serverHostName
 config.Agent.teamName = teamName
 
 config.component_("AsyncTransfer")
+config.AsyncTransfer.log_level = logging.INFO
 config.AsyncTransfer.namespace = "AsyncStageOut.AsyncTransfer"
 config.AsyncTransfer.componentDir  = config.General.workDir
 config.AsyncTransfer.pollInterval = 10
