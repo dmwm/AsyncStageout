@@ -22,6 +22,7 @@ serviceCert = "/path/to/valid/proxy"
 userEmail = "Your mail address"
 agentName = "Agent name"
 teamName = "Your team name"
+credentialDir = "/tmp/credentials/"
 
 config = Configuration()
 config.section_('General')
@@ -52,7 +53,7 @@ config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
 config.AsyncTransfer.max_files_per_transfer = 1000
 config.AsyncTransfer.pool_size = 3
 config.AsyncTransfer.max_retry = 3
-config.AsyncTransfer.credentialDir = '/credential/dir/path'
+config.AsyncTransfer.credentialDir = credentialDir
 config.AsyncTransfer.serverDN = hostDN
 config.AsyncTransfer.pollStatInterval = 86400
 config.AsyncTransfer.expiration_days = 7
