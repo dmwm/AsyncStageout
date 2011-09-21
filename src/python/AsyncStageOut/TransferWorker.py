@@ -24,7 +24,7 @@ import urllib
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 
-def getProxy(userdn, defaultDelegation, logger):
+def getProxy(userdn, group, role, defaultDelegation, logger):
     """
     _getProxy_
     """
@@ -32,6 +32,8 @@ def getProxy(userdn, defaultDelegation, logger):
     logger.debug("Retrieving proxy for %s" % userdn)
     config = defaultDelegation
     config['userDN'] = userdn
+    config['group'] = group
+    config['role'] = role
     proxy = Proxy(defaultDelegation)
     proxyPath = proxy.getProxyFilename( True )
     timeleft = proxy.getTimeLeft( proxyPath )
@@ -75,7 +77,12 @@ class TransferWorker:
 
         query = {'group': True,
                  'startkey':[user], 'endkey':[user, {}, {}]}
-        self.userDN = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][3]
+        self.listCred = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][2:]
+
+        self.userDN = self.listCred[0]
+        self.group = self.listCred[1]
+        self.role = self.listCred[2]
+
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
@@ -89,7 +96,7 @@ class TransferWorker:
         valid = False
         try:
 
-            valid, proxy = getProxy(self.userDN, defaultDelegation, self.logger)
+            valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
 
         except Exception, ex:
 
