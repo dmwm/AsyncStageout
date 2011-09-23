@@ -54,6 +54,7 @@ config.AsyncTransfer.max_files_per_transfer = 1000
 config.AsyncTransfer.pool_size = 3
 config.AsyncTransfer.max_retry = 3
 config.AsyncTransfer.credentialDir = credentialDir
+config.AsyncTransfer.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 config.AsyncTransfer.serverDN = hostDN
 config.AsyncTransfer.pollStatInterval = 86400
 config.AsyncTransfer.expiration_days = 7
