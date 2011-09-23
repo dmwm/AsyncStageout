@@ -71,6 +71,7 @@ class TransferWorker:
         self.db = server.connectDatabase(self.config.files_database)
         self.map_fts_servers = config.map_FTSserver
         self.max_retry = config.max_retry
+        self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         # TODO: improve how the worker gets a log
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
@@ -91,7 +92,7 @@ class TransferWorker:
                                   'myProxySvr': 'myproxy.cern.ch',
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
-                                  'setupScript' : getattr(self.config, 'UISetupScript', None)
+                                  'uisource' : self.uiSetupScript
                             }
         valid = False
         try:
@@ -155,7 +156,7 @@ class TransferWorker:
                 destination_pfn = self.apply_tfc_to_lfn( '%s:%s' % ( site_to_clean, destination_path ) )
                 logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
 
-                command = 'export X509_USER_PROXY=%s ; lcg-del -l %s'  % ( self.userProxy, destination_pfn )
+                command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
                 self.logger.debug("Running remove command %s" % command)
                 self.logger.debug("log file: %s" % logfile.name)
 
@@ -178,7 +179,7 @@ class TransferWorker:
 
                     # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
                     # the srmrm log and parse it
-                    commandLs = 'export X509_USER_PROXY=%s ; lcg-ls %s'  % ( self.userProxy, destination_pfn )
+                    commandLs = 'export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
                     self.logger.debug("Running list command %s" % commandLs)
                     self.logger.debug("log file: %s" % ls_logfile.name)
 
@@ -198,7 +199,7 @@ class TransferWorker:
                     if not rcLs:
 
                         rm_logfile = open('%s/%s_%s.srmrm.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
-                        commandRm = 'export X509_USER_PROXY=%s ; srmrm %s'  % ( self.userProxy, destination_pfn )
+                        commandRm = 'export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
                         self.logger.debug("Running rm command %s" % commandRm)
                         self.logger.debug("log file: %s" % rm_logfile.name)
 
@@ -368,8 +369,9 @@ class TransferWorker:
                             stdin=subprocess.PIPE,
                         )
 
-            command = 'export X509_USER_PROXY=%s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
+            command = 'export X509_USER_PROXY=%s ; source %s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
                              self.userProxy,
+                             self.uiSetupScript,
                              tmp_copyjob_file.name,
                              fts_server_for_transfer )
             proc.stdin.write(command)
