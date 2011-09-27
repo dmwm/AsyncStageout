@@ -78,7 +78,7 @@ class TransferWorker:
 
         query = {'group': True,
                  'startkey':[user], 'endkey':[user, {}, {}]}
-        self.listCred = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][2:]
+        self.listCred = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][3:]
 
         self.userDN = self.listCred[0]
         self.group = self.listCred[1]
@@ -265,7 +265,7 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, destination, source, self.userDN]}
+                     'key':[self.user, destination, source, self.userDN, self.group, self.role]}
 
                 active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files), source, destination))
