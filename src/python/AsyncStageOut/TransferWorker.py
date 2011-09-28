@@ -129,101 +129,114 @@ class TransferWorker:
 
         jobs = self.files_for_transfer()
 
-        transferred, failed = self.command()
+        transferred, failed, transferred_to_clean, failed_to_clean = self.command()
 
         self.mark_failed( failed )
         self.mark_good( transferred )
 
+        # Now clean
+        self.cleanSpace(transferred_to_clean)
+        self.cleanSpace(failed_to_clean, True)
+
         self.logger.info('Transfers completed')
         return
 
-    def cleanSpace(self, copyjob, site_to_clean, force_delete = False ):
+    def cleanSpace(self, to_clean_dict, force_delete = False ):
         """
         Remove all __destination__ PFNs got in input. The delete can fail because of a file not found
         so issue the command and hope for the best.
 
         TODO: better parsing of output
         """
-        if copyjob:
+        if to_clean_dict:
 
-            for task in copyjob:
+            for task in to_clean_dict:
 
-                # Decomment this if we want to clean before
-                # the beginning of the transfer in the future
-                #    destination_path = task.split()[1]
-                destination_path = task
+                for destination_paths in task:
+                    # Decomment this if we want to clean before
+                    # the beginning of the transfer in the future
+                    #    destination_path = task.split()[1]
 
-                destination_pfn = self.apply_tfc_to_lfn( '%s:%s' % ( site_to_clean, destination_path ) )
-                logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
+                    try:
+                        destination_path = destination_paths.split()[1]
+                    except:
+                        destination_path = destination_paths
 
-                command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
-                self.logger.debug("Running remove command %s" % command)
-                self.logger.debug("log file: %s" % logfile.name)
+                    # Test if it is an lfn
+                    if destination_path.find(":") < 0:
+                        destination_pfn = self.apply_tfc_to_lfn( '%s:%s' %( to_clean_dict[ task ], destination_path ) )
+                    else:
+                        destination_pfn = '%s:%s' %( to_clean_dict[ task ], destination_path )
 
-                proc = subprocess.Popen(
-                        ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                        stdout=logfile,
-                        stderr=logfile,
-                        stdin=subprocess.PIPE,
-                )
-                proc.stdin.write(command)
-                stdout, stderr = proc.communicate()
+                    logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                rc = proc.returncode
-                logfile.close()
+                    command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                    self.logger.debug("Running remove command %s" % command)
+                    self.logger.debug("log file: %s" % logfile.name)
 
-
-                if force_delete:
-
-                    ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
-
-                    # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
-                    # the srmrm log and parse it
-                    commandLs = 'export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
-                    self.logger.debug("Running list command %s" % commandLs)
-                    self.logger.debug("log file: %s" % ls_logfile.name)
-
-                    procLs = subprocess.Popen(
+                    proc = subprocess.Popen(
                             ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                            stdout=ls_logfile,
-                            stderr=ls_logfile,
+                            stdout=logfile,
+                            stderr=logfile,
                             stdin=subprocess.PIPE,
                     )
-                    procLs.stdin.write(commandLs)
-                    stdout, stderr = procLs.communicate()
-                    rcLs = procLs.returncode
-                    ls_logfile.close()
+                    proc.stdin.write(command)
+                    stdout, stderr = proc.communicate()
 
-                    # rcLs = 0 file exists while rcLs = 1 it doesn't
-                    # Fallback to srmrm if the file still exists
-                    if not rcLs:
-
-                        rm_logfile = open('%s/%s_%s.srmrm.log' % ( self.log_dir, site_to_clean, str(time.time()) ), 'w')
-                        commandRm = 'export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
-                        self.logger.debug("Running rm command %s" % commandRm)
-                        self.logger.debug("log file: %s" % rm_logfile.name)
+                    rc = proc.returncode
+                    logfile.close()
 
 
-                        procRm = subprocess.Popen(
+                    if force_delete:
+
+                        ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
+
+                        # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
+                        # the srmrm log and parse it
+                        commandLs = 'export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                        self.logger.debug("Running list command %s" % commandLs)
+                        self.logger.debug("log file: %s" % ls_logfile.name)
+
+                        procLs = subprocess.Popen(
                                 ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                stdout=rm_logfile,
-                                stderr=rm_logfile,
+                                stdout=ls_logfile,
+                                stderr=ls_logfile,
                                 stdin=subprocess.PIPE,
                         )
-                        procRm.stdin.write(commandRm)
-                        stdout, stderr = procRm.communicate()
-                        rcRm = procRm.returncode
-                        rm_logfile.close()
+                        procLs.stdin.write(commandLs)
+                        stdout, stderr = procLs.communicate()
+                        rcLs = procLs.returncode
+                        ls_logfile.close()
 
-                        # rcRm = 0 the remove was succeeding.
-                        if rcRm:
+                        # rcLs = 0 file exists while rcLs = 1 it doesn't
+                        # Fallback to srmrm if the file still exists
+                        if not rcLs:
 
-                            copyjob.remove(task)
-                            # Force file failure
-                            self.mark_failed( [task], True )
+                            rm_logfile = open('%s/%s_%s.srmrm.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
+                            commandRm = 'export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                            self.logger.debug("Running rm command %s" % commandRm)
+                            self.logger.debug("log file: %s" % rm_logfile.name)
 
 
-        return copyjob
+                            procRm = subprocess.Popen(
+                                    ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                                    stdout=rm_logfile,
+                                    stderr=rm_logfile,
+                                    stdin=subprocess.PIPE,
+                            )
+                            procRm.stdin.write(commandRm)
+                            stdout, stderr = procRm.communicate()
+                            rcRm = procRm.returncode
+                            rm_logfile.close()
+
+                            # rcRm = 0 the remove was succeeding.
+                            #if rcRm:
+
+                            #    del to_clean_dict[task]
+                            #    # Force file failure
+                            #    self.mark_failed( [task], True )
+
+        return
 
     def getFTServer(self, site):
         """
@@ -336,6 +349,9 @@ class TransferWorker:
         transferred_files = []
         failed_files = []
 
+        transferred_to_clean = {}
+        failed_to_clean = {}
+
         #Loop through all the jobs for the links we have
         for link, copyjob in jobs.items():
 
@@ -345,7 +361,9 @@ class TransferWorker:
 
             # Clean cruft files from previous transfer attempts
             # TODO: check that the job has a retry count > 0 and only delete files if that is the case
-            #self.cleanSpace( copyjob, link[1] )
+            to_clean = {}
+            to_clean[ tuple( copyjob ) ] = link[1]
+            self.cleanSpace( to_clean )
 
             tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
             tmp_copyjob_file.write('\n'.join(copyjob))
@@ -385,8 +403,11 @@ class TransferWorker:
             results = self.parse_ftscp_results(logfile.name, link[0])
 
             # Removing lfn from the source if the transfer succeeded else from the destination
-            transferred_files.extend( self.cleanSpace( results[0], link[0] ) )
-            failed_files.extend( self.cleanSpace( results[1], link[1], force_delete = True ) )
+            transferred_files.extend( results[0] )
+            failed_files.extend( results[1] )
+
+            transferred_to_clean[ tuple(results[0]) ] = link[0]
+            failed_to_clean[ tuple(results[1]) ] = link[1]
 
             # Clean up the temp copy job file
             os.unlink( tmp_copyjob_file.name )
@@ -396,7 +417,7 @@ class TransferWorker:
             # the ftscp log files to a done folder once parsed, and parsing all files in some
             # work directory.
 
-        return transferred_files, failed_files
+        return transferred_files, failed_files, transferred_to_clean, failed_to_clean
 
     def validate_copyjob(self, copyjob):
         """
