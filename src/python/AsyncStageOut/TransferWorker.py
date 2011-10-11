@@ -166,7 +166,7 @@ class TransferWorker:
                     if destination_path.find(":") < 0:
                         destination_pfn = self.apply_tfc_to_lfn( '%s:%s' %( to_clean_dict[ task ], destination_path ) )
                     else:
-                        destination_pfn = '%s:%s' %( to_clean_dict[ task ], destination_path )
+                        destination_pfn = destination_path
 
                     logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
