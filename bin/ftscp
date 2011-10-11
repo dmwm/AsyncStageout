@@ -4,7 +4,7 @@
 ##H This is a "srmcp"-like script using FTS to transfer files.
 ##H
 ##H Usage: ftscp -copyjobfile=FILE [-report=FILE] -passfile=FILE
-##H              [-server=SERVER-ACCESS-POINT] 
+##H              [-server=SERVER-ACCESS-POINT]
 ##H              [-mode=MODE] [-mapfile=SRM2FTS_SERVER_MAP]
 ##H              [-m=MYPROXY_SERVER] [-token=TOKEN]
 ##H
@@ -20,24 +20,24 @@
 ##H zero; the details can be found in the report file.
 ##H
 ##H The "-passfile" specifies the file name from which to read the
-##H the password for FTS MyProxy password.  This option is required 
+##H the password for FTS MyProxy password.  This option is required
 ### for FTS 1.5 server,
 ##H and the file must be readable and writeable only by the user or
 ##H the command will fail.
 ##H
 ##H The "-server" option specifies the FTS entry point.  If this
 ##H option is not used, gLite service discovery is used.
-##H 
+##H
 ##H The "-mode" option specifies whether to run against a single FTS
 ##H endpoint or to use multiple endpoints.
-##H 
+##H
 ##H The "-mapfile" option specifies a map of SRM endpoint to FTS server,
 ##H used in place of service discovery.
 ##H
-##H The "-m" option specifies a myproxy server to use for the transfer. 
+##H The "-m" option specifies a myproxy server to use for the transfer.
 ##H This is usually required if you are using an "out of region" FTS server.
 ##H
-##H If "-token=TOKEN" is specified, the space token (TOKEN) will 
+##H If "-token=TOKEN" is specified, the space token (TOKEN) will
 ##H be passed to the FTS submission. Default is *no token passed*
 ##H
 
@@ -84,11 +84,11 @@ for arg; do
     -mode=* )
       mode="${arg#-mode=}"
       echo "mode=$mode"
-      ;; 
+      ;;
     -mapfile=* )
       mapfile="${arg#-mapfile=}"
       echo "mapfile=$mapfile"
-      ;;            
+      ;;
     -m=* )
       myproxy_server="-m ${arg#-m=}"
       echo "MyProxy server option=$myproxy_server"
@@ -114,7 +114,7 @@ done
 [ ! -r "$copyjobfile" ] && { echo "$copyjobfile: cannot read" 1>&2; exit 103; }
 
 if [ -z "$passfile" ]; then
-    echo "Warning: missing -passfile, use -h for help unless intentional." 1>&2; 
+    echo "Warning: missing -passfile, use -h for help unless intentional." 1>&2;
 else
     [ ! -f "$passfile" ] && { echo "$passfile: no such file" 1>&2; exit 112; }
     [ ! -r "$passfile" ] && { echo "$passfile: cannot read" 1>&2; exit 113; }
@@ -136,13 +136,13 @@ if [ "$mode" == "multi" ]; then
     echo "no FTS server or FTS mapping file is given." 1>&2; exit 10;
   elif [  ! -r "$mapfile" ]; then
     echo "$mapfile: cannot read" 1>&2; exit 123;
-  else 
+  else
     srm_contact=`head -1 $copyjobfile|awk '{print $1}'|awk -F? '{print $1}'`;
     fts_contact=`grep $srm_contact $mapfile|awk '{print $2}'|cut -f2 -d=|awk '{print $NF}'`;
     if [ -z "$fts_contact" ]; then :
       # [FIXME] Try service discovery here
       #if [ -z "$discovered_fts" ]: then
-      fts_contact=`grep DEFAULT $mapfile|awk '{print $2}'|cut -f2 -d=|awk '{print $NF}'` 
+      fts_contact=`grep DEFAULT $mapfile|awk '{print $2}'|cut -f2 -d=|awk '{print $NF}'`
       echo "Using DEFAULT FTS server:$fts_contact";
       #else
       #fts_contact=$discovered_fts
@@ -154,7 +154,7 @@ if [ "$mode" == "multi" ]; then
       echo "No FTS server is found, exit." 1>&2; exit 1;
     fi
   fi
-elif [ -z "$server" ]; then 
+elif [ -z "$server" ]; then
   echo "Running in single server mode, without specifying a server. Cannot identify FTS server in this configuration"
   exit 201;
 else
@@ -190,7 +190,7 @@ passoptshow=
 if [ ! -z "$passfile" ]; then
 passopt="-p $(cat "$passfile")"
 passoptshow="-p _censored_"
-fi 
+fi
 
 if [ "$token" != "" ] ; then
     echo "+ glite-transfer-submit -t $token $passoptshow $myproxy_server $server -f $copyjobfile"
@@ -226,8 +226,8 @@ while true; do
     Ready )
       # [FIXME] ready should indicate the clock should start timing the transfer maybe
       ;;
-      
-    Active )
+
+    Active | Finishing )
       ;;
 
     Canceling )
