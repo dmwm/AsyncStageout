@@ -57,6 +57,8 @@ class TransferWorker:
         self.config = config
         self.log_dir = '%s/logs/%s/%s/%s' % ( self.config.componentDir, \
  str(datetime.datetime.now().month), str(datetime.datetime.now().year), self.user)
+        logging.basicConfig(level=config.log_level)
+        self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
         self.pfn_to_lfn_mapping = {}
 
         try:
@@ -64,7 +66,9 @@ class TransferWorker:
         except OSError, e:
             if e.errno == errno.EEXIST:
                 pass
-            else: raise
+            else:
+                self.logger.error('Unknown error in mkdir' % e.errno)
+                raise
 
 
         server = CouchServer(self.config.couch_instance)
@@ -72,9 +76,10 @@ class TransferWorker:
         self.map_fts_servers = config.map_FTSserver
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
+        self.cleanEnvironment = ''
+        if getattr(self.config, 'cleanEnvironment', False):
+            self.cleanEnvironment = 'unset LD_LIBRARY_PATH;'
         # TODO: improve how the worker gets a log
-        logging.basicConfig(level=config.log_level)
-        self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
 
         query = {'group': True,
                  'startkey':[user], 'endkey':[user, {}, {}]}
@@ -92,8 +97,15 @@ class TransferWorker:
                                   'myProxySvr': 'myproxy.cern.ch',
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
-                                  'uisource' : self.uiSetupScript
+                                  'uisource' : self.uiSetupScript,
+                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False),
                             }
+
+        if getattr(self.config, 'serviceCert', None):
+            defaultDelegation['server_cert'] = self.config.serviceCert
+        if getattr(self.config, 'serviceKey', None):
+            defaultDelegation['server_key'] = self.config.serviceKey
+
         valid = False
         try:
 
@@ -114,6 +126,7 @@ class TransferWorker:
 
             # Use the operator's proxy when the user proxy in invalid.
             # This will be moved soon
+            self.logger.error('Did not get valid proxy. Setting proxy to host cert')
             self.userProxy = config.serviceCert
 
         # Set up a factory for loading plugins
@@ -170,7 +183,8 @@ class TransferWorker:
 
                     logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                    command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % \
+                              (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
                     self.logger.debug("Running remove command %s" % command)
                     self.logger.debug("log file: %s" % logfile.name)
 
@@ -193,7 +207,8 @@ class TransferWorker:
 
                         # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
                         # the srmrm log and parse it
-                        commandLs = 'export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                        commandLs = '%s export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % \
+                                    (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
                         self.logger.debug("Running list command %s" % commandLs)
                         self.logger.debug("log file: %s" % ls_logfile.name)
 
@@ -213,7 +228,8 @@ class TransferWorker:
                         if not rcLs:
 
                             rm_logfile = open('%s/%s_%s.srmrm.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
-                            commandRm = 'export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % ( self.userProxy, self.uiSetupScript, destination_pfn )
+                            commandRm = '%s export X509_USER_PROXY=%s ; source %s ; srmrm %s'  %\
+                                        (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn )
                             self.logger.debug("Running rm command %s" % commandRm)
                             self.logger.debug("log file: %s" % rm_logfile.name)
 
@@ -387,11 +403,13 @@ class TransferWorker:
                             stdin=subprocess.PIPE,
                         )
 
-            command = 'export X509_USER_PROXY=%s ; source %s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
+            command = '%s export X509_USER_PROXY=%s ; source %s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
+                             self.cleanEnvironment,
                              self.userProxy,
                              self.uiSetupScript,
                              tmp_copyjob_file.name,
                              fts_server_for_transfer )
+            self.logger.debug("executing command: %s" % command)
             proc.stdin.write(command)
 
             stdout, stderr = proc.communicate()
@@ -401,10 +419,11 @@ class TransferWorker:
             # now populate results by parsing the copy job's log file.
             # results is a tuple of lists, 1st list is transferred files, second is failed
             results = self.parse_ftscp_results(logfile.name, link[0])
-
             # Removing lfn from the source if the transfer succeeded else from the destination
             transferred_files.extend( results[0] )
             failed_files.extend( results[1] )
+            self.logger.debug("transferred : %s" % transferred_files)
+            self.logger.info("failed : %s" % failed_files)
 
             transferred_to_clean[ tuple(results[0]) ] = link[0]
             failed_to_clean[ tuple(results[1]) ] = link[1]
