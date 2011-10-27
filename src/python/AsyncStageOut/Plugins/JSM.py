@@ -24,7 +24,7 @@ class JSM(Source):
 
         self.sourceServer = CouchServer(self.config.data_source)
         self.dbSource = self.sourceServer.connectDatabase(self.config.jsm_db)
-        self.viewSource = 'inputAsycStageOut'
+        self.viewSource = 'inputAsyncStageOut'
         self.fwjrsID = 'fwjrByJobIDTimestamp'
         self.designSource = 'FWJRDump'
 
@@ -95,7 +95,8 @@ class JSM(Source):
         couchDocID = self.dbSource.loadView(self.designSource, self.fwjrsID, query)['rows'][0]['id']
 
         updateUri = "/" + self.dbSource.name + "/_design/" + self.designSource + "/_update/addAsyncStageOutStep/" + couchDocID
-        updateUri += "?pfn=%s&adler=%s&cksum=%s" % ( inputDict['pfn'], inputDict['checksums']['adler32'], inputDict['checksums']['cksum'] )
+        updateUri += "?lfn=%s&location=%s&pfn=%s&adler=%s&cksum=%s" % ( inputDict['lfn'], inputDict['location'], inputDict['pfn'],
+                                                                        inputDict['checksums']['adler32'], inputDict['checksums']['cksum'] )
 
         self.dbSource.makeRequest(uri = updateUri, type = "PUT", decode = False)
 
