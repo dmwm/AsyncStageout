@@ -519,10 +519,11 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
-            outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], document['lfn'].replace('store/temp', 'store', 1) ) )
+            outputLfn = document['lfn'].replace('store/temp', 'store', 1)
+            outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
             pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
             pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
-                                        'pfn': outputPfn, 'checksums': document['checksums'] })
+                                        'lfn': outputLfn, 'location': document['destination'], 'pfn': outputPfn, 'checksums': document['checksums'] })
 
         try:
             self.db.commit()
