@@ -62,4 +62,29 @@ config.AsyncTransfer.couch_statinstance = statCouchUrl
 config.AsyncTransfer.serviceCert = serviceCert
 config.AsyncTransfer.serviceKey = "/path/to/valid/host-key"
 config.AsyncTransfer.cleanEnvironment = False
-config.AsyncTransfer.map_FTSserver = { 'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' , 'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer' , 'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer' , 'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer' , 'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer' , 'CH' : 'https://prod-fts-ws.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer' , 'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer' , 'TW' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer' , 'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer' , 'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'}
+config.AsyncTransfer.map_FTSserver = {
+'AT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer',
+'BE' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer',
+'BR' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer',
+'CH' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer',
+'CN' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer',
+'DE' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer',
+'EE' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer',
+'ES' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer',
+'FI' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer',
+'FR' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer',
+'HU' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer',
+'IN' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer',
+'IT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer',
+'KR' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer',
+'PK' : 'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer',
+'PL' : 'https://fts-fzk.gridka.de:8443/glite-data-transfer-fts/services/FileTransfer',
+'PT' : 'https://fts.pic.es:8443/glite-data-transfer-fts/services/FileTransfer',
+'RU' : 'https://fts-t2-service.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer',
+'TR' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer',
+'TW' :  'https://w-fts.grid.sinica.edu.tw:8443/glite-data-transfer-fts/services/FileTransfer',
+'UA' : 'https://fts-t2-service.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer',
+'UK' : 'https://lcgfts.gridpp.rl.ac.uk:8443/glite-data-transfer-fts/services/FileTransfer',
+'US' : 'https://cmsfts1.fnal.gov:8443/glite-data-transfer-fts/services/FileTransfer',
+'defaultServer' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer'
+}
