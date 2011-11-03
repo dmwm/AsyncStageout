@@ -61,7 +61,7 @@ config.AsyncTransfer.expiration_days = 7
 config.AsyncTransfer.couch_statinstance = statCouchUrl
 config.AsyncTransfer.serviceCert = serviceCert
 config.AsyncTransfer.serviceKey = "/path/to/valid/host-key"
-config.AsyncTransfer.cleanEnvironment = False
+config.AsyncTransfer.cleanEnvironment = True
 config.AsyncTransfer.map_FTSserver = {
 'AT' : 'https://fts.cr.cnaf.infn.it:8443/glite-data-transfer-fts/services/FileTransfer',
 'BE' : 'https://cclcgftsprod.in2p3.fr:8443/glite-data-transfer-fts/services/FileTransfer',
