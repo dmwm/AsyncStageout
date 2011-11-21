@@ -68,7 +68,6 @@ class JSM(Source):
 
             # Prepare the files_db document
             value = row['value']
-            value['source'] = self.phedexApi.getNodeNames( value['source'] )[0]
             value['lfn'] = value["_id"]
             value['user'] = value["_id"].split('/')[4]
             value['_id'] = getHashLfn( value["_id"] )
