@@ -73,7 +73,6 @@ class TransferWorker:
 
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
-        self.map_fts_servers = config.map_FTSserver
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.cleanEnvironment = ''
@@ -259,11 +258,13 @@ class TransferWorker:
         Parse site string to know the fts server to use
         """
         country = site.split('_')[1]
-        if country in self.map_fts_servers :
-            return self.map_fts_servers[country]
-        #TODO: decide what to do if site.split('_')[0] == 'T1'
-        else:
-            return self.map_fts_servers['defaultServer']
+        query = {'key':country}
+        try:
+            fts_server = self.db.loadView('AsyncTransfer', 'getRunningFTSserver', query)['rows'][0]['value']
+        except IndexError:
+            self.logger.info("FTS server for %s is down" % country)
+            fts_server = ''
+        return fts_server
 
     def source_destinations_by_user(self):
         """
