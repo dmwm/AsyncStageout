@@ -9,6 +9,7 @@ old documents from runtime database.
 """
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
+from AsyncStageOut import getFTServer
 
 import datetime
 import traceback
@@ -31,8 +32,6 @@ class StatisticDaemon(BaseWorkerThread):
             self.logger.setLevel(self.config.log_level)
 
         self.logger.debug('Configuration loaded')
-
-        self.map_fts_servers = self.config.map_FTSserver
 
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
@@ -112,17 +111,6 @@ class StatisticDaemon(BaseWorkerThread):
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-
-    def getFTServer(self, site):
-        """
-        Parse site string to know the fts server to use
-        """
-        country = site.split('_')[1]
-        if country in self.map_fts_servers :
-            return self.map_fts_servers[country]
-        else:
-            return self.map_fts_servers['defaultServer']
-
     def getOldJobs(self):
 
         """
@@ -145,7 +133,7 @@ class StatisticDaemon(BaseWorkerThread):
         """
         Update the stat documents list.
         """
-        ftserver = self.getFTServer(document['destination'])
+        ftserver = getFTServer(document['destination'], 'getAllFTSserver', self.db, self.logger)
 
         for oldDoc in self.iteration_docs:
             if oldDoc['fts'] == ftserver:
