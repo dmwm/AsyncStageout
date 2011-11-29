@@ -23,6 +23,7 @@ from WMCore.WMFactory import WMFactory
 import urllib
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
+from AsyncStageOut import getFTServer
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
@@ -253,19 +254,6 @@ class TransferWorker:
 
         return
 
-    def getFTServer(self, site):
-        """
-        Parse site string to know the fts server to use
-        """
-        country = site.split('_')[1]
-        query = {'key':country}
-        try:
-            fts_server = self.db.loadView('AsyncTransfer', 'getRunningFTSserver', query)['rows'][0]['value']
-        except IndexError:
-            self.logger.info("FTS server for %s is down" % country)
-            fts_server = ''
-        return fts_server
-
     def source_destinations_by_user(self):
         """
         Get all the destinations for a user
@@ -386,7 +374,7 @@ class TransferWorker:
             tmp_copyjob_file.write('\n'.join(copyjob))
             tmp_copyjob_file.close()
 
-            fts_server_for_transfer = self.getFTServer(link[1])
+            fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.db, self.logger)
 
             logfile = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
 
