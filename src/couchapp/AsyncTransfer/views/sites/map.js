@@ -1,4 +1,6 @@
 function(doc) {
-  emit(doc.source, 1);
-  emit(doc.destination, 1);
-}
+        if (doc.lfn){
+                emit(doc.source, 1);
+                emit(doc.destination, 1);
+                }
+        }
