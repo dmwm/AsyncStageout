@@ -283,7 +283,7 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, destination, source, self.userDN, self.group, self.role]}
+                     'startkey':[self.user, destination, source, self.userDN]}
 
                 active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files), source, destination))
