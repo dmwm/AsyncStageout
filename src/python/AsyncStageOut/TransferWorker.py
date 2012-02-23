@@ -492,7 +492,7 @@ class TransferWorker:
 
             except Exception, ex:
 
-                msg =  "Error in updating document in couch"
+                msg =  "Error updating document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
@@ -530,40 +530,38 @@ class TransferWorker:
 
         for lfn in files:
 
-            # TODO: modify without loading first
+            data = {}
+            docId = getHashLfn(lfn)
+
+            # Load document to get the retry_count
             try:
-
-
-                document = self.db.document( getHashLfn(lfn) )
-
+                document = self.db.document( docId )
             except Exception, ex:
-
                 msg =  "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
-            document['retry_count'].append(now)
+            # Prepare data to update the document in couch
+            data['retry_count'] = document['retry_count'].append(now)
 
-            if force_fail or len(document['retry_count']) > self.max_retry:
-
-                document['state'] = 'failed'
-                document['end_time'] = now
-
+            if force_fail or len(data['retry_count']) > self.max_retry:
+                data['state'] = 'failed'
+                data['end_time'] = now
             else:
+                data['state'] = 'acquired'
 
-                document['state'] = 'acquired'
-
+            # Update the document in couch
             try:
-
-                self.db.queue(document, viewlist=['AsyncTransfer/ftscp'])
-
+                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
+                updateUri += "?" + urllib.urlencode(data)
+                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             except Exception, ex:
-
-                msg =  "Error when queuing document in couch"
+                msg =  "Error in updating document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+
         try:
             self.db.commit()
         except Exception, ex:
