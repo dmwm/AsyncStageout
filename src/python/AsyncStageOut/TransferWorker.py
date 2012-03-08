@@ -53,13 +53,15 @@ class TransferWorker:
         """
         store the user and tfc the worker
         """
-        self.user = user
+        self.user = user[0]
+        self.group = user[1]
+        self.role = user[2]
         self.tfc_map = tfc_map
         self.config = config
         self.log_dir = '%s/logs/%s/%s/%s' % ( self.config.componentDir, \
  str(datetime.datetime.now().month), str(datetime.datetime.now().year), self.user)
         logging.basicConfig(level=config.log_level)
-        self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % user)
+        self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
         self.pfn_to_lfn_mapping = {}
 
         try:
@@ -82,12 +84,8 @@ class TransferWorker:
         # TODO: improve how the worker gets a log
 
         query = {'group': True,
-                 'startkey':[user], 'endkey':[user, {}, {}]}
-        self.listCred = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][3:]
-
-        self.userDN = self.listCred[0]
-        self.group = self.listCred[1]
-        self.role = self.listCred[2]
+                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}
+        self.userDN = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows'][0]['key'][5]
 
         defaultDelegation = {
                                   'logger': self.logger,
@@ -259,11 +257,11 @@ class TransferWorker:
         Get all the destinations for a user
         """
         query = {'group': True,
-                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}
+                 'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
         sites = self.db.loadView('AsyncTransfer', 'ftscp', query)
 
         def keys_map(dict):
-            return dict['key'][2], dict['key'][1]
+            return dict['key'][4], dict['key'][3]
 
         return map(keys_map, sites['rows'])
 
@@ -283,7 +281,7 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'startkey':[self.user, destination, source, self.userDN]}
+                     'key':[self.user, self.group, self.role, destination, source, self.userDN]}
 
                 active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files), source, destination))

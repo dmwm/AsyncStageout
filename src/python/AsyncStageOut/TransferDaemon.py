@@ -125,6 +125,7 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
             site_tfc_map[site] = self.get_tfc_rules(site)
 
         self.logger.debug('kicking off pool')
+
         r = [self.pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
         for result in r:
             self.logger.info(result.get())
@@ -135,7 +136,7 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
         following view:
             ftscp?group=true&group_level=1
         """
-        query = {'group': True, 'group_level':1}
+        query = {'group': True, 'group_level':3}
         users = db.loadView('AsyncTransfer', 'ftscp', query)
 
         active_users = []
@@ -149,7 +150,7 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
             """
             Map function.
             """
-            return inputDict['key'][0]
+            return inputDict['key']
 
         return map(keys_map, active_users)
 
