@@ -477,15 +477,15 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
+        now = str(datetime.datetime.now())
+        last_update = int(time.time())
+
         for lfn in files:
 
             try:
 
                 updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
-                data = {}
-                data['end_time'] = str(datetime.datetime.now())
-                data['state'] = 'done'
-                updateUri += "?" + urllib.urlencode(data)
+                updateUri += "?end_time=%s&state=%s&last_update=%d" % (now, 'done', last_update)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
 
             except Exception, ex:
@@ -525,6 +525,7 @@ class TransferWorker:
         Something failed for these files so increment the retry count
         """
         now = str(datetime.datetime.now())
+        last_update = int(time.time())
 
         for lfn in files:
 
@@ -541,13 +542,14 @@ class TransferWorker:
                 self.logger.error(msg)
 
             # Prepare data to update the document in couch
-            data['retry_count'] = document['retry_count'].append(now)
-
-            if force_fail or len(data['retry_count']) > self.max_retry:
+            if force_fail or len(document['retry_count']) + 1 > self.max_retry:
                 data['state'] = 'failed'
                 data['end_time'] = now
             else:
                 data['state'] = 'acquired'
+
+            data['last_update'] = last_update
+            data['retry'] = now
 
             # Update the document in couch
             try:
