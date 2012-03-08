@@ -1,6 +1,5 @@
 function(doc) {
-
-  emit(doc.dbSource_update, doc._id) ;
-
+        if (doc.lfn) {
+                emit(doc.dbSource_update, doc._id) ;
+        }
 }
-
