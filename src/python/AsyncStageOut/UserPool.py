@@ -11,7 +11,7 @@ class UserPool(Pool):
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger = logger
-        self.size =
+        self.size = 0
         self.result = []
 
     def get_users(self):

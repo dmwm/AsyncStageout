@@ -1,5 +1,7 @@
 import hashlib
 
+__version__ = '0.0.6'
+
 def getHashLfn(lfn):
     """
     Provide a hashed lfn from an lfn.
