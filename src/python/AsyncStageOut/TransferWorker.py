@@ -477,6 +477,7 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
+
         now = str(datetime.datetime.now())
         last_update = int(time.time())
 
@@ -484,8 +485,12 @@ class TransferWorker:
 
             try:
 
+                data = {}
+                data['end_time'] = now
+                data['state'] = 'done'
+                data['last_update'] = last_update
                 updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
-                updateUri += "?end_time=%s&state=%s&last_update=%d" % (now, 'done', last_update)
+                updateUri += "?" + urllib.urlencode(data)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
 
             except Exception, ex:

@@ -7,6 +7,7 @@ Duplicate docs from the centralMonitoring database
 from WMCore.Database.CMSCouch import CouchServer
 from AsyncStageOut.Plugins.Source import Source
 import datetime
+import time
 from AsyncStageOut import getHashLfn
 
 class CentralMonitoring(Source):
@@ -24,7 +25,6 @@ class CentralMonitoring(Source):
         self.sourceServer = CouchServer(self.config.data_source)
         self.dbSource = self.sourceServer.connectDatabase(self.config.db_source)
         self.viewSource = 'inputAsyncStageOut'
-        self.viewRequestDetail = 'request-detail'
         self.designSource = 'WMStats'
 
         self.logger.debug('Connected to CouchDB source')
@@ -69,22 +69,18 @@ class CentralMonitoring(Source):
                 temp = job
                 workflow = job['value']['workflow']
                 if not cache.has_key(workflow):
-                    query = { 'limit': 1, 'key':[workflow, 1] }
-                    user_details = self.dbSource.loadView(self.designSource, self.viewRequestDetail, query)['rows'][0]['value']
-                    cache[workflow] = {'user_dn': user_details['user_dn'],
-                                       'vo_role': user_details['vo_role'],
-                                       'vo_group': user_details['vo_group'],
-                                       'async_dest': user_details['async_dest']}
+                    user_details = self.dbSource.document( workflow )
+                    cache[workflow] = {'user_dn': user_details['user_dn'], 'vo_role': user_details['vo_role'], 'vo_group': user_details['vo_group'], 'async_dest': user_details['async_dest']}
                 temp['value']['dn'] = cache[workflow]['user_dn']
                 temp['value']['role'] = cache[workflow]['vo_role']
                 temp['value']['group'] = cache[workflow]['vo_group']
                 temp['value']['destination'] = cache[workflow]['async_dest']
-                del temp['value']['workflow']
                 result.append(temp)
 
         # Little map function to pull out the data we need
         def pull_value(row):
             now = str(datetime.datetime.now())
+            last_update = int(time.time())
 
             # Prepare file documents
             value = row['value']
@@ -95,6 +91,7 @@ class CentralMonitoring(Source):
             value['retry_count'] = []
             value['state'] = 'new'
             value['start_time'] = now
+            value['last_update'] = last_update
             value['dbSource_update'] = row['key']
             try:
                 value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1]+"@", "")

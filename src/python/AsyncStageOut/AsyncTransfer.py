@@ -10,7 +10,8 @@ from WMCore.Agent.Harness import Harness
 from AsyncStageOut.TransferDaemon import TransferDaemon
 from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncStageOut.StatisticDaemon import StatisticDaemon
-
+from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
+ 
 class AsyncTransfer(Harness):
     """
     _AsyncTransfer_
@@ -59,6 +60,13 @@ class AsyncTransfer(Harness):
                               self.config.AsyncTransfer.pollStatInterval \
                             )
 
+        logging.debug("Setting Analytics polling interval to %s seconds" \
+                       %str(self.config.AsyncTransfer.analyticsPollingInterval) )
+
+        myThread.workerThreadManager.addWorker( \
+                              AnalyticsDaemon(self.config), \
+                              self.config.AsyncTransfer.analyticsPollingInterval \
+                            )
 
         return
 
