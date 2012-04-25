@@ -78,6 +78,7 @@ class TransferWorker:
         self.db = server.connectDatabase(self.config.files_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
+        self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
         self.cleanEnvironment = ''
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH;'
@@ -390,10 +391,11 @@ class TransferWorker:
                             stdin=subprocess.PIPE,
                         )
 
-            command = '%s export X509_USER_PROXY=%s ; source %s ; ftscp -copyjobfile=%s -server=%s -mode=single' % (
+            command = '%s export X509_USER_PROXY=%s ; source %s ; %s -copyjobfile=%s -server=%s -mode=single' % (
                              self.cleanEnvironment,
                              self.userProxy,
                              self.uiSetupScript,
+                             self.transfer_script,
                              tmp_copyjob_file.name,
                              fts_server_for_transfer )
             self.logger.debug("executing command: %s" % command)
