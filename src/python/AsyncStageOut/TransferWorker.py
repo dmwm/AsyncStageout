@@ -141,13 +141,11 @@ class TransferWorker:
 
         jobs = self.files_for_transfer()
 
-        transferred, failed, transferred_to_clean, failed_to_clean = self.command()
+        transferred, failed, failed_to_clean = self.command()
 
         self.mark_failed( failed )
         self.mark_good( transferred )
 
-        # Now clean
-        self.cleanSpace(transferred_to_clean)
         self.cleanSpace(failed_to_clean, True)
 
         self.logger.info('Transfers completed')
@@ -353,7 +351,6 @@ class TransferWorker:
         transferred_files = []
         failed_files = []
 
-        transferred_to_clean = {}
         failed_to_clean = {}
 
         #Loop through all the jobs for the links we have
@@ -414,7 +411,6 @@ class TransferWorker:
             self.logger.debug("transferred : %s" % transferred_files)
             self.logger.info("failed : %s" % failed_files)
 
-            transferred_to_clean[ tuple(results[0]) ] = link[0]
             failed_to_clean[ tuple(results[1]) ] = link[1]
 
             # Clean up the temp copy job file
@@ -425,7 +421,7 @@ class TransferWorker:
             # the ftscp log files to a done folder once parsed, and parsing all files in some
             # work directory.
 
-        return transferred_files, failed_files, transferred_to_clean, failed_to_clean
+        return transferred_files, failed_files, failed_to_clean
 
     def validate_copyjob(self, copyjob):
         """
