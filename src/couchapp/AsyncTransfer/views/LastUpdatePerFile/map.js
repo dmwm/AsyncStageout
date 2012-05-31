@@ -1,5 +1,5 @@
 function complete_job(doc, req) {
-        if ( doc['state'] != 'done' && doc['state'] != 'failed') {
+        if ( doc['state'] != 'done' ) {
                 return false;
         }
         return true;
