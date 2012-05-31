@@ -81,7 +81,7 @@ class TransferWorker:
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
         self.cleanEnvironment = ''
         if getattr(self.config, 'cleanEnvironment', False):
-            self.cleanEnvironment = 'unset LD_LIBRARY_PATH;'
+            self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         # TODO: improve how the worker gets a log
 
         query = {'group': True,
