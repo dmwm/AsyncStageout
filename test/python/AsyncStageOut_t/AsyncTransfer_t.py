@@ -2,7 +2,7 @@
 #pylint: disable=C0103,E1103
 """
 AsyncTransfer test
-It requires X509_USER_PROXY and COUCHURL vars.
+It requires X509_USER_PROXY, COUCHURL vars, and ftscp command.
 """
 
 import os
@@ -12,11 +12,10 @@ import time
 import threading
 import subprocess
 
-#from WMQuality.TestInit   import TestInit
-
 from AsyncStageOut.TransferDaemon import TransferDaemon
 from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncStageOut.TransferWorker import TransferWorker
+from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
 from AsyncStageOut.StatisticDaemon import StatisticDaemon
 from WMCore.Configuration import loadConfigurationFile
 from WMCore.Database.CMSCouch import CouchServer
@@ -71,16 +70,20 @@ class AsyncTransfer_t(unittest.TestCase):
         self.testInit = TestInitCouchApp(__file__)
         self.testInit.setLogging()
         self.config = self.getConfig()
-        self.testInit.setupCouch("wmagent_jobdump/fwjrs_2", "FWJRDump")
+        self.testInit.setupCouch("wmagent_jobdump/fwjrs", "FWJRDump")
         self.testInit.setupCouch("agent_database", "Agent")
         couchapps = "../../../src/couchapp"
         self.async_couchapp = "%s/AsyncTransfer" % couchapps
         self.monitor_couchapp = "%s/monitor" % couchapps
+        self.user_monitoring_couchapp = "%s/UserMonitoring" % couchapps
         self.stat_couchapp = "%s/stat" % couchapps
         harness = CouchAppTestHarness("asynctransfer")
         harness.create()
         harness.pushCouchapps(self.async_couchapp)
         harness.pushCouchapps(self.monitor_couchapp)
+        harness_user_mon = CouchAppTestHarness("user_monitoring_asynctransfer")
+        harness_user_mon.create()
+        harness_user_mon.pushCouchapps(self.user_monitoring_couchapp)
         harness_stat = CouchAppTestHarness("asynctransfer_stat")
         harness_stat.create()
         harness_stat.pushCouchapps(self.stat_couchapp)
@@ -88,10 +91,10 @@ class AsyncTransfer_t(unittest.TestCase):
         # Connect to db
         self.async_server = CouchServer( os.getenv("COUCHURL") )
         self.db = self.async_server.connectDatabase( "asynctransfer" )
+        self.monitoring_db = self.async_server.connectDatabase( "user_monitoring_asynctransfer" )
         self.dbStat = self.async_server.connectDatabase( "asynctransfer_stat" )
         self.dbSource = self.async_server.connectDatabase( "wmagent_jobdump/fwjrs" )
         doc = {"_id": "T1_IT_INFN",
-               "_rev": "2-f673cf6281898388d132cadc55602cde",
                "state": "running",
                "countries": [
                    "IT",
@@ -105,10 +108,18 @@ class AsyncTransfer_t(unittest.TestCase):
             }
         self.db.queue(doc, True)
         self.db.commit()
+        doc = {
+           "_id": "MONITORING_DB_UPDATE",
+           "db_update": 1,
+           "couchapp": {
+           }
+        }
+        self.monitoring_db.queue(doc, True)
+        self.monitoring_db.commit()
         self.config = self.getConfig()
         self.testConfig = self.getTestConfig()
         self.users = ['fred', 'barney', 'wilma', 'betty']
-        self.sites = ['T2_IT_Legnaro', 'T2_IT_Pisa', 'T2_IT_Rome', 'T2_IT_bari']
+        self.sites = ['T2_IT_Pisa', 'T2_IT_Rome', 'T2_IT_Bari']
         self.lfn = ['/this/is/a/lfnA', '/this/is/a/lfnB', '/this/is/a/lfnC', '/this/is/a/lfnD', '/this/is/a/lfnE']
 
         return
@@ -122,6 +133,8 @@ class AsyncTransfer_t(unittest.TestCase):
             self.myThread.dbi = self.database_interface
         self.async_server.deleteDatabase( "asynctransfer" )
         self.async_server.deleteDatabase( "asynctransfer_stat" )
+        self.async_server.deleteDatabase( "user_monitoring_asynctransfer" )
+
 
     def getConfig(self):
         """
@@ -132,6 +145,7 @@ class AsyncTransfer_t(unittest.TestCase):
         config.CoreDatabase.connectUrl = os.getenv("COUCHURL") + "/agent_database"
         config.AsyncTransfer.couch_instance = os.getenv("COUCHURL")
         config.AsyncTransfer.couch_statinstance = os.getenv("COUCHURL")
+        config.AsyncTransfer.couch_user_monitoring_instance = os.getenv("COUCHURL")
         config.AsyncTransfer.files_database = "asynctransfer"
         config.AsyncTransfer.statitics_database = "asynctransfer_stat"
         config.AsyncTransfer.data_source = os.getenv("COUCHURL")
@@ -139,10 +153,11 @@ class AsyncTransfer_t(unittest.TestCase):
         config.AsyncTransfer.db_source = "wmagent_jobdump/fwjrs"
         config.AsyncTransfer.log_level = logging.DEBUG
         config.AsyncTransfer.pluginName = "JSM"
+        config.AsyncTransfer.max_retry = 2
         config.AsyncTransfer.expiration_days = 1
         config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
         config.AsyncTransfer.serviceCert = os.getenv('X509_USER_PROXY')
-        config.AsyncTransfer.componentDir          = self.testInit.generateWorkDir(config)
+        config.AsyncTransfer.componentDir = self.testInit.generateWorkDir(config)
 
         return config
 
@@ -163,6 +178,7 @@ class AsyncTransfer_t(unittest.TestCase):
         config.AsyncTransferTest.pluginDir = "AsyncStageOut.Plugins"
         config.AsyncTransferTest.max_files_per_transfer = 10
         config.AsyncTransferTest.pool_size = 3
+        config.AsyncTransferTest.max_retry = 2
         config.AsyncTransferTest.max_retry = 1000
         config.AsyncTransferTest.pollInterval = 10
         config.AsyncTransferTest.serviceCert = os.getenv('X509_USER_PROXY')
@@ -190,6 +206,8 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['role'] = 'someRole'
         doc['lfn'] = '/store/user/riahi/TestUnit'
         doc['state'] = 'new'
+        doc['workflow'] = 'someWorkflow'
+        doc['checksums'] = 'someChecksums'
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
         doc['dbSource_update'] = str(time.time())
@@ -199,7 +217,7 @@ class AsyncTransfer_t(unittest.TestCase):
 
         return doc
 
-    def createFileDocinFilesDB(self, doc_id = '' ):
+    def createFileDocinFilesDB(self, doc_id = '',state = 'new' ):
         """
         Creates a test document in files_db
         """
@@ -216,11 +234,16 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['user'] = random.choice(self.users)
         doc['group'] = 'someGroup'
         doc['role'] = 'someRole'
-        doc['state'] = 'new'
+        doc['state'] = state
+        doc['workflow'] = 'someWorkflow'
+        doc['checksums'] = 'someChecksums'
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
         doc['dbSource_update'] = str(time.time())
         doc['dbSource_url'] = 'someUrl'
+        doc['size'] = 1000
+        doc['end_time'] = 10000
+        doc['last_update'] = 10000
         self.db.queue(doc, True)
         self.db.commit()
 
@@ -522,7 +545,6 @@ WMTaskSpace/cmsRun1/output.root",\
 
         assert len(active1_files) == 5
 
-
         Transfer_1 = TransferDaemon(config = self.config)
         Transfer_1.algorithm( )
         query = {'reduce':False}
@@ -591,20 +613,6 @@ WMTaskSpace/cmsRun1/output.root",\
         docSource = self.dbSource.document(result[0]['id'])
 
         assert docSource['fwjr']['steps'].has_key('asyncStageOut1') == True
-
-    def testE_FixBug1196_BasicPoolWorkers_FunctionTest(self):
-        """
-        _BasicPoolWorkers_FunctionTest_
-        Tests the class used by the component, by seeing if it can spawn process
-        using the multiprocessing without problems
-        """
-        self.createTestDocinFilesDB()
-        Transfer = fakeDaemon(config = self.testConfig)
-        counter = 0
-        while ( counter < 10 ):
-            result = Transfer.algorithm( )
-            assert len(result) == 1
-            counter += 1
 
     def testE_FixBug1196_PoolWorkersFromAgent_FunctionTest(self):
         """
@@ -683,6 +691,30 @@ WMTaskSpace/cmsRun1/output.root",\
         stdoutls_log.close()
         stderrls_log.close()
         assert rcls == 1
+
+    def testE_AnalyticsCompMethods_tests(self):
+        """
+        _testE_AnalyticsCompMethods_tests_
+        Tests the Analytics component methods
+        """
+        self.createFileDocinFilesDB()
+        self.config.AsyncTransfer.max_retry = 0
+        Analytics = AnalyticsDaemon(config = self.config)
+        Analytics.updateWorkflowSummaries()
+        query = {}
+        state = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
+        assert state["new"] == 1
+        # Run the daemon
+        Transfer = TransferDaemon(config = self.config)
+        Transfer.algorithm( )
+        Analytics.updateWorkflowSummaries()
+        state = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
+        assert state["failed"] == 1
+        self.createFileDocinFilesDB( state = 'done' )
+        Analytics.updateJobSummaries()
+        query = { 'reduce':True }
+        numberWorkflow = self.monitoring_db.loadView('UserMonitoring', 'FilesByWorkflow', query)['rows'][0]['value']
+        assert numberWorkflow == 1
 
 if __name__ == '__main__':
     unittest.main()
