@@ -2,16 +2,34 @@
 """
 Checks for files to transfer
 """
-import logging
-import threading
-
 from WMCore.Agent.Harness import Harness
-
 from AsyncStageOut.TransferDaemon import TransferDaemon
 from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncStageOut.StatisticDaemon import StatisticDaemon
 from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
- 
+from AsyncStageOut.FilesCleaner import FilesCleaner
+import subprocess, os, errno
+import time, datetime
+import logging
+import threading
+
+def execute_command(command):
+    """
+    _execute_command_
+    Function to manage commands.
+    """
+    proc = subprocess.Popen(
+           ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+           stdout=subprocess.PIPE,
+           stderr=subprocess.PIPE,
+           stdin=subprocess.PIPE,
+    )
+    proc.stdin.write(command)
+    stdout, stderr = proc.communicate()
+    rc = proc.returncode
+
+    return stdout, stderr, rc
+
 class AsyncTransfer(Harness):
     """
     _AsyncTransfer_
@@ -29,14 +47,32 @@ class AsyncTransfer(Harness):
         """
         Add required worker modules to work threads
         """
-        logging.info(self.config)
+        logging.debug(self.config)
 
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
 
+        # Archiving logs
+        log_dir = '%s/logs' % self.config.AsyncTransfer.componentDir
+        if os.path.exists(log_dir):
+
+            archive_dir = '%s/archive/%s/%s/%s' % ( self.config.AsyncTransfer.componentDir, \
+str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datetime.datetime.now().day) )
+            try:
+                os.makedirs(archive_dir)
+            except OSError, e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else: raise
+            command = 'tar -czf %s/logs_%s.tar.gz %s/* ; rm -rf %s/*' % ( archive_dir, str(time.time()), log_dir, log_dir )
+            out, error, retcode = execute_command(command)
+            if retcode != 0 :
+                msg = "Error when archiving %s : %s"\
+                       % (log_dir, error)
+                raise Exception(msg)
+
         logging.debug("Setting DB source poll interval to %s seconds" \
                       %str(self.config.AsyncTransfer.pollViewsInterval) )
-
 
         myThread.workerThreadManager.addWorker( \
                               LFNSourceDuplicator(self.config), \
@@ -68,5 +104,12 @@ class AsyncTransfer(Harness):
                               self.config.AsyncTransfer.analyticsPollingInterval \
                             )
 
-        return
+        myThread.workerThreadManager.addWorker( \
+                              FilesCleaner(self.config), \
+                              self.config.AsyncTransfer.filesCleaningPollingInterval \
+                            )
 
+        logging.debug("Setting Analytics polling interval to %s seconds" \
+                       %str(self.config.AsyncTransfer.filesCleaningPollingInterval) )
+
+        return

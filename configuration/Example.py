@@ -60,7 +60,7 @@ config.AsyncTransfer.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.s
 config.AsyncTransfer.transfer_script = 'ftscp'
 config.AsyncTransfer.serverDN = hostDN
 config.AsyncTransfer.pollStatInterval = 86400
-config.AsyncTransfer.expiration_days = 30 
+config.AsyncTransfer.expiration_days = 30
 config.AsyncTransfer.couch_statinstance = statCouchUrl
 config.AsyncTransfer.serviceCert = serviceCert
 config.AsyncTransfer.serviceKey = "/path/to/valid/host-key"
@@ -68,5 +68,6 @@ config.AsyncTransfer.cleanEnvironment = True
 config.AsyncTransfer.user_monitoring_db = user_monitoring_db
 config.AsyncTransfer.couch_user_monitoring_instance = userMonitoringCouchUrl
 config.AsyncTransfer.analyticsPollingInterval = 1800
-config.AsyncTransfer.summaries_expiration_days = 30 
+config.AsyncTransfer.filesCleaningPollingInterval = 14400
+config.AsyncTransfer.summaries_expiration_days = 30
 
