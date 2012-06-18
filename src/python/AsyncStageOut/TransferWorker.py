@@ -475,41 +475,36 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
-
         now = str(datetime.datetime.now())
         last_update = int(time.time())
 
         for lfn in files:
 
             try:
-
-                data = {}
-                data['end_time'] = now
-                data['state'] = 'done'
-                data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
-                updateUri += "?" + urllib.urlencode(data)
-                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-
-            except Exception, ex:
-
-                msg =  "Error updating document in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-            try:
-
                 document = self.db.document( getHashLfn(lfn) )
-
             except Exception, ex:
-
                 msg =  "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
             outputLfn = document['lfn'].replace('store/temp', 'store', 1)
+
+            try:
+                data = {}
+                data['end_time'] = now
+                data['state'] = 'done'
+		data['lfn'] = outputLfn
+                data['last_update'] = last_update
+                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
+                updateUri += "?" + urllib.urlencode(data)
+                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+            except Exception, ex:
+                msg =  "Error updating document in couch"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+
             outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
             pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
             pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \

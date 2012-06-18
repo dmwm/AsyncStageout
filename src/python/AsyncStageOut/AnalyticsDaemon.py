@@ -150,7 +150,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             doc = {}
             doc['type'] = 'aso_file'
             doc['workflow'] = file['value']['workflow']
-            doc['lfn'] = (file['value']['lfn']).replace('store/temp', 'store', 1)
+            doc['lfn'] = file['value']['lfn']
             doc['location'] = file['value']['location']
             doc['checksum'] = file['value']['checksum']
             doc['jobid'] = file['value']['jobid']
