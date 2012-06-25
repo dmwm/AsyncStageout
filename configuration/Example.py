@@ -25,6 +25,7 @@ userEmail = "Your mail address"
 agentName = "Agent name"
 teamName = "Your team name"
 credentialDir = "/tmp/credentials/"
+file_cache_endpoint = "http://cmsweb-testbed.cern.ch/crabserver/"
 
 config = Configuration()
 config.section_('General')
@@ -70,4 +71,20 @@ config.AsyncTransfer.couch_user_monitoring_instance = userMonitoringCouchUrl
 config.AsyncTransfer.analyticsPollingInterval = 1800
 config.AsyncTransfer.filesCleaningPollingInterval = 14400
 config.AsyncTransfer.summaries_expiration_days = 30
+config.component_('DBSPublisher')
+config.DBSPublisher.pollInterval = 10
+config.DBSPublisher.publication_pool_size = 1
+config.DBSPublisher.componentDir = config.General.workDir
+config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
+config.DBSPublisher.log_level = logging.INFO
+config.DBSPublisher.files_database = files_database
+config.DBSPublisher.couch_instance = couchUrl
+config.DBSPublisher.publication_max_retry = 3
+config.DBSPublisher.userFileCacheEndpoint = file_cache_endpoint
+config.DBSPublisher.credentialDir = credentialDir
+config.DBSPublisher.serverDN = hostDN
+config.DBSPublisher.serviceCert = serviceCert
+config.DBSPublisher.serviceKey =  "/path/to/valid/host-key"
+config.DBSPublisher.min_files_per_block = 1
+config.DBSPublisher.workflow_expiration_time = 3
 

@@ -70,11 +70,14 @@ class CentralMonitoring(Source):
                 workflow = job['value']['workflow']
                 if not cache.has_key(workflow):
                     user_details = self.dbSource.document( workflow )
-                    cache[workflow] = {'user_dn': user_details['user_dn'], 'vo_role': user_details['vo_role'], 'vo_group': user_details['vo_group'], 'async_dest': user_details['async_dest']}
+                    cache[workflow] = {'user_dn': user_details['user_dn'], 'vo_role': user_details['vo_role'], 'vo_group': user_details['vo_group'], 'async_dest': user_details['async_dest'], 'inputdataset': user_details['inputdataset'], 'dbs_url': user_details['dbs_url'], 'publish_dbs_url': user_details['publish_dbs_url']}
                 temp['value']['dn'] = cache[workflow]['user_dn']
                 temp['value']['role'] = cache[workflow]['vo_role']
                 temp['value']['group'] = cache[workflow]['vo_group']
                 temp['value']['destination'] = cache[workflow]['async_dest']
+                temp['value']['inputdataset'] = cache[workflow]['inputdataset']
+                temp['value']['dbs_url'] = cache[workflow]['dbs_url']
+                temp['value']['publish_dbs_url'] = cache[workflow]['publish_dbs_url']
                 result.append(temp)
 
         # Little map function to pull out the data we need
@@ -92,6 +95,12 @@ class CentralMonitoring(Source):
             value['state'] = 'new'
             value['start_time'] = now
             value['last_update'] = last_update
+
+            # Attributes required for publication
+            value['job_end_time'] = value['job_end_time']
+	    value['publication_state'] = 'not_published'
+            value['publication_retry_count'] = []
+
             value['dbSource_update'] = row['key']
             try:
                 value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1]+"@", "")
