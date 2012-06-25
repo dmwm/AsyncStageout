@@ -75,7 +75,12 @@ class AnalyticsDaemon(BaseWorkerThread):
         now = int(time.time())
         for job in active_jobs:
             workflow = job['key']
-            current_states = clean_states( job['value'] )
+            jobs_states = job['value']
+            query = {'reduce':True, 'group': True, 'key':workflow}
+            publication_state = db.loadView('AsyncTransfer', 'PublicationStateByWorkflow', query)['rows']
+            if publication_state:
+                jobs_states.update(publication_state[0]['value'])
+            current_states = clean_states( jobs_states )
             query = {'key': workflow}
             try:
                 states = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
@@ -89,29 +94,41 @@ class AnalyticsDaemon(BaseWorkerThread):
                 doc['type'] = 'aso_workflow'
                 try:
                     self.monitoring_db.queue(doc, True)
-                except Exception, ex:
-                    msg =  "Error queuing document in monitoring_db"
-                    msg += str(ex)
-                    msg += str(traceback.format_exc())
-                    self.logger.error(msg)
-                try:
-                    self.monitoring_db.commit()
                     updated += 1
                 except Exception, ex:
-                    msg =  "Error commiting documents in monitoring_db"
+                    msg =  "Error queuing document in monitoring_db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                 continue
 
             if states != current_states:
-                updateUri = "/" + self.monitoring_db.name + "/_design/UserMonitoring/_update/updateWorkflowSummary/" + workflow
-                updateUri += "?"
-                for state in current_states:
-                    updateUri += "%s=%d&" % (state, current_states[state])
-                updateUri += "last_update=%d" % now
-                self.monitoring_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-                updated += 1
+                try:
+                    doc = self.monitoring_db.document( workflow )
+                    doc['state'] = current_states
+                    doc['last_update'] = now
+                except Exception, ex:
+                    msg =  "Error loading document from couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                try:
+                    self.monitoring_db.queue(doc, True)
+                    updated += 1
+                except Exception, ex:
+                    msg =  "Error queuing document in monitoring_db"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+
+        # Perform a bulk update of documents
+        try:
+            self.monitoring_db.commit()
+        except Exception, ex:
+            msg =  "Error commiting documents in monitoring_db"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
 
         self.logger.debug("%d summary_per_workflows documents updated..." % updated)
         return
