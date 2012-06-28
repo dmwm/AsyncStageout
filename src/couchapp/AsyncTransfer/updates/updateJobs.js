@@ -2,7 +2,7 @@ function (doc,req) {
         if (req.query.state != 'done'){
 	        doc.retry_count.push(req.query.retry);
 	} else {
-		doc.lfn.push(req.query.lfn);
+		doc.lfn = req.query.lfn;
 	}
         if (req.query.state == 'done' || req.query.state == 'failed'){
                 doc.end_time = req.query.end_time;

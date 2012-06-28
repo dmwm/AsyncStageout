@@ -25,7 +25,7 @@ userEmail = "Your mail address"
 agentName = "Agent name"
 teamName = "Your team name"
 credentialDir = "/tmp/credentials/"
-file_cache_endpoint = "http://cmsweb-testbed.cern.ch/crabserver/"
+file_cache_endpoint = "http://cmsweb-testbed.cern.ch/crabcache/"
 
 config = Configuration()
 config.section_('General')
