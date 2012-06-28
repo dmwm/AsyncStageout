@@ -77,7 +77,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             workflow = job['key']
             jobs_states = job['value']
             query = {'reduce':True, 'group': True, 'key':workflow}
-            publication_state = db.loadView('AsyncTransfer', 'PublicationStateByWorkflow', query)['rows']
+            publication_state = self.db.loadView('AsyncTransfer', 'PublicationStateByWorkflow', query)['rows']
             if publication_state:
                 jobs_states.update(publication_state[0]['value'])
             current_states = clean_states( jobs_states )
