@@ -33,7 +33,6 @@ from WMCore.WMFactory import WMFactory
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from WMCore.Services.UserFileCache.UserFileCache import UserFileCache
-from WMCore.Credential.Proxy import myProxyEnvironment
 from WMCore.DataStructs.Run import Run
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
@@ -245,18 +244,14 @@ class PublisherWorker:
         try:
             toPublish = self.readToPublishFiles(workflow, userhn, lfn_ready)
         except (tarfile.ReadError, RuntimeError):
-            return {'status': False,
-                    'message': "Unable to read publication description files. " +
-                               "You may need to wait for some time after all jobs have finished.",
-                    'summary': {}, }
-
+            self.logger.error("Unable to read publication description files. ")
+            return lfn_ready, []
+        if not toPublish: return lfn_ready, []
         self.logger.info("Starting data publication for: " + str(workflow))
-
         failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
-                                       inputDataset=inputDataset, toPublish=toPublish, destURL=dbsurl)
-
+                                                     inputDataset=inputDataset, toPublish=toPublish,
+                                                     destURL=dbsurl)
         self.logger.debug("DBS publication results %s" % dbsResults)
-
         return failed, done
 
     def readToPublishFiles(self, workflow, userhn, lfn_ready):
@@ -300,7 +295,8 @@ class PublisherWorker:
                         else:
                             toPublish[datasetName] = copy.deepcopy(requestPublish[datasetName])
                 # Clean toPublish keeping only completed files
-                toPublish = self.clean(lfn_ready, toPublish)
+                fail_files, toPublish = self.clean(lfn_ready, toPublish)
+                self.mark_failed(fail_files)
                 tgz.close()
             shutil.rmtree(tmpDir, ignore_errors=True)
         except Exception, ex:
@@ -315,14 +311,20 @@ class PublisherWorker:
         """
         Clean before publishing
         """
+        fail_files = []
         new_toPublish = {}
-        for datasetPath, files in toPublish.iteritems():
-            new_files = []
-            for lfn in files:
-                if lfn['lfn'] in lfn_ready:
-                    new_files.append(lfn)
-            new_toPublish[datasetPath] = new_files
-        return new_toPublish
+        files_to_publish = []
+        for ready in lfn_ready:
+            for datasetPath, files in toPublish.iteritems():
+                new_temp_files = []
+                for lfn in files:
+                    if lfn['lfn'] == ready:
+                        new_temp_files.append(lfn)
+                if new_temp_files: new_toPublish[datasetPath] = new_temp_files
+                files_to_publish.extend(new_temp_files)
+        # Fail files that user does not ask to publish
+        fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
+        return fail_files, new_toPublish
 
     def dbsFiles_to_failed(self, dbsFiles):
         """
