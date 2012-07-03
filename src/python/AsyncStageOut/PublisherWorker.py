@@ -144,7 +144,7 @@ class PublisherWorker:
         self.logger.debug('actives wfs %s' %active_workflows)
         for wf in active_workflows:
             lfn_ready = []
-            wf_jobs_endtime= []
+            wf_jobs_endtime = []
             workToDo = False
             query = {'reduce':False, 'key': wf['key']}
             active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
@@ -175,7 +175,7 @@ class PublisherWorker:
                 data = {}
                 data['publication_state'] = 'published'
                 data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + getHashLfn(lfn)
+                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + getHashLfn(lfn.replace('store', 'store/temp', 1))
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
@@ -200,7 +200,7 @@ class PublisherWorker:
         last_update = int(time.time())
         for lfn in files:
             data = {}
-            docId = getHashLfn(lfn)
+            docId = getHashLfn(lfn.replace('store', 'store/temp', 1))
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
@@ -210,7 +210,7 @@ class PublisherWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
             # Prepare data to update the document in couch
-            if len(document['retry_count']) + 1 > self.publication_max_retry:
+            if len(document['publication_retry_count']) + 1 > self.max_retry:
                 data['publication_state'] = 'publication_failed'
             else:
                 data['publication_state'] = 'publishing'
@@ -218,7 +218,7 @@ class PublisherWorker:
             data['retry'] = now
             # Update the document in couch
             try:
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateFile/" + docId
+                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + docId
                 updateUri += "?" + urllib.urlencode(data)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             except Exception, ex:
@@ -447,22 +447,22 @@ class PublisherWorker:
             blockCount = 0
             while count < len(dbsFiles):
                 try:
-                   block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                   status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), files=dbsFiles[count:count+blockSize], block=block, maxFiles=100)
-                   count += blockSize
-                   blockCount += 1
-                   status = closeBlock(apiRef=destApi, block=block)
-                   # TODO: check here last files and decide whether a new block is required
-                   # New block is required only max_files_per_block + 50 % > remaining_files > max_files_per_block
+                    block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
+                    status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), files=dbsFiles[count:count+blockSize], block=block, maxFiles=100)
+                    count += blockSize
+                    blockCount += 1
+                    status = closeBlock(apiRef=destApi, block=block)
+                    # TODO: check here last files and decide whether a new block is required
+                    # New block is required only max_files_per_block + 50 % > remaining_files > max_files_per_block
                 except Exception, ex:
-                   failed = self.dbsFiles_to_failed(dbsFiles)
-                   msg =  "Error when publishing"
-                   msg += str(ex)
-                   msg += str(traceback.format_exc())
-                   self.logger.error(msg)
+                    failed = self.dbsFiles_to_failed(dbsFiles)
+                    msg =  "Error when publishing"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
             results[datasetPath]['files'] = len(dbsFiles)
             results[datasetPath]['blocks'] = blockCount
         del os.environ['X509_USER_PROXY']
         published = filter(lambda x: x not in failed, published)
-        self.logger.info("end of publication failed %s published %s results %s" %(failed,published,results))
+        self.logger.info("end of publication failed %s published %s results %s" %(failed, published, results))
         return failed, published, results
