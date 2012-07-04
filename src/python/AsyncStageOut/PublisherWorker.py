@@ -158,7 +158,7 @@ class PublisherWorker:
                 if (( time.time() - wf_jobs_endtime[len(wf_jobs_endtime) - 1] )/3600) < self.config.workflow_expiration_time:
                     continue
             if lfn_ready:
-                failed_files, good_files = self.publish( file['key'][4], file['value'][2], file['key'][3], file['key'][0], file['value'][3], file['value'][4], lfn_ready )
+                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), str(file['key'][3]), str(file['key'][0]), str(file['value'][3]), str(file['value'][4]), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
@@ -314,14 +314,16 @@ class PublisherWorker:
         fail_files = []
         new_toPublish = {}
         files_to_publish = []
+        lfn_to_publish = []
         for ready in lfn_ready:
             for datasetPath, files in toPublish.iteritems():
                 new_temp_files = []
                 for lfn in files:
                     if lfn['lfn'] == ready:
                         new_temp_files.append(lfn)
+                        lfn_to_publish.append(lfn['lfn'])
                 if new_temp_files: new_toPublish[datasetPath] = new_temp_files
-                files_to_publish.extend(new_temp_files)
+                files_to_publish.extend(lfn_to_publish)
         # Fail files that user does not ask to publish
         fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
         return fail_files, new_toPublish
