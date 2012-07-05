@@ -131,6 +131,8 @@ class PublisherWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to host cert')
             self.userProxy = config.serviceCert
+        self.ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint})
+        os.environ['X509_USER_PROXY'] = self.userProxy
 
     def __call__(self):
         """
@@ -283,7 +285,7 @@ class PublisherWorker:
             with working_directory(tmpDir):
                 tgzName = '%s_publish.tgz' % workflow
                 self.logger.info('Workflow ready for publication %s' % tgzName)
-                tgzPath = ufc.download(name=tgzName, output=tgzName)
+                tgzPath = self.ufc.download(name=tgzName, output=tgzName)
                 tgz = tarfile.open(tgzName, 'r')
                 for member in tgz.getmembers():
                     jsonFile = tgz.extractfile(member)
@@ -377,7 +379,6 @@ class PublisherWorker:
 
         # Start of publishInDBS
         blockSize = 100
-        os.environ['X509_USER_PROXY'] = self.userProxy
         migrateAPI = DbsMigrateApi(sourceURL, destURL)
         sourceApi = DbsApi({'url' : sourceURL, 'version' : 'DBS_2_0_9', 'mode' : 'POST'})
         destApi   = DbsApi({'url' : destURL,   'version' : 'DBS_2_0_9', 'mode' : 'POST'})
@@ -466,7 +467,6 @@ class PublisherWorker:
                     self.logger.error(msg)
             results[datasetPath]['files'] = len(dbsFiles)
             results[datasetPath]['blocks'] = blockCount
-        del os.environ['X509_USER_PROXY']
         published = filter(lambda x: x not in failed, published)
         self.logger.info("end of publication failed %s published %s results %s" %(failed, published, results))
         return failed, published, results
