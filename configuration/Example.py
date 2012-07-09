@@ -18,14 +18,14 @@ couchURLSource = "http://user:passwd@host:port"
 files_database = "asynctransfer"
 statitics_database = "asynctransfer_stat"
 requests_database = "request_database"
-database_src = "wmstats"
+database_src = "analysis_wmstats"
 user_monitoring_db = "user_monitoring_asynctransfer"
 serviceCert = "/path/to/valid/host-cert"
 userEmail = "Your mail address"
 agentName = "Agent name"
 teamName = "Your team name"
 credentialDir = "/tmp/credentials/"
-file_cache_endpoint = "http://cmsweb-testbed.cern.ch/crabcache/"
+file_cache_endpoint = "https://cmsweb-testbed.cern.ch/crabcache/"
 
 config = Configuration()
 config.section_('General')
