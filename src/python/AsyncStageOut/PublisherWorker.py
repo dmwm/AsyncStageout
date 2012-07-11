@@ -298,7 +298,6 @@ class PublisherWorker:
                             toPublish[datasetName] = copy.deepcopy(requestPublish[datasetName])
                 # Clean toPublish keeping only completed files
                 fail_files, toPublish = self.clean(lfn_ready, toPublish)
-                self.mark_failed(fail_files)
                 tgz.close()
             shutil.rmtree(tmpDir, ignore_errors=True)
         except Exception, ex:
@@ -320,10 +319,13 @@ class PublisherWorker:
         for ready in lfn_ready:
             for datasetPath, files in toPublish.iteritems():
                 new_temp_files = []
+                lfn_dict = {}
                 for lfn in files:
                     if lfn['lfn'] == ready:
-                        new_temp_files.append(lfn)
                         lfn_to_publish.append(lfn['lfn'])
+                        lfn_dict = lfn
+                        lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
+                        new_temp_files.append(lfn_dict)
                 if new_temp_files: new_toPublish[datasetPath] = new_temp_files
                 files_to_publish.extend(lfn_to_publish)
         # Fail files that user does not ask to publish
