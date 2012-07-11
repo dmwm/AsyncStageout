@@ -26,6 +26,7 @@ agentName = "Agent name"
 teamName = "Your team name"
 credentialDir = "/tmp/credentials/"
 file_cache_endpoint = "https://cmsweb-testbed.cern.ch/crabcache/"
+ui_script = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 
 config = Configuration()
 config.section_('General')
@@ -57,7 +58,7 @@ config.AsyncTransfer.max_files_per_transfer = 1000
 config.AsyncTransfer.pool_size = 3
 config.AsyncTransfer.max_retry = 3
 config.AsyncTransfer.credentialDir = credentialDir
-config.AsyncTransfer.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
+config.AsyncTransfer.UISetupScript = ui_script
 config.AsyncTransfer.transfer_script = 'ftscp'
 config.AsyncTransfer.serverDN = hostDN
 config.AsyncTransfer.pollStatInterval = 86400
@@ -75,6 +76,7 @@ config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
 config.DBSPublisher.publication_pool_size = 1
 config.DBSPublisher.componentDir = config.General.workDir
+config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
 config.DBSPublisher.log_level = logging.INFO
 config.DBSPublisher.files_database = files_database
