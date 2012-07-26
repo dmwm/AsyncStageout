@@ -180,7 +180,7 @@ class TransferWorker:
 
                     logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % \
+                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
                               (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
                     self.logger.debug("Running remove command %s" % command)
                     self.logger.debug("log file: %s" % logfile.name)
