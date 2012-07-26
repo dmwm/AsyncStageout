@@ -148,6 +148,7 @@ class AsyncTransfer_t(unittest.TestCase):
         config.AsyncTransfer.couch_user_monitoring_instance = os.getenv("COUCHURL")
         config.AsyncTransfer.files_database = "asynctransfer"
         config.AsyncTransfer.statitics_database = "asynctransfer_stat"
+        config.AsyncTransfer.user_monitoring_db = "user_monitoring_asynctransfer"
         config.AsyncTransfer.data_source = os.getenv("COUCHURL")
         config.AsyncTransfer.couch_statinstance = os.getenv("COUCHURL")
         config.AsyncTransfer.db_source = "wmagent_jobdump/fwjrs"
@@ -217,7 +218,7 @@ class AsyncTransfer_t(unittest.TestCase):
 
         return doc
 
-    def createFileDocinFilesDB(self, doc_id = '',state = 'new' ):
+    def createFileDocinFilesDB(self, doc_id = '', state = 'new', publication_state = 'not_published'):
         """
         Creates a test document in files_db
         """
@@ -244,6 +245,9 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['size'] = 1000
         doc['end_time'] = 10000
         doc['last_update'] = 10000
+        doc['job_end_time'] = str(time.time())
+        doc['publication_state'] = publication_state
+        doc['publication_retry_count'] = []
         self.db.queue(doc, True)
         self.db.commit()
 
@@ -710,11 +714,16 @@ WMTaskSpace/cmsRun1/output.root",\
         Analytics.updateWorkflowSummaries()
         state = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
         assert state["failed"] == 1
-        self.createFileDocinFilesDB( state = 'done' )
+        self.createFileDocinFilesDB( state = 'done', publication_state = 'published' )
         Analytics.updateJobSummaries()
         query = { 'reduce':True }
         numberWorkflow = self.monitoring_db.loadView('UserMonitoring', 'FilesByWorkflow', query)['rows'][0]['value']
         assert numberWorkflow == 1
+        query = { }
+        Analytics.updateWorkflowSummaries()
+        state = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
+        assert state["published"] == 1
+
 
 if __name__ == '__main__':
     unittest.main()
