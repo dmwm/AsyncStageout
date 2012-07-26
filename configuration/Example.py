@@ -87,6 +87,6 @@ config.DBSPublisher.credentialDir = credentialDir
 config.DBSPublisher.serverDN = hostDN
 config.DBSPublisher.serviceCert = serviceCert
 config.DBSPublisher.serviceKey =  "/path/to/valid/host-key"
-config.DBSPublisher.min_files_per_block = 1
+config.DBSPublisher.max_files_per_block = 100
 config.DBSPublisher.workflow_expiration_time = 3
 
