@@ -11,8 +11,10 @@ import unittest
 import time
 import threading
 import subprocess
+import urllib
 
 from AsyncStageOut.TransferDaemon import TransferDaemon
+from AsyncStageOut.PublisherDaemon import PublisherDaemon
 from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncStageOut.TransferWorker import TransferWorker
 from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
@@ -74,12 +76,14 @@ class AsyncTransfer_t(unittest.TestCase):
         self.testInit.setupCouch("agent_database", "Agent")
         couchapps = "../../../src/couchapp"
         self.async_couchapp = "%s/AsyncTransfer" % couchapps
+        self.publication_couchapp = "%s/DBSPublisher" % couchapps
         self.monitor_couchapp = "%s/monitor" % couchapps
         self.user_monitoring_couchapp = "%s/UserMonitoring" % couchapps
         self.stat_couchapp = "%s/stat" % couchapps
         harness = CouchAppTestHarness("asynctransfer")
         harness.create()
         harness.pushCouchapps(self.async_couchapp)
+        harness.pushCouchapps(self.publication_couchapp)
         harness.pushCouchapps(self.monitor_couchapp)
         harness_user_mon = CouchAppTestHarness("user_monitoring_asynctransfer")
         harness_user_mon.create()
@@ -159,6 +163,17 @@ class AsyncTransfer_t(unittest.TestCase):
         config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
         config.AsyncTransfer.serviceCert = os.getenv('X509_USER_PROXY')
         config.AsyncTransfer.componentDir = self.testInit.generateWorkDir(config)
+        config.DBSPublisher.pollInterval = 10
+        config.DBSPublisher.publication_pool_size = 1
+        config.DBSPublisher.componentDir = self.testInit.generateWorkDir(config)
+        config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
+        config.DBSPublisher.log_level = logging.DEBUG
+        config.DBSPublisher.files_database = "asynctransfer_1"
+        config.DBSPublisher.couch_instance = os.getenv("COUCHURL")
+        config.DBSPublisher.publication_max_retry = 0
+        config.DBSPublisher.serviceCert = os.getenv('X509_USER_PROXY')
+        config.DBSPublisher.max_files_per_block = 100
+        config.DBSPublisher.workflow_expiration_time = 3
 
         return config
 
@@ -245,9 +260,12 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['size'] = 1000
         doc['end_time'] = 10000
         doc['last_update'] = 10000
-        doc['job_end_time'] = str(time.time())
+        doc['job_end_time'] = 10000
         doc['publication_state'] = publication_state
         doc['publication_retry_count'] = []
+        doc['publish_dbs_url'] = 'https://cmsdbsprod.cern.ch:8443/cms_dbs_ph_analysis_02_writer/servlet/DBSServlet'
+        doc['inputdataset'] = '/RelValProdTTbar/JobRobot-MC_3XY_V24_JobRobot-v1/GEN-SIM-DIGI-RECO'
+        doc['dbs_url'] = 'http://cmsdbsprod.cern.ch/cms_dbs_prod_global/servlet/DBSServlet'
         self.db.queue(doc, True)
         self.db.commit()
 
@@ -696,9 +714,9 @@ WMTaskSpace/cmsRun1/output.root",\
         stderrls_log.close()
         assert rcls == 1
 
-    def testE_AnalyticsCompMethods_tests(self):
+    def testH_AnalyticsCompMethods_tests(self):
         """
-        _testE_AnalyticsCompMethods_tests_
+        _testH_AnalyticsCompMethods_tests_
         Tests the Analytics component methods
         """
         self.createFileDocinFilesDB()
@@ -724,6 +742,25 @@ WMTaskSpace/cmsRun1/output.root",\
         state = self.monitoring_db.loadView('UserMonitoring', 'StatesByWorkflow', query)['rows'][0]['value']
         assert state["published"] == 1
 
+    def testI_DBSPublisher_testLoadPublishView(self):
+        """
+        _testI_DBSPublisher_testLoadPublishView_
+        Tests Publish view used by the DBSPublisher to load the files to publish.
+        """
+        doc = self.createFileDocinFilesDB( state = 'done', publication_state = 'not_published' )
+        query = {'reduce':False,
+         'key':[doc['user'], doc['group'], doc['role'], doc['dn'], doc['workflow']]}
+        active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+        assert len(active_files) == 1
+        for i in range(1, 5):
+            self.createFileDocinFilesDB( doc_id = str(i), state = 'done', publication_state = 'not_published' )
+        query = {'reduce':False}
+        all_active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+        assert len(all_active_files) == 5
+        Publisher = PublisherDaemon( config = self.config )
+        Publisher.algorithm( )
+        all_active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+        assert len(all_active_files) == 0
 
 if __name__ == '__main__':
     unittest.main()
