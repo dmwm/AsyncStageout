@@ -119,7 +119,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                         query = {'reduce':True, 'group_level':2, 'startkey': [workflow], 'endkey':[workflow, {}]}
                         failures = self.db.loadView('AsyncTransfer', 'JobsByFailuresReasons', query)['rows']
                         for failure in failures:
-                            failures_reasons[job['key'][1]] = job['value']
+                            failures_reasons[failure['key'][1]] = failure['value']
                         doc['failures_reasons'] = failures_reasons
                     doc['last_update'] = now
                 except Exception, ex:
