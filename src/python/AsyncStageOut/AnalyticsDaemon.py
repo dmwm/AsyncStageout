@@ -90,6 +90,14 @@ class AnalyticsDaemon(BaseWorkerThread):
                 doc = {}
                 doc['_id'] = workflow
                 doc['state'] = current_states
+                if states.has_key("failed"):
+                    failures_reasons = {}
+                    query = {'reduce':True, 'group_level':2, 'startkey': [workflow], 'endkey':[workflow, {}]}
+                    failures = self.db.loadView('AsyncTransfer', 'JobsByFailuresReasons', query)['rows']
+                    self.logger.error(failures)
+                    for failure in failures:
+                        failures_reasons[failure['key'][1]] = failure['value']
+                    doc['failures_reasons'] = failures_reasons
                 doc['last_update'] = now
                 doc['type'] = 'aso_workflow'
                 try:
@@ -106,6 +114,13 @@ class AnalyticsDaemon(BaseWorkerThread):
                 try:
                     doc = self.monitoring_db.document( workflow )
                     doc['state'] = current_states
+                    if current_states.has_key("failed"):
+                        failures_reasons = {}
+                        query = {'reduce':True, 'group_level':2, 'startkey': [workflow], 'endkey':[workflow, {}]}
+                        failures = self.db.loadView('AsyncTransfer', 'JobsByFailuresReasons', query)['rows']
+                        for failure in failures:
+                            failures_reasons[job['key'][1]] = job['value']
+                        doc['failures_reasons'] = failures_reasons
                     doc['last_update'] = now
                 except Exception, ex:
                     msg =  "Error loading document from couch"
