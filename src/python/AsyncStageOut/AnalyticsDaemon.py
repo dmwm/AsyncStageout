@@ -163,17 +163,18 @@ class AnalyticsDaemon(BaseWorkerThread):
         all_files = self.db.loadView('AsyncTransfer', 'LastUpdatePerFile', query)['rows']
 
         for file in all_files:
-
             doc = {}
             doc['type'] = 'aso_file'
             doc['workflow'] = file['value']['workflow']
             doc['lfn'] = file['value']['lfn']
+            doc['state'] = file['value']['state']
+            if file['value'].has_key('errors'):
+                doc['errors'] = file['value']['errors']
             doc['location'] = file['value']['location']
             doc['checksum'] = file['value']['checksum']
             doc['jobid'] = file['value']['jobid']
             doc['retry_count'] = file['value']['retry_count']
             doc['size'] = file['value']['size']
-
             try:
                 self.monitoring_db.queue(doc, True)
             except Exception, ex:
