@@ -130,7 +130,7 @@ class TransferWorker:
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
-
+        self.failures_reasons =  {}
 
     def __call__(self):
         """
@@ -462,6 +462,9 @@ class TransferWorker:
                     else:
                         failed_files.append(lfn)
 
+                if line.split(':')[0].strip() == 'Reason':
+                    self.failures_reasons[lfn] = line.split('Reason:')[1:][0].strip()
+
             except IndexError, ex:
 
                 self.logger.debug("wrong log file! %s" %ex)
@@ -542,6 +545,7 @@ class TransferWorker:
             # Prepare data to update the document in couch
             if force_fail or len(document['retry_count']) + 1 > self.max_retry:
                 data['state'] = 'failed'
+                data['failure_reason'] = self.failures_reasons[lfn]
                 data['end_time'] = now
             else:
                 data['state'] = 'acquired'
