@@ -209,7 +209,6 @@ class AsyncTransfer_t(unittest.TestCase):
         """
         doc = {}
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
-        doc['workflow'] = 'someWorkflow'
         doc['jobid'] = '1'
         doc['retry_count'] = []
         doc['source'] = random.choice(self.sites)
@@ -226,7 +225,7 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['checksums'] = 'someChecksums'
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
-        doc['dbSource_update'] = str(time.time())
+        doc['job_end_time'] = str(time.time())
         doc['dbSource_url'] = 'someUrl'
         self.db.queue(doc, True)
         self.db.commit()
@@ -251,11 +250,9 @@ class AsyncTransfer_t(unittest.TestCase):
         doc['group'] = 'someGroup'
         doc['role'] = 'someRole'
         doc['state'] = state
-        doc['workflow'] = 'someWorkflow'
         doc['checksums'] = 'someChecksums'
         doc['start_time'] = str(datetime.datetime.now())
         doc['end_time'] = str(datetime.datetime.now())
-        doc['dbSource_update'] = str(time.time())
         doc['dbSource_url'] = 'someUrl'
         doc['size'] = 1000
         doc['end_time'] = 10000
@@ -279,7 +276,7 @@ class AsyncTransfer_t(unittest.TestCase):
         doc = {}
         doc['_id'] = getHashLfn("/this/is/a/lfnA")
         doc['dn'] = "/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi"
-        doc['task'] = 'someWorkflow'
+        doc['workflow'] = 'someWorkflow'
         doc['size'] = 999999
         doc['jobid'] = '1'
         doc['lfn'] = '/this/is/a/lfnA'
@@ -294,7 +291,7 @@ str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 3))
         doc['end_time'] = str(datetime.datetime.now()).\
 replace(str(datetime.datetime.now()).split(" ")[0].split("-")[2], \
 str(int(str(datetime.datetime.now()).split(" ")[0].split("-")[2]) - 2))
-        doc['dbSource_update'] = str(time.time())
+        doc['job_end_time'] = str(time.time())
         doc['dbSource_url'] = 'someUrl'
         self.db.queue(doc, True)
         self.db.commit()
@@ -630,7 +627,7 @@ WMTaskSpace/cmsRun1/output.root",\
         # Mark the document as good
         worker = TransferWorker([document['user'], None, None], site_tfc_map, self.config.AsyncTransfer)
         worker.mark_good([document['lfn']])
-        query = { 'reduce':False, 'key':[ document['jobid'] , document['dbSource_update'] ] }
+        query = { 'reduce':False, 'key':[ document['jobid'] , document['job_end_time'] ] }
         result = self.dbSource.loadView('FWJRDump', 'fwjrByJobIDTimestamp', query)['rows']
         docSource = self.dbSource.document(result[0]['id'])
 

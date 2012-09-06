@@ -87,8 +87,8 @@ while i <= size:
                 'start_time' : now,
                 'end_time' : now,
                 'state' : 'new',
-                'dbSource_update' : now,
-                'task': '/CmsRunAnalysis/Analysis-%s' %(random.randint(1,3)),
+                'job_end_time' : now,
+                'workflow': 'CmsRunAnalysis-%s' %(random.randint(1,3)),
                 'retry_count': [],
                 'user': user,
                 'size': random.randint(1, 9999)
