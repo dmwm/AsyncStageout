@@ -1,5 +1,5 @@
 function(doc) {
 	if (doc.state == 'new') {
-		emit([doc.user, doc.task, doc.source, doc.destination], 1);
+		emit([doc.user, doc.workflow, doc.source, doc.destination], 1);
 	}
 }
