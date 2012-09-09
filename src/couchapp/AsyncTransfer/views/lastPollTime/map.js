@@ -1,5 +1,5 @@
 function(doc) {
         if (doc.lfn) {
-                emit(doc.dbSource_update, doc._id) ;
+                emit(doc.job_end_time, doc._id) ;
         }
 }
