@@ -215,7 +215,7 @@ class PublisherWorker:
         last_update = int(time.time())
         for lfn in files:
             data = {}
-            docId = getHashLfn(lfn.replace('store', 'store/temp', 1))
+            docId = getHashLfn(lfn)
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
