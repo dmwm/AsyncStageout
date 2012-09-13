@@ -510,7 +510,7 @@ class TransferWorker:
 
             outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
             pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
-            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['dbSource_update'], \
+            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['job_end_time'], \
                                         'lfn': outputLfn, 'location': document['destination'], 'pfn': outputPfn, 'checksums': document['checksums'] })
 
         try:
