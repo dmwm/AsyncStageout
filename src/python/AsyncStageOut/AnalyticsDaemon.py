@@ -182,9 +182,6 @@ class AnalyticsDaemon(BaseWorkerThread):
             doc['type'] = 'aso_file'
             doc['workflow'] = file['value']['workflow']
             doc['lfn'] = file['value']['lfn']
-            doc['state'] = file['value']['state']
-            if file['value'].has_key('errors'):
-                doc['errors'] = file['value']['errors']
             doc['location'] = file['value']['location']
             doc['checksum'] = file['value']['checksum']
             doc['jobid'] = file['value']['jobid']
