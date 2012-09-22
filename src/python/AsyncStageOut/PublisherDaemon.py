@@ -78,6 +78,9 @@ class PublisherDaemon(BaseWorkerThread):
         else:
             #TODO: have a plugin algorithm here...
             active_users = random.sample(users['rows'], self.config.publication_pool_size)
+        self.logger.info('%s active users' % len(active_users))
+        self.logger.debug('Active users are: %s' % active_users)
+
         def keys_map(inputDict):
             """
             Map function.
