@@ -131,7 +131,9 @@ class PublisherWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to host cert')
             self.userProxy = config.serviceCert
-        self.ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint})
+        self.ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint,
+                                  'cert': self.userProxy,
+                                  'key': self.userProxy})
         os.environ['X509_USER_PROXY'] = self.userProxy
 
     def __call__(self):
@@ -276,8 +278,6 @@ class PublisherWorker:
                 newDict.update({key : value})
             return newDict
 
-        ## TODO need to define what to change to enable the CRABCache access
-        ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint})
         tmpDir = tempfile.mkdtemp()
         toPublish = {}
 
