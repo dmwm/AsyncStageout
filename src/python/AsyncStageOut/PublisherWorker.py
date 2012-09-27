@@ -163,7 +163,7 @@ class PublisherWorker:
             # If the number of files < max_files_per_block then check the oldness of the workflow
             if wf['value'] < self.max_files_per_block:
                 wf_jobs_endtime.sort()
-                if (( time.time() - wf_jobs_endtime[len(wf_jobs_endtime) - 1] )/3600) < self.config.workflow_expiration_time:
+                if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
                     continue
             if lfn_ready:
                 try:
@@ -340,8 +340,13 @@ class PublisherWorker:
                         lfn_dict = lfn
                         lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
                         new_temp_files.append(lfn_dict)
-                if new_temp_files: new_toPublish[datasetPath] = new_temp_files
-                files_to_publish.extend(lfn_to_publish)
+                        break
+            if new_temp_files:
+                if new_toPublish.has_key(datasetPath):
+                    new_toPublish[datasetPath].extend(new_temp_files)
+                else:
+                    new_toPublish[datasetPath] = new_temp_files
+            files_to_publish.extend(lfn_to_publish)
         # Fail files that user does not ask to publish
         fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
         return fail_files, new_toPublish
@@ -395,7 +400,7 @@ class PublisherWorker:
         results = {}
 
         # Start of publishInDBS
-        blockSize = 100
+        blockSize = self.max_files_per_block
         migrateAPI = DbsMigrateApi(sourceURL, destURL)
         sourceApi = DbsApi({'url' : sourceURL, 'version' : 'DBS_2_0_9', 'mode' : 'POST'})
         destApi   = DbsApi({'url' : destURL,   'version' : 'DBS_2_0_9', 'mode' : 'POST'})
