@@ -180,7 +180,7 @@ class PublisherWorker:
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
-        self.logger.info('Publications completed')
+        self.logger.debug('Publication algorithm completed')
 
     def mark_good(self, files=[]):
         """
