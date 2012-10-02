@@ -164,7 +164,7 @@ class PublisherWorker:
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
-        self.logger.info('Publications completed')
+        self.logger.info('Publication algo completed')
 
     def mark_good(self, files=[]):
         """
@@ -419,7 +419,7 @@ class PublisherWorker:
                 msg =  "Error when listing files in DBS"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
-                self.logger.error(msg)
+                self.logger.debug(msg)
 
             workToDo = False
 
