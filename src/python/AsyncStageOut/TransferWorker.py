@@ -141,12 +141,10 @@ class TransferWorker:
 
         jobs = self.files_for_transfer()
 
-        transferred, failed, failed_to_clean = self.command()
+        transferred, failed = self.command()
 
         self.mark_failed( failed )
         self.mark_good( transferred )
-
-        self.cleanSpace(failed_to_clean, True)
 
         self.logger.info('Transfers completed')
         return
@@ -364,7 +362,7 @@ class TransferWorker:
             # TODO: check that the job has a retry count > 0 and only delete files if that is the case
             to_clean = {}
             to_clean[ tuple( copyjob ) ] = link[1]
-            self.cleanSpace( to_clean )
+            self.cleanSpace( to_clean, True )
 
             tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
             tmp_copyjob_file.write('\n'.join(copyjob))
@@ -411,8 +409,6 @@ class TransferWorker:
             self.logger.debug("transferred : %s" % transferred_files)
             self.logger.info("failed : %s" % failed_files)
 
-            failed_to_clean[ tuple(results[1]) ] = link[1]
-
             # Clean up the temp copy job file
             os.unlink( tmp_copyjob_file.name )
 
@@ -421,7 +417,7 @@ class TransferWorker:
             # the ftscp log files to a done folder once parsed, and parsing all files in some
             # work directory.
 
-        return transferred_files, failed_files, failed_to_clean
+        return transferred_files, failed_files
 
     def validate_copyjob(self, copyjob):
         """
