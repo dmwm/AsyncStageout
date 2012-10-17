@@ -310,7 +310,7 @@ class TransferWorker:
 
         #TODO: improve fix for wrong tfc on sites
         try:
-            if pfn.split(':')[0] != 'srm':
+            if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
         except IndexError:
