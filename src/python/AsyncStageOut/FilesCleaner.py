@@ -87,7 +87,7 @@ class FilesCleaner(BaseWorkerThread):
             location = lfnDetails['value']['location']
             pfn = self.apply_tfc_to_lfn( '%s:%s' %( location, lfn ) )
             logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, location, str(time.time()) ), 'w')
-            command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -l %s'  % \
+            command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
                       (self.opProxy, self.uiSetupScript, pfn)
             self.logger.debug("Running remove command %s" % command)
             self.logger.debug("log file: %s" % logfile.name)
