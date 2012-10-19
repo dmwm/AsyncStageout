@@ -124,7 +124,8 @@ class AnalyticsDaemon(BaseWorkerThread):
                 try:
                     doc = self.monitoring_db.document( workflow )
                     doc['state'] = clean_states( jobs_states )
-	            doc['publication_state'] = clean_states( publication_state[0]['value'].copy() )
+                    if publication_state:
+   	                doc['publication_state'] = clean_states( publication_state[0]['value'].copy() )
                     if doc['state'].has_key("failed"):
                         failures_reasons = {}
                         query = {'reduce':True, 'group_level':2, 'startkey': [workflow], 'endkey':[workflow, {}]}
