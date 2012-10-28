@@ -259,12 +259,12 @@ class PublisherWorker:
           :arg str inputDataset
           :arg str sourceurl
           :return: the publication status or result"""
-        try:
-            toPublish = self.readToPublishFiles(workflow, userhn, lfn_ready)
-        except (tarfile.ReadError, RuntimeError):
-            self.logger.error("Unable to read publication description files. ")
-            return lfn_ready, []
-        if not toPublish: return lfn_ready, []
+        toPublish, fail = self.readToPublishFiles(workflow, userhn, lfn_ready)
+        if not toPublish:
+            if fail:
+                return lfn_ready, []
+            else:
+                return [], []
         self.logger.info("Starting data publication for: " + str(workflow))
         failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
@@ -314,13 +314,20 @@ class PublisherWorker:
                 fail_files, toPublish = self.clean(lfn_ready, toPublish)
                 tgz.close()
             shutil.rmtree(tmpDir, ignore_errors=True)
-        except Exception, ex:
-            msg =  "Error error when reading publication details for %s" %workflow
+        except RuntimeError, ex:
+            msg =  "Error when reading publication details for %s" %workflow
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+            return {}, False
+        except Exception, ex:
+            msg =  "Unknown error when reading publication details for %s. Failing the publication" %workflow
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            return {}, True
         self.logger.debug('to_publish %s' %toPublish)
-        return toPublish
+        return toPublish, False
 
     def clean(self, lfn_ready, toPublish):
         """
