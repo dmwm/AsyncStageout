@@ -338,6 +338,7 @@ class PublisherWorker:
         files_to_publish = []
         lfn_to_publish = []
         for ready in lfn_ready:
+            done = False
             for datasetPath, files in toPublish.iteritems():
                 new_temp_files = []
                 lfn_dict = {}
@@ -347,13 +348,17 @@ class PublisherWorker:
                         lfn_dict = lfn
                         lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
                         new_temp_files.append(lfn_dict)
+                        done = True
                         break
+                if done:
+                    break
             if new_temp_files:
                 if new_toPublish.has_key(datasetPath):
                     new_toPublish[datasetPath].extend(new_temp_files)
                 else:
                     new_toPublish[datasetPath] = new_temp_files
             files_to_publish.extend(lfn_to_publish)
+
         # Fail files that user does not ask to publish
         fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
         return fail_files, new_toPublish
