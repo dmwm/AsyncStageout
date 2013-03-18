@@ -97,11 +97,9 @@ class CentralMonitoring(Source):
             value['last_update'] = last_update
 
             # Attributes required for publication
-            value['job_end_time'] = value['job_end_time']
+            value['job_end_time'] = row['key']
 	    value['publication_state'] = 'not_published'
             value['publication_retry_count'] = []
-
-            value['dbSource_update'] = row['key']
             try:
                 value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1]+"@", "")
             except:

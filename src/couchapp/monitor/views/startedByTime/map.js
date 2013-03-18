@@ -14,13 +14,20 @@ function(doc) {
 
   var startDate = new Date(yy, mm, dd, h, m, s);
 
-  yy =  startDate.getUTCFullYear();
-  mm = startDate.getUTCMonth();
-  dd = startDate.getUTCDate();
-  h = startDate.getUTCHours();
-  m = startDate.getUTCMinutes();
-  s = startDate.getUTCSeconds();
+                yy_utc =  startDate.getUTCFullYear();
+                mm_utc = startDate.getUTCMonth();
+                dd_utc = startDate.getUTCDate();
+                h_utc = startDate.getUTCHours();
+                m_utc = startDate.getUTCMinutes();
+                s_utc = startDate.getUTCSeconds();
 
-  emit([yy, mm, dd, h, m, s], {"state": doc.state});
+                if ( mm == "12"){
+                        emit([parseInt(yy), parseInt(mm), parseInt(dd), parseInt(h), parseInt(m), parseInt(s)], {"state": doc.state});
+                }
+                else {
+                        emit([yy_utc, mm_utc, dd_utc, h_utc, m_utc, s_utc], {"state": doc.state});
+
+                }
+
 }
 }

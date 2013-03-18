@@ -29,7 +29,8 @@ input.popolate = function(){
 		var otherfile = [];
 		
 		xmlhttp = new XMLHttpRequest();
-  		xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
+//  		xmlhttp.open("GET", "_view/filesCountByTask?group_level=1?stale=ok", false);
+                xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 		for (i in response) {
@@ -52,6 +53,7 @@ input.update = function(){
 		var DB = $.couch.db(dbname);
 		DB.view('monitor/filesCountByTask', { 
 		      group_level: 1,
+//                      stale: "ok",
 		      success: function(data) {
 				var labels = [];
 				var dati = [];

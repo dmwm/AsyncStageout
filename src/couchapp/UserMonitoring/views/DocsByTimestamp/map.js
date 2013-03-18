@@ -1,8 +1,8 @@
 function(doc) {
-        if (doc.type == "summary_per_workflow") {
+        if (doc.type == "aso_workflow") {
                 emit(doc.last_update, doc._id);
         }
-	else if (doc.type == "summary_per_file") {
+	else if (doc.type == "aso_file" && (doc.state == "failed" || doc.state == "done")) {
 		emit(doc.timestamp, doc._id);
 	}           
 }

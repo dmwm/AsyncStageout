@@ -43,7 +43,8 @@ popolate = function(){
 		var otherfile = [];
 		
 		xmlhttp = new XMLHttpRequest();
-  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
+//  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2?stale=ok", false);
+                xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 	
@@ -70,7 +71,8 @@ inputm.popolate = function(){
 		var otherfile = [];
 		
 		xmlhttp = new XMLHttpRequest();
-  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
+//  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2?stale=ok", false);
+                xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
   		xmlhttp.send();
         var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 	
