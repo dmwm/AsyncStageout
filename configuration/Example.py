@@ -2,24 +2,27 @@
 """
 Example configuration for AsyncStageOut
 """
-
 from WMCore.WMInit import getWMBASE
 from WMCore.Configuration import Configuration
 import logging
 
 serverHostName = "HOST_NAME"
 hostDN = "Your host DN"
+amqAuthFile = "AMQ_auth_file"
 workDirectory = "/AsyncStageOut/worgkin/dir"
 databaseUrl = "http://user:password@host:port/agent_database"
 couchUrl = "http://user:passwd@host:port"
 statCouchUrl = "http://user:passwd@host:port"
 userMonitoringCouchUrl = "http://user:passwd@host:port"
+statUrl = "http://user:passwd@host:port"
 couchURLSource = "http://user:passwd@host:port"
 files_database = "asynctransfer"
 statitics_database = "asynctransfer_stat"
 requests_database = "request_database"
+config_database = "asynctransfer_config"
 database_src = "analysis_wmstats"
 user_monitoring_db = "user_monitoring_asynctransfer"
+jobs_database = "jobs"
 serviceCert = "/path/to/valid/host-cert"
 userEmail = "Your mail address"
 agentName = "Agent name"
@@ -89,4 +92,40 @@ config.DBSPublisher.serviceCert = serviceCert
 config.DBSPublisher.serviceKey =  "/path/to/valid/host-key"
 config.DBSPublisher.min_files_per_block = 1
 config.DBSPublisher.workflow_expiration_time = 3
-
+config.component_('Analytics')
+config.Analytics.user_monitoring_db = 'user_monitoring_asynctransfer'
+config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
+config.Analytics.analyticsPollingInterval = 900
+config.Analytics.log_level = 10
+config.Analytics.componentDir = config.General.workDir
+config.Analytics.namespace = 'AsyncStageOut.Analytics'
+config.Analytics.files_database = files_database
+config.Analytics.config_database = config_database
+config.Analytics.couch_instance = couchUrl
+config.Analytics.summaries_expiration_days = 6
+config.Analytics.amq_auth_file = amqAuthFile
+config.Analytics.jobs_db = jobs_database
+#config.component_('FilesCleaner')
+#config.FilesCleaner.log_level = 10
+#config.FilesCleaner.componentDir = config.General.workDir
+#config.FilesCleaner.namespace = 'AsyncStageOut.FilesCleaner'
+#config.FilesCleaner.credentialDir = credentialDir
+#config.FilesCleaner.files_database = 'asynctransfer'
+#config.FilesCleaner.UISetupScript = ui_script
+#config.FilesCleaner.files_database = 'asynctransfer'
+#config.FilesCleaner.couch_instance = couchUrl
+#config.FilesCleaner.filesCleaningPollingInterval = 14400
+#config.FilesCleaner.user_monitoring_db = 'user_monitoring_asynctransfer'
+#config.FilesCleaner.couch_user_monitoring_instance = userMonitoringCouchUrl
+#config.FilesCleaner.opsProxy = serviceCert
+config.component_('Statistics')
+config.Statistics.log_level = 10
+config.Statistics.componentDir = config.General.workDir
+config.Statistics.namespace = 'AsyncStageOut.Statistics'
+config.Statistics.files_database = files_database
+config.Statistics.config_database = config_database
+config.Statistics.couch_instance = couchUrl
+config.Statistics.pollStatInterval = 1800
+config.Statistics.couch_statinstance = statUrl
+config.Statistics.expiration_days = 3
+config.Statistics.statitics_database = 'asynctransfer_stat'

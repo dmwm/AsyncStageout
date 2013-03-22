@@ -49,10 +49,14 @@ class AnalyticsDaemon(BaseWorkerThread):
         self.db = server.connectDatabase(self.config.files_database)
         self.config_db = server.connectDatabase(self.config.config_database)
         self.amq_auth_file = self.config.amq_auth_file
-        self.logger.debug('Connected to local couchDB')
+        self.logger.debug('Connected to files_db couchDB')
 
         monitoring_server = CouchServer(self.config.couch_user_monitoring_instance)
         self.monitoring_db = monitoring_server.connectDatabase(self.config.user_monitoring_db)
+        self.logger.debug('Connected to user_monitoring_db in couchDB')
+
+        jobs_server = CouchServer(self.config.couch_jobs_instance)
+        self.jobs_db = jobs_server.connectDatabase(self.config.jobs_db)
         self.logger.debug('Connected to user_monitoring_db in couchDB')
 
     def algorithm(self, parameters = None):
@@ -322,7 +326,7 @@ class AnalyticsDaemon(BaseWorkerThread):
 
             if ended_files:
                 try:
-                    job_doc = self.monitoring_db.document(str(job['value']))
+                    job_doc = self.jobs_db.document(str(job['value']))
                 except:
                     self.logger.debug("%s doc not found" %str(job['value']))
                     continue
@@ -370,8 +374,8 @@ class AnalyticsDaemon(BaseWorkerThread):
                     self.logger.error(msg)
 
                 try:
-                    self.logger.info("remove this doc %s" %job_doc['_id'])
-                    self.monitoring_db.queueDelete(job_doc)
+                    self.logger.info("remove this job doc %s" %job_doc['_id'])
+                    self.jobs_db.queueDelete(job_doc)
                     self.monitoring_db.commit( )
                 except Exception, e:
                      self.logger.exception('A problem occured when removing docs: %s %s' % (message['PandaID'], e))
