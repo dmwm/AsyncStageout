@@ -65,19 +65,24 @@
 	<a>&nbsp;&nbsp;End Date&nbsp;</a>
 	<input type="text" name="testinput2" id="end" />
 	<script language="JavaScript">
-	var A_CALTPL = {
-		'months' : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
-		'weekdays' : ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sa'],
-		'yearscroll': true,
-		'weekstart': 0,
-		'centyear'  : 70,
-		'imgpath' : 'img/'
-	}
+//	var A_CALTPL = {
+//		'months' : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+//		'weekdays' : ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sa'],
+//		'yearscroll': true,
+//		'weekstart': 0,
+//		'centyear'  : 70,
+//		'imgpath' : 'img/'
+//	}
 	
 	new tcal ({
 		// if referenced by ID then form name is not required
 		'controlname': 'end'
-	}, A_CALTPL);
+//	}, A_CALTPL);
+        });
+
+        tcal.a_tpl.yearscroll = false;
+        tcal.a_tpl.weekstart = 1;
+
 	</script>
 	<a>End Time</a>
 	<select id="endtime">
@@ -113,10 +118,10 @@
 
 	</form>	
 	
-<h3>Status of Active Jobs</h3>
+<h3>Status of Active Files</h3>
 <div id="started"> Retriving Data... </div>
 <br>
-<h3>Status of Ended Jobs</h3>
+<h3>Status of Ended Files</h3>
 <div id="ended"> Retriving Data... </div>
 	
 	</div>
@@ -134,7 +139,7 @@
   $.couch.app(function(app) {
     $("#sidebar").evently("menu", app);
     $("#head").evently("head", app);
-    //$("#items").evently("main", app);    
+//    $("#items").evently("main", app);    
   });
   
   $(document).ready(function() {
@@ -250,12 +255,14 @@ inputs.popolate = function(){
 				"value": 0};
 			
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
-				newF.value= response[rs].value.new;
+
 				acqF.value= response[rs].value.acquired;
+				newF.value= response[rs].value.new;
 				rs = rs+1;
 			}
-			newfile.push(newF);
+
 			acqfile.push(acqF);
+			newfile.push(newF);
 			tslice.setHours(tslice.getHours()+1);	
 			}
 		inputs.stacked.push(newfile);

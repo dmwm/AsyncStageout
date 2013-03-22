@@ -4,31 +4,12 @@ Checks for files to transfer
 """
 from WMCore.Agent.Harness import Harness
 from AsyncStageOut.TransferDaemon import TransferDaemon
-from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
-from AsyncStageOut.StatisticDaemon import StatisticDaemon
-from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
-from AsyncStageOut.FilesCleaner import FilesCleaner
-import subprocess, os, errno
+#from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
+from AsyncStageOut import execute_command
+import os, errno
 import time, datetime
 import logging
 import threading
-
-def execute_command(command):
-    """
-    _execute_command_
-    Function to manage commands.
-    """
-    proc = subprocess.Popen(
-           ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-           stdout=subprocess.PIPE,
-           stderr=subprocess.PIPE,
-           stdin=subprocess.PIPE,
-    )
-    proc.stdin.write(command)
-    stdout, stderr = proc.communicate()
-    rc = proc.returncode
-
-    return stdout, stderr, rc
 
 class AsyncTransfer(Harness):
     """
@@ -74,10 +55,11 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
         logging.debug("Setting DB source poll interval to %s seconds" \
                       %str(self.config.AsyncTransfer.pollViewsInterval) )
 
-        myThread.workerThreadManager.addWorker( \
-                              LFNSourceDuplicator(self.config), \
-                              self.config.AsyncTransfer.pollViewsInterval \
-                            )
+        # TODO: Make the pull mode configurable
+        #myThread.workerThreadManager.addWorker( \
+        #                      LFNSourceDuplicator(self.config), \
+        #                      self.config.AsyncTransfer.pollViewsInterval \
+        #                    )
 
         logging.debug("Setting poll interval to %s seconds" \
                       %str(self.config.AsyncTransfer.pollInterval) )
@@ -87,29 +69,5 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
                               TransferDaemon(self.config), \
                               self.config.AsyncTransfer.pollInterval \
                             )
-
-        logging.debug("Setting poll statistic interval to %s seconds" \
-                       %str(self.config.AsyncTransfer.pollStatInterval) )
-
-        myThread.workerThreadManager.addWorker( \
-                              StatisticDaemon(self.config), \
-                              self.config.AsyncTransfer.pollStatInterval \
-                            )
-
-        logging.debug("Setting Analytics polling interval to %s seconds" \
-                       %str(self.config.AsyncTransfer.analyticsPollingInterval) )
-
-        myThread.workerThreadManager.addWorker( \
-                              AnalyticsDaemon(self.config), \
-                              self.config.AsyncTransfer.analyticsPollingInterval \
-                            )
-
-        myThread.workerThreadManager.addWorker( \
-                              FilesCleaner(self.config), \
-                              self.config.AsyncTransfer.filesCleaningPollingInterval \
-                            )
-
-        logging.debug("Setting Analytics polling interval to %s seconds" \
-                       %str(self.config.AsyncTransfer.filesCleaningPollingInterval) )
 
         return

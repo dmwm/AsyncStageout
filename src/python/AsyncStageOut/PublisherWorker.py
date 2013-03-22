@@ -11,7 +11,7 @@ There should be one worker per user transfer.
 '''
 import time
 import logging
-import subprocess, os, errno
+import os
 import tempfile
 import datetime
 import traceback
@@ -23,17 +23,15 @@ import types
 import copy
 from contextlib import contextmanager
 from WMComponent.DBSUpload.DBSInterface import createProcessedDataset, createAlgorithm, insertFiles
-from WMComponent.DBSUpload.DBSInterface import createPrimaryDataset,   createFileBlock, closeBlock
 from WMComponent.DBSUpload.DBSInterface import createDBSFileFromBufferFile
+from DBSAPI.dbsMigrateApi import DbsMigrateApi
 from DBSAPI.dbsApi import DbsApi
 from DBSAPI.dbsException import DbsException
-from DBSAPI.dbsMigrateApi import DbsMigrateApi
-from WMCore.Database.CMSCouch import CouchServer
-from WMCore.WMFactory import WMFactory
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from WMCore.Services.UserFileCache.UserFileCache import UserFileCache
 from WMCore.DataStructs.Run import Run
+from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
@@ -131,12 +129,17 @@ class PublisherWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to host cert')
             self.userProxy = config.serviceCert
-        self.ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint})
+        self.ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint,
+                                  'cert': self.userProxy,
+                                  'key': self.userProxy})
         os.environ['X509_USER_PROXY'] = self.userProxy
+        self.phedexApi = PhEDEx(responseType='json')
+        self.max_files_per_block = self.config.max_files_per_block
+
 
     def __call__(self):
         """
-        1- check the nubmer of files in wf to publish if it is > min_files_per_block
+        1- check the nubmer of files in wf to publish if it is < max_files_per_block
 	2- check in wf if now - last_finished_job > max_publish_time
         3- then call publish, mark_good, mark_failed for each wf
         """
@@ -154,13 +157,26 @@ class PublisherWorker:
                 wf_jobs_endtime.append(file['value'][5])
                 lfn_ready.append(file['value'][1])
                 self.logger.debug('LFNs ready %s' %lfn_ready)
-            # If the number of files < min_files_per_block then check the oldness of the workflow
-            if wf['value'] < self.config.min_files_per_block:
+            # If the number of files < max_files_per_block then check the oldness of the workflow
+            if wf['value'] < self.max_files_per_block:
                 wf_jobs_endtime.sort()
-                if (( time.time() - wf_jobs_endtime[len(wf_jobs_endtime) - 1] )/3600) < self.config.workflow_expiration_time:
+                if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
                     continue
             if lfn_ready:
-                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), str(file['key'][3]), str(file['key'][0]), str(file['value'][3]), str(file['value'][4]), lfn_ready )
+                try:
+                    seName = self.phedexApi.getNodeSE( str(file['value'][0]) )
+                    if not seName:
+                        continue
+                except Exception, ex:
+                    msg =  "SE of %s cannot be retrieved" % str(file['value'][0])
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    continue
+                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), \
+                                                         str(file['key'][3]), str(file['key'][0]), \
+                                                         str(file['value'][3]), str(file['value'][4]), \
+                                                         str(seName), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
@@ -176,7 +192,8 @@ class PublisherWorker:
                 data = {}
                 data['publication_state'] = 'published'
                 data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + getHashLfn(lfn.replace('store', 'store/temp', 1))
+                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + \
+                            getHashLfn(lfn.replace('store', 'store/temp', 1))
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
@@ -201,7 +218,7 @@ class PublisherWorker:
         last_update = int(time.time())
         for lfn in files:
             data = {}
-            docId = getHashLfn(lfn.replace('store', 'store/temp', 1))
+            docId = getHashLfn(lfn)
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
@@ -236,7 +253,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def publish(self, workflow, dbsurl, userdn, userhn, inputDataset, sourceurl, lfn_ready):
+    def publish(self, workflow, dbsurl, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
         """Perform the data publication of the workflow result.
           :arg str workflow: a workflow name
           :arg str dbsurl: the DBS URL endpoint where to publish
@@ -252,7 +269,7 @@ class PublisherWorker:
         self.logger.info("Starting data publication for: " + str(workflow))
         failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
-                                                     destURL=dbsurl)
+                                                     destURL=dbsurl, targetSE=targetSE)
         self.logger.debug("DBS publication results %s" % dbsResults)
         return failed, done
 
@@ -276,8 +293,6 @@ class PublisherWorker:
                 newDict.update({key : value})
             return newDict
 
-        ## TODO need to define what to change to enable the CRABCache access
-        ufc = UserFileCache({'endpoint': self.userFileCacheEndpoint})
         tmpDir = tempfile.mkdtemp()
         toPublish = {}
 
@@ -299,9 +314,9 @@ class PublisherWorker:
                 # Clean toPublish keeping only completed files
                 fail_files, toPublish = self.clean(lfn_ready, toPublish)
                 tgz.close()
-            shutil.rmtree(tmpDir, ignore_errors=True)
+                shutil.rmtree(tmpDir, ignore_errors=True)
         except Exception, ex:
-            msg =  "Error error when reading publication details for %s" %workflow
+            msg =  "Error error when reading publication details for %s" % workflow
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
@@ -326,8 +341,13 @@ class PublisherWorker:
                         lfn_dict = lfn
                         lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
                         new_temp_files.append(lfn_dict)
-                if new_temp_files: new_toPublish[datasetPath] = new_temp_files
-                files_to_publish.extend(lfn_to_publish)
+                        break
+            if new_temp_files:
+                if new_toPublish.has_key(datasetPath):
+                    new_toPublish[datasetPath].extend(new_temp_files)
+                else:
+                    new_toPublish[datasetPath] = new_temp_files
+            files_to_publish.extend(lfn_to_publish)
         # Fail files that user does not ask to publish
         fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
         return fail_files, new_toPublish
@@ -341,7 +361,7 @@ class PublisherWorker:
             failed.append(file['LogicalFileName'])
         return failed
 
-    def publishInDBS(self, userdn, sourceURL, inputDataset, toPublish, destURL):
+    def publishInDBS(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE):
         """
         Actually do the publishing
         """
@@ -375,12 +395,13 @@ class PublisherWorker:
                     parents.append({'LogicalFileName': str(lfn)})
                 return parents
 
+        publish_next_iteration = []
         failed = []
         published = []
         results = {}
 
         # Start of publishInDBS
-        blockSize = 100
+        blockSize = self.max_files_per_block
         migrateAPI = DbsMigrateApi(sourceURL, destURL)
         sourceApi = DbsApi({'url' : sourceURL, 'version' : 'DBS_2_0_9', 'mode' : 'POST'})
         destApi   = DbsApi({'url' : destURL,   'version' : 'DBS_2_0_9', 'mode' : 'POST'})
@@ -403,8 +424,7 @@ class PublisherWorker:
             appName = files[0]["appName"]
             appVer  = files[0]["appVer"]
             appFam  = files[0]["appFam"]
-            seName  = {'Name': files[0]["locations"][0]}
-            seName  = str(files[0]["locations"][0])
+            seName  = targetSE
 
             empty, primName, procName, tier =  datasetPath.split('/')
 
@@ -452,23 +472,46 @@ class PublisherWorker:
 
             count = 0
             blockCount = 0
-            while count < len(dbsFiles):
+            if len(dbsFiles) < self.max_files_per_block:
                 try:
                     block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                    status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), files=dbsFiles[count:count+blockSize], block=block, maxFiles=100)
+                    status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                                         files=dbsFiles[count:count+blockSize], block=block, \
+                                         maxFiles=blockSize)
                     count += blockSize
                     blockCount += 1
                     status = closeBlock(apiRef=destApi, block=block)
-                    # TODO: check here last files and decide whether a new block is required
-                    # New block is required only max_files_per_block + 50 % > remaining_files > max_files_per_block
                 except Exception, ex:
                     failed = self.dbsFiles_to_failed(dbsFiles)
                     msg =  "Error when publishing"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
+            else:
+                while count < len(dbsFiles):
+                    try:
+                        if len(dbsFiles[count:len(dbsFiles)]) < self.max_files_per_block:
+                            for file in dbsFiles[count:len(dbsFiles)]:
+                                publish_next_iteration.append(file['LogicalFileName'])
+                            count += blockSize
+                            continue
+                        block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
+                        status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                                             files=dbsFiles[count:count+blockSize], \
+                                             block=block, maxFiles=blockSize)
+                        count += blockSize
+                        blockCount += 1
+                        status = closeBlock(apiRef=destApi, block=block)
+                    except Exception, ex:
+                        failed = self.dbsFiles_to_failed(dbsFiles)
+                        msg =  "Error when publishing"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+
             results[datasetPath]['files'] = len(dbsFiles)
             results[datasetPath]['blocks'] = blockCount
-        published = filter(lambda x: x not in failed, published)
-        self.logger.info("end of publication failed %s published %s results %s" %(failed, published, results))
+        published = filter(lambda x: x not in failed + publish_next_iteration, published)
+        self.logger.info("End of publication")
+        self.logger.debug("failed %s published %s publish_next_iteration %s results %s" %(failed, published, publish_next_iteration, results))
         return failed, published, results

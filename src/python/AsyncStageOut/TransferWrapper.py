@@ -1,7 +1,13 @@
+#!/usr/bin/env
+'''
+The TransferWrapper is the parent of all TransferWorker flavors.
+'''
 import datetime
 
 class TransferWrapper:
-
+    """
+    Parent class of TransferWorker flavors.
+    """
     def __init__(self, logger, db):
         """
         Super-class constructor
@@ -37,7 +43,7 @@ class TransferWrapper:
         """
         Mark the list as transferred in database.
         """
-        pass 
+        pass
 
     def mark_failed(self, failed, force_fail):
         """

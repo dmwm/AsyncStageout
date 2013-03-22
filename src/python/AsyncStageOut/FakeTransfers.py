@@ -2,6 +2,9 @@ from AsyncStageOut.TransferWrapper import TransferWrapper
 import random
 
 class FakeTransfers(TransferWrapper):
+    """
+    FakeTransfers in ASO
+    """
     def command(self, files, userProxy, destSites):
         """
         In this transfer wrapper a random population is taken as being successfully transferred

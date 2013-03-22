@@ -65,4 +65,3 @@ class LFNSourceDuplicator(BaseWorkerThread):
         self.logger.debug('Duplication done')
 
         return
-
