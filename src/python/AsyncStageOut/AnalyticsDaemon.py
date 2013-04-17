@@ -48,9 +48,14 @@ class AnalyticsDaemon(BaseWorkerThread):
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to local couchDB')
 
-        monitoring_server = CouchServer(self.config.couch_user_monitoring_instance)
-        self.monitoring_db = monitoring_server.connectDatabase(self.config.user_monitoring_db)
-        self.logger.debug('Connected to user_monitoring_db in couchDB')
+        try:
+            monitoring_server = CouchServer(self.config.couch_user_monitoring_instance)
+            self.monitoring_db = monitoring_server.connectDatabase(self.config.user_monitoring_db)
+            self.logger.debug('Connected to user_monitoring_db in couchDB')
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return
+
 
     def algorithm(self, parameters = None):
         """
@@ -119,6 +124,9 @@ class AnalyticsDaemon(BaseWorkerThread):
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                 continue
+            except Exception, e:
+                    self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+                    return
 
             if all_mon_states != current_states:
                 try:
@@ -223,8 +231,11 @@ class AnalyticsDaemon(BaseWorkerThread):
         files_to_remove = []
         expiration_time = int(time.time()) - (86400 * self.config.summaries_expiration_days)
         query = {'startkey': 1, 'endkey': expiration_time}
-        files_to_remove = self.monitoring_db.loadView('UserMonitoring', 'DocsByTimestamp', query)['rows']
-
+        try:
+            files_to_remove = self.monitoring_db.loadView('UserMonitoring', 'DocsByTimestamp', query)['rows']
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return
         for old_file in files_to_remove:
             document = self.monitoring_db.document( old_file['value'] )
             self.monitoring_db.queueDelete(document)
