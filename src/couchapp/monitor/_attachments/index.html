@@ -65,19 +65,24 @@
 	<a>&nbsp;&nbsp;End Date&nbsp;</a>
 	<input type="text" name="testinput2" id="end" />
 	<script language="JavaScript">
-	var A_CALTPL = {
-		'months' : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
-		'weekdays' : ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sa'],
-		'yearscroll': true,
-		'weekstart': 0,
-		'centyear'  : 70,
-		'imgpath' : 'img/'
-	}
+//	var A_CALTPL = {
+//		'months' : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+//		'weekdays' : ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sa'],
+//		'yearscroll': true,
+//		'weekstart': 0,
+//		'centyear'  : 70,
+//		'imgpath' : 'img/'
+//	}
 	
 	new tcal ({
 		// if referenced by ID then form name is not required
 		'controlname': 'end'
-	}, A_CALTPL);
+//	}, A_CALTPL);
+        });
+
+        tcal.a_tpl.yearscroll = false;
+        tcal.a_tpl.weekstart = 1;
+
 	</script>
 	<a>End Time</a>
 	<select id="endtime">
@@ -112,14 +117,20 @@
 
 
 	</form>	
-	
+
 <h3>Status of Active Jobs</h3>
 <div id="started"> Retriving Data... </div>
 <br>
-<h3>Status of Ended Jobs</h3>
+<h3>Status of Active Jobs</h3>
 <div id="ended"> Retriving Data... </div>
-	
-	</div>
+<br>
+<h3>Status of Killed Jobs</h3>
+<div id="killed"> Retriving Data... </div>
+<br>
+<h3>Status of Resubmitted Jobs</h3>
+<div id="resubmitted"> Retriving Data... </div>
+
+        </div>
 
   </div>
   </body>
@@ -134,7 +145,7 @@
   $.couch.app(function(app) {
     $("#sidebar").evently("menu", app);
     $("#head").evently("head", app);
-    //$("#items").evently("main", app);    
+//    $("#items").evently("main", app);    
   });
   
   $(document).ready(function() {
@@ -154,6 +165,16 @@ inputs = [];
 inputs.data = [];
 inputs.stacked = [];
 inputs.status = ["new","acquired"];
+
+inputes = [];
+inputes.data = [];
+inputes.stacked = [];
+inputes.status = ["killed"];
+
+inputess = [];
+inputess.data = [];
+inputess.stacked = [];
+inputess.status = ["resubmitted"];
 
 var startd = new Date();
 var endd = new Date();
@@ -250,17 +271,90 @@ inputs.popolate = function(){
 				"value": 0};
 			
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
-				newF.value= response[rs].value.new;
+
 				acqF.value= response[rs].value.acquired;
+				newF.value= response[rs].value.new;
 				rs = rs+1;
 			}
-			newfile.push(newF);
+
 			acqfile.push(acqF);
+			newfile.push(newF);
 			tslice.setHours(tslice.getHours()+1);	
 			}
 		inputs.stacked.push(newfile);
 		inputs.stacked.push(acqfile);
 }
+
+inputes.popolate = function(){
+                inputes.stacked = [];
+                var h = timeSlice;
+                var hours = (endd.getTime() - startd.getTime())/h;
+                var startkey =  [startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
+                var endkey = [endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
+                        xmlhttp = new XMLHttpRequest();
+                        xmlhttp.open("GET", "_view/endedByTime?group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey +"]", false);
+                        xmlhttp.send();
+                        var response = eval("(" + xmlhttp.responseText + ")")["rows"];
+                        var rs = 0;
+                        var tslice = new Date(startd);
+                        var killfile = [];
+                        var empfile = [];
+                        for(i=0; i<=hours; i++){
+                        
+                        var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()]
+;
+                        //alert(key.toString());
+                        var killF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
+                        var empF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
+                        
+                        if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
+                                killF.value= response[rs].value.killed;
+                                empF.value=0;
+                                    rs = rs+1;
+                        }
+                        empfile.push(empF);
+                        killfile.push(killF);
+                        tslice.setHours(tslice.getHours()+1);   
+                        }
+    inputes.stacked.push(empfile);      
+    inputes.stacked.push(killfile);
+}
+
+inputess.popolate = function(){
+                inputess.stacked = [];
+                var h = timeSlice;
+                var hours = (endd.getTime() - startd.getTime())/h;
+                var startkey =  [startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
+                var endkey = [endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
+                        xmlhttp = new XMLHttpRequest();
+                        xmlhttp.open("GET", "_view/endedByTime?group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey +"]", false);
+                        xmlhttp.send();
+                        var response = eval("(" + xmlhttp.responseText + ")")["rows"];
+                        var rs = 0;
+                        var tslice = new Date(startd);
+                        var resubfile = [];
+                        var empfile2 = [];
+                        for(i=0; i<=hours; i++){
+                        
+                        var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()]
+;
+                        //alert(key.toString());
+                        var resubF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
+                        var empF2 = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
+                        
+                        if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
+                                resubF.value= response[rs].value.resubmitted;
+                                empF2.value=0;
+                                    rs = rs+1;
+                        }
+                        empfile2.push(empF2);
+                        resubfile.push(resubF);
+                        tslice.setHours(tslice.getHours()+1);   
+                        }
+    inputess.stacked.push(empfile2);      
+    inputess.stacked.push(resubfile);
+}
+
 
 function drawchart(){
 	
@@ -268,10 +362,14 @@ function drawchart(){
 		calcInterval();
 	}
 	inputs.popolate();
-	inpute.popolate();
+        inputes.popolate();
+        inpute.popolate();
+        inputess.popolate();    
 
     setTimeout(function() stackedArea("started", inputs) , 1000 );
-    setTimeout(function() stackedArea("ended", inpute) , 1000 );
+    setTimeout(function() stackedArea("killed", inputes) , 1000 );
+    setTimeout(function() stackedArea("ended", inpute) , 1000 );        
+    setTimeout(function() stackedArea("resubmitted", inputess) , 1000 );
 }
 
 

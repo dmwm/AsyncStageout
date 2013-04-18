@@ -12,7 +12,11 @@ from WMCore.Database.CMSCouch import CouchServer
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 from AsyncStageOut.PublisherWorker import PublisherWorker
 from multiprocessing import Pool
-import random
+from WMCore.WMFactory import WMFactory
+#import random
+
+result_list = []
+current_running = []
 
 def publish(user, config):
     """
@@ -20,6 +24,13 @@ def publish(user, config):
     """
     worker = PublisherWorker(user, config)
     return worker()
+
+def log_result(result):
+    """
+    Each worker executes this callback.
+    """
+    result_list.append(result)
+    current_running.remove(result)
 
 class PublisherDaemon(BaseWorkerThread):
     """
@@ -49,6 +60,8 @@ class PublisherDaemon(BaseWorkerThread):
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
         self.pool = Pool(processes=self.config.publication_pool_size)
 
     # Over riding setup() is optional, and not needed here
@@ -62,32 +75,51 @@ class PublisherDaemon(BaseWorkerThread):
         """
         users = self.active_users(self.db)
         self.logger.debug('kicking off pool %s' %users)
-        r = [self.pool.apply_async(publish, (u, self.config)) for u in users]
-        for result in r:
-            self.logger.info(result.get())
+        for u in users:
+            self.logger.debug('current_running %s' %current_running)
+            if u not in current_running:
+                self.logger.debug('processing %s' %u)
+                current_running.append(u)
+                self.logger.debug('processing %s' %current_running)
+                self.pool.apply_async(ftscp,(u, self.config), callback = log_result)
 
     def active_users(self, db):
         """
-        Query a view for users with files to publish.
+        Query a view for users with files to transfer. Get this from the
+        following view:
+            ftscp?group=true&group_level=1
         """
-        query = {'group': True, 'group_level':3}
-        users = db.loadView('DBSPublisher', 'publish', query)
+        query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        try:
+            users = db.loadView('DBSPublisher', 'publish', query)
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return []
+
         active_users = []
-        if len(users['rows']) <= self.config.publication_pool_size:
+        if len(users['rows']) <= self.config.pool_size:
             active_users = users['rows']
+            def keys_map(inputDict):
+                """
+                Map function.
+                """
+                return inputDict['key']
+            active_users = map(keys_map, active_users)
         else:
             #TODO: have a plugin algorithm here...
-            active_users = random.sample(users['rows'], self.config.publication_pool_size)
+            users = self.factory.loadObject(self.config.algoName,
+                                            args = [self.config, self.logger, users['rows'], self.config.pool_size],
+                                            getFromCache = False,
+                                            listFlag = True)
+            active_users = users()
+            self.logger.debug("users %s" % active_users)
+            # TODO: Fallback to random algo
+            #active_users = random.sample(users['rows'], self.config.pool_size)
+
         self.logger.info('%s active users' % len(active_users))
         self.logger.debug('Active users are: %s' % active_users)
 
-        def keys_map(inputDict):
-            """
-            Map function.
-            """
-            return inputDict['key']
-
-        return map(keys_map, active_users)
+        return active_users
 
     def terminate(self, parameters = None):
         """

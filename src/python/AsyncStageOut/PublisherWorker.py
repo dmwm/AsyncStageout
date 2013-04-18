@@ -180,7 +180,7 @@ class PublisherWorker:
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
-        self.logger.info('Publication algorithm completed')
+        self.logger.info('Publications completed')
 
     def mark_good(self, files=[]):
         """
@@ -259,12 +259,12 @@ class PublisherWorker:
           :arg str inputDataset
           :arg str sourceurl
           :return: the publication status or result"""
-        toPublish, fail = self.readToPublishFiles(workflow, userhn, lfn_ready)
-        if not toPublish:
-            if fail:
-                return lfn_ready, []
-            else:
-                return [], []
+        try:
+            toPublish = self.readToPublishFiles(workflow, userhn, lfn_ready)
+        except (tarfile.ReadError, RuntimeError):
+            self.logger.error("Unable to read publication description files. ")
+            return lfn_ready, []
+        if not toPublish: return lfn_ready, []
         self.logger.info("Starting data publication for: " + str(workflow))
         failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
@@ -314,20 +314,13 @@ class PublisherWorker:
                 fail_files, toPublish = self.clean(lfn_ready, toPublish)
                 tgz.close()
             shutil.rmtree(tmpDir, ignore_errors=True)
-        except RuntimeError, ex:
-            msg =  "Error when reading publication details for %s" %workflow
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-            return {}, False
         except Exception, ex:
-            msg =  "Unknown error when reading publication details for %s. Failing the publication" %workflow
+            msg =  "Error error when reading publication details for %s" %workflow
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-            return {}, True
         self.logger.debug('to_publish %s' %toPublish)
-        return toPublish, False
+        return toPublish
 
     def clean(self, lfn_ready, toPublish):
         """
@@ -338,7 +331,6 @@ class PublisherWorker:
         files_to_publish = []
         lfn_to_publish = []
         for ready in lfn_ready:
-            done = False
             for datasetPath, files in toPublish.iteritems():
                 new_temp_files = []
                 lfn_dict = {}
@@ -348,17 +340,13 @@ class PublisherWorker:
                         lfn_dict = lfn
                         lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
                         new_temp_files.append(lfn_dict)
-                        done = True
                         break
-                if done:
-                    break
             if new_temp_files:
                 if new_toPublish.has_key(datasetPath):
                     new_toPublish[datasetPath].extend(new_temp_files)
                 else:
                     new_toPublish[datasetPath] = new_temp_files
             files_to_publish.extend(lfn_to_publish)
-
         # Fail files that user does not ask to publish
         fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
         return fail_files, new_toPublish
@@ -450,7 +438,7 @@ class PublisherWorker:
                 msg =  "Error when listing files in DBS"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
-                self.logger.debug(msg)
+                self.logger.error(msg)
 
             workToDo = False
 

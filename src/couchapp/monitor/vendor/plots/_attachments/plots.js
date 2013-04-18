@@ -394,7 +394,7 @@ root.add(pv.Label)
   .font("bold 14px sans-serif")
   .top(75)
   .left(w/1.75)
-  .text("Number of Jobs");
+  .text("Number of Files");
 
 
 root.render();
@@ -566,8 +566,8 @@ var w = 850,
 
 
 var fill = pv.colors("#2ca02c", "#d62728");
-var colors = {done: "#2ca02c", failed: "#d62728", new: "#3299cc", acquired:"#ffff00"};
-
+//var colors = {done: "#2ca02c", failed: "#d62728", new: "#3299cc", acquired:"#ffff00"};
+var colors = {done: "#2ca02c", failed: "#d62728", new: "#3299cc", acquired:"#ffff00", killed:"#2ca02c", resubmitted:"#3299cc"};
 
 /* The root panel. */
 var root = new pv.Panel()
@@ -610,7 +610,9 @@ var area = vis.add(pv.Layout.Stack)
     .x(function(d) x(d.time))
     .y(function(d) y(d.value))
   .layer.add(pv.Area)
-    .fillStyle(function () {return colors[input.status[this.index]];})
+    .fillStyle(function () {return colors[input.status[this.parent.index]];})
+  //  .fillStyle(pv.colors("red", "orange", "yellow", "green", "blue", "violet"))
+  //  .fillStyle(fill.by(pv.index))
     .anchor("top").add(pv.Line)
       .strokeStyle("black")
       .lineWidth(0)
@@ -628,7 +630,7 @@ root.add(pv.Label)
   .bottom(h/3)
   .left(20)
   .textAngle(1.5 * Math.PI)
-  .text("Number of Jobs")
+  .text("Number of Files")
 
 root.add(pv.Label)
   .font("bold 13px sans-serif")

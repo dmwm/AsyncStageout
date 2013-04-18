@@ -18,14 +18,31 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 from AsyncStageOut.TransferWorker import TransferWorker
 from multiprocessing import Pool
+from WMCore.WMFactory import WMFactory
 import random
+import logging
+import time
+
+result_list = []
+current_running = []
 
 def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
     worker = TransferWorker(user, tfc_map, config)
-    return worker()
+    try:
+        worker ()
+    except:
+        pass
+    return user
+
+def log_result(result):
+    """
+    Each worker executes this callback.
+    """
+    result_list.append(result)
+    current_running.remove(result)
 
 class TransferDaemon(BaseWorkerThread):
     """
@@ -54,21 +71,32 @@ class TransferDaemon(BaseWorkerThread):
 
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
+        self.config_db = server.connectDatabase(self.config.config_database)
         self.logger.debug('Connected to CouchDB')
         self.pool = Pool(processes=self.config.pool_size)
-
         self.phedex = PhEDEx(responseType='xml')
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
+
+        result_list = []
+        current_running = []
 
     # Over riding setup() is optional, and not needed here
-
     def algorithm(self, parameters = None):
         """
-
         1. Get a list of users with files to transfer from the couchdb instance
         2. For each user get a suitably sized input for ftscp (call to a list)
         3. Submit the ftscp to a subprocess
-
         """
+        query = {'stale':'ok'}
+        try:
+            params = self.config_db.loadView('asynctransfer_config', 'GetTransferConfig', query)
+        #    self.pool = Pool(processes=params['rows'][0]['key'][0]) 
+            self.config.max_files_per_transfer = params['rows'][0]['key'][1]
+            self.config.algoName = params['rows'][0]['key'][2]
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+
         users = self.active_users(self.db)
 
         sites = self.active_sites()
@@ -77,13 +105,34 @@ class TransferDaemon(BaseWorkerThread):
 
         site_tfc_map = {}
         for site in sites:
-            site_tfc_map[site] = self.get_tfc_rules(site)
+            if site == 'T1_US_FNAL':
+                site = 'T1_US_FNAL_Buffer'
+##            if site == 'T2_IT_Legnaro':
+##                site = 'None'
+            if site and str(site) != 'None':
+                site_tfc_map[site] = self.get_tfc_rules(site)
+
+#        site_tfc_map = {}
+#        for site in sites:
+#            if site == 'T1_US_FNAL':
+#                site = 'T1_US_FNAL_Buffer'
+#            site_tfc_map[site] = self.get_tfc_rules(site)
 
         self.logger.debug('kicking off pool')
 
-        r = [self.pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
-        for result in r:
-            self.logger.info(result.get())
+#        r = [self.pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
+
+
+        for u in users:
+            self.logger.debug('current_running %s' %current_running)
+            if u not in current_running:
+                self.logger.debug('processing %s' %u)
+                current_running.append(u)
+                self.logger.debug('processing %s' %current_running)
+                self.pool.apply_async(ftscp,(u, site_tfc_map, self.config), callback = log_result)
+ 
+#        for result in r:
+#            self.logger.info(result.get())
 
     def active_users(self, db):
         """
@@ -91,30 +140,41 @@ class TransferDaemon(BaseWorkerThread):
         following view:
             ftscp?group=true&group_level=1
         """
-        query = {'group': True, 'group_level':3}
-        users = db.loadView('AsyncTransfer', 'ftscp', query)
-
+        query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        try: 
+            users = db.loadView('AsyncTransfer', 'ftscp_all', query)
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return []
+   
         active_users = []
         if len(users['rows']) <= self.config.pool_size:
             active_users = users['rows']
+            def keys_map(inputDict):
+                """
+                Map function.
+                """
+                return inputDict['key']
+            active_users = map(keys_map, active_users)
         else:
             #TODO: have a plugin algorithm here...
-            active_users = random.sample(users['rows'], self.config.pool_size)
+            users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.pool_size], getFromCache = False, listFlag = True)
+            active_users = users()
+            self.logger.debug("users %s" % active_users)
+            #active_users = random.sample(users['rows'], self.config.pool_size)
 
-        def keys_map(inputDict):
-            """
-            Map function.
-            """
-            return inputDict['key']
-
-        return map(keys_map, active_users)
+        return active_users
 
     def active_sites(self):
         """
         Get a list of all sites involved in transfers.
         """
-        query = {'group': True}
-        sites = self.db.loadView('AsyncTransfer', 'sites', query)
+        query = {'group': True, 'stale': 'ok'}
+        try:
+            sites = self.db.loadView('AsyncTransfer', 'sites', query)
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return []
 
         def keys_map(inputDict):
             """

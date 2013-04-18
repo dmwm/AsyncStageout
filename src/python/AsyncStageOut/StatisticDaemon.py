@@ -22,7 +22,7 @@ class StatisticDaemon(BaseWorkerThread):
     """
     def __init__(self, config):
         BaseWorkerThread.__init__(self)
-        self.config = config.AsyncTransfer
+        self.config = config.Statistics
 
         try:
             self.logger.setLevel(self.config.log_level)
@@ -35,11 +35,15 @@ class StatisticDaemon(BaseWorkerThread):
 
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
+        self.config_db = server.connectDatabase(self.config.config_database)
         self.logger.debug('Connected to CouchDB')
 
         statserver = CouchServer(self.config.couch_statinstance)
         self.statdb = statserver.connectDatabase(self.config.statitics_database)
         self.logger.debug('Connected to Stat CouchDB')
+
+        self.iteration_docs = []
+        self.exptime = None
 
     def algorithm(self, parameters = None):
         """
@@ -50,28 +54,31 @@ class StatisticDaemon(BaseWorkerThread):
             c. delete the document from files_database
             d. update the stat_db by adding the fts servers documents for this iteration
         """
-
+        query = {'stale':'ok'}
+        try:
+            param = self.config_db.loadView('asynctransfer_config', 'GetStatConfig', query)
+            self.config.expiration_days = param['rows'][0]['key']
+            self.logger.debug('Got expiration_days %s from Couch' % self.config.expiration_days)
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting config DB in couch: %s' % e)
         expdays = datetime.timedelta(days = self.config.expiration_days)
         self.exptime = datetime.datetime.now() - expdays
         self.logger.debug('Deleting Jobs ended before %s' %str(self.exptime) )
 
-        self.iteration_docs = []
         oldJobs = self.getOldJobs()
         self.logger.debug('%d jobs to delete' % len(oldJobs) )
 
         for doc in oldJobs:
 
             try:
+                self.logger.debug('deleting %s' %doc)
                 jobDoc = self.db.document(doc)
                 self.updateStat(jobDoc)
-
             except Exception, ex:
-
                 msg =  "Error retriving document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
 
             try:
                 self.db.queueDelete(jobDoc)
@@ -102,7 +109,6 @@ class StatisticDaemon(BaseWorkerThread):
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-
         try:
             self.db.commit()
         except Exception, ex:
@@ -112,16 +118,22 @@ class StatisticDaemon(BaseWorkerThread):
             self.logger.error(msg)
 
     def getOldJobs(self):
-
         """
         Get the list of finished jobs older than the exptime.
         """
-
         query = {'reduce': False,
-                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}
-        oldJobs = self.db.loadView('monitor', 'endedByTime', query)['rows']
+                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}#,
+                # 'stale': 'ok'}
+        try:
+            oldJobs = self.db.loadView('monitor', 'endedByTime', query)['rows']
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return []
 
         def docIdMap(row):
+            """
+            Map old jobs.
+            """
             return row['id']
 
         oldJobs = map(docIdMap, oldJobs)
@@ -133,7 +145,7 @@ class StatisticDaemon(BaseWorkerThread):
         """
         Update the stat documents list.
         """
-        ftserver = getFTServer(document['destination'], 'getAllFTSserver', self.db, self.logger)
+        ftserver = getFTServer(document['destination'], 'getAllFTSserver', self.config_db, self.logger)
 
         for oldDoc in self.iteration_docs:
             if oldDoc['fts'] == ftserver:
@@ -158,7 +170,7 @@ class StatisticDaemon(BaseWorkerThread):
                           'sites_served': {document['destination']: {'done': 0,
                                                                      'failed': 0}
                                             },
-                          'users': { document['user']: [document['task']]},
+                          'users': { document['user']: [document['workflow']]},
                           'timing': {'min_transfer_duration': jobDuration,
                                      'max_transfer_duration': jobDuration,
                                      'avg_transfer_duration': jobDuration},
@@ -187,14 +199,14 @@ class StatisticDaemon(BaseWorkerThread):
             if server_users.has_key(document['user']):
                 #user already in users list
                 user_entry = server_users[document['user']]
-                if not document['task'] in user_entry:
+                if not document['workflow'] in user_entry:
                 #add workflow to user
-                    user_entry.append(document['task'])
+                    user_entry.append(document['workflow'])
                     server_users[document['user']] = user_entry
                     oldDoc['users'] = server_users
             else:
                 #add user to users list with workflow
-                user_entry = [document['task']]
+                user_entry = [document['workflow']]
                 server_users[document['user']] = user_entry
                 oldDoc['users'] = server_users
 

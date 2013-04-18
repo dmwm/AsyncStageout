@@ -8,10 +8,10 @@ function (doc,req) {
                 doc.end_time = req.query.end_time;
         }
         if (req.query.state == 'failed'){
-                doc.failure_reason = req.query.failure_reason;
+                doc.failure_reason.push(req.query.failure_reason);
                 doc.end_time = req.query.end_time;
         }
-        doc.last_update = parseInt(req.query.last_update)
+        doc.last_update = parseFloat(req.query.last_update)
         doc.state = req.query.state;
         return [doc, "OK"];
 }

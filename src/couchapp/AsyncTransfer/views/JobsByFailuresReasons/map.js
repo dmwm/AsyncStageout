@@ -1,5 +1,5 @@
 function(doc) {
-	if(doc.failure_reason){
+	if(doc.workflow){
 		emit([doc.workflow, doc.failure_reason], 1);
 	}
 }
