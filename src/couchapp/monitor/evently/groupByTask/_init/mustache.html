@@ -15,8 +15,8 @@ input.data = [];
 input.labels = [];
 input.info = [];
 input.stacked = [];
-input.layers = ["done","failed","other"];
-input.status = ["done","failed","other"];
+input.layers = ["done","failed","killed","new", "acquired", "resubmitted"];
+input.status = ["done","failed","killed", "new", "acquired", "resubmitted"];
 
 
 input.popolate = function(){
@@ -26,11 +26,13 @@ input.popolate = function(){
 		input.info = [];
                 var donefile = [];
 		var failfile = [];
-		var otherfile = [];
+		var killfile=[];
+		var newfile = [];
+                var acqfile = [];
+                var resubfile=[];
 		
 		xmlhttp = new XMLHttpRequest();
-//  		xmlhttp.open("GET", "_view/filesCountByTask?group_level=1?stale=ok", false);
-                xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
+  		xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 		for (i in response) {
@@ -39,21 +41,27 @@ input.popolate = function(){
 
 		donefile.push(response[i].value.done);
 		failfile.push(response[i].value.failed);
-		otherfile.push(response[i].value.other);
+		newfile.push(response[i].value.new);
+		killfile.push(response[i].value.killed);
+		resubfile.push(response[i].value.resubmitted);
+		acqfile.push(response[i].value.acquired);
+
 		input.labels.push(response[i].key);
 		input.data.push(value);
 		input.info.push(rowinfo);
 			}
 		input.stacked.push(donefile);
 		input.stacked.push(failfile);
-		input.stacked.push(otherfile);
+		input.stacked.push(killfile);
+		input.stacked.push(newfile);
+		input.stacked.push(acqfile);
+		input.stacked.push(resubfile);
 }
 
 input.update = function(){
 		var DB = $.couch.db(dbname);
 		DB.view('monitor/filesCountByTask', { 
 		      group_level: 1,
-//                      stale: "ok",
 		      success: function(data) {
 				var labels = [];
 				var dati = [];
