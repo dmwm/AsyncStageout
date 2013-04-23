@@ -323,8 +323,8 @@ tr = tr.map(function(d){return d.reduce(function(a, b){ return a + b; }) } );
 
 var w = 700,
     h = 25*(tr.length),
-    fill = pv.colors("#b5cf6b", "#d6616b", "#e7ba52"),
-    selected = pv.colors("#2ca02c", "#d62728","#e7ba52"),
+    fill = pv.colors("#b5cf6b", "#d6616b", "#000000",  "#e7ba52", "#6495ed", "#006400"),
+    selected = pv.colors("#2ca02c", "#d62728","#000000",  "#e7ba52", "#6495ed", "#006400"),
     x = pv.Scale.linear(0, pv.max(tr)).range(0, w),
     y = pv.Scale.ordinal(pv.range(tr.length)).splitBanded(0, h, 6/7);
 
@@ -394,7 +394,7 @@ root.add(pv.Label)
   .font("bold 14px sans-serif")
   .top(75)
   .left(w/1.75)
-  .text("Number of Files");
+  .text("Number of Jobs");
 
 
 root.render();
@@ -565,9 +565,9 @@ var w = 850,
     y = pv.Scale.linear(0, pv.max(tr)).range(0, h*.8);
 
 
-var fill = pv.colors("#2ca02c", "#d62728");
-//var colors = {done: "#2ca02c", failed: "#d62728", new: "#3299cc", acquired:"#ffff00"};
+var fill = pv.colors("#2ca02c", "#d62728", "#3299cc", "#ffff00");
 var colors = {done: "#2ca02c", failed: "#d62728", new: "#3299cc", acquired:"#ffff00", killed:"#2ca02c", resubmitted:"#3299cc"};
+
 
 /* The root panel. */
 var root = new pv.Panel()
@@ -610,9 +610,7 @@ var area = vis.add(pv.Layout.Stack)
     .x(function(d) x(d.time))
     .y(function(d) y(d.value))
   .layer.add(pv.Area)
-    .fillStyle(function () {return colors[input.status[this.parent.index]];})
-  //  .fillStyle(pv.colors("red", "orange", "yellow", "green", "blue", "violet"))
-  //  .fillStyle(fill.by(pv.index))
+    .fillStyle(function () {return colors[input.status[this.index]];})
     .anchor("top").add(pv.Line)
       .strokeStyle("black")
       .lineWidth(0)
@@ -630,7 +628,7 @@ root.add(pv.Label)
   .bottom(h/3)
   .left(20)
   .textAngle(1.5 * Math.PI)
-  .text("Number of Files")
+  .text("Number of Jobs")
 
 root.add(pv.Label)
   .font("bold 13px sans-serif")
@@ -872,4 +870,5 @@ vis.render();
 function clone(o) {
  return eval(uneval(o));
 }
+
 
