@@ -97,7 +97,7 @@ class PublisherDaemon(BaseWorkerThread):
             return []
 
         active_users = []
-        if len(users['rows']) <= self.config.pool_size:
+        if len(users['rows']) <= self.config.publication_pool_size:
             active_users = users['rows']
             def keys_map(inputDict):
                 """
@@ -108,13 +108,13 @@ class PublisherDaemon(BaseWorkerThread):
         else:
             #TODO: have a plugin algorithm here...
             users = self.factory.loadObject(self.config.algoName,
-                                            args = [self.config, self.logger, users['rows'], self.config.pool_size],
+                                            args = [self.config, self.logger, users['rows'], self.config.publication_pool_size],
                                             getFromCache = False,
                                             listFlag = True)
             active_users = users()
             self.logger.debug("users %s" % active_users)
             # TODO: Fallback to random algo
-            #active_users = random.sample(users['rows'], self.config.pool_size)
+            #active_users = random.sample(users['rows'], self.config.publication_pool_size)
 
         self.logger.info('%s active users' % len(active_users))
         self.logger.debug('Active users are: %s' % active_users)
