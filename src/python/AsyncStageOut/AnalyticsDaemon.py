@@ -8,6 +8,7 @@ files_database.
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
+from AsyncStageOut import getHashLfn
 import time
 import traceback
 from time import strftime
@@ -249,6 +250,8 @@ class AnalyticsDaemon(BaseWorkerThread):
             doc['size'] = file['value']['size']
             doc['state'] = file['value']['state']
             doc['last_update'] = time.time()
+            if file['value']['failure_reason']:
+                doc['failure_reason'] = file['value']['failure_reason']
             if file['value'].has_key('type'):
                 doc['file_type'] = file['value']['type']
             else:
@@ -353,16 +356,30 @@ class AnalyticsDaemon(BaseWorkerThread):
                             return
 
                         self.logger.info("the job %s has %s failed files %s" %(job, len(files_to_publish), files_to_publish))
+                        transferError = "Output transfer error"
                         for file in files_to_publish:
                             if file['value'].find('temp') > 1:
                                 status[file['value']] = 'failed'
+                                lfn = status[file['value']]
                             else:
                                 status[file['value'].replace('store', 'store/temp', 1)] = 'failed'
+                                lfn = file['value'].replace('store', 'store/temp', 1)
+                            docId = getHashLfn(lfn)
+                            # Load document to get the failure reason from output file
+                            try:
+                                document = self.monitoring_db.document( docId )
+                                if (document['file_type'] == "output" and document.has_key('failure_reason')):
+                                    transferError = document['failure_reason']
+                            except Exception, ex:
+                                msg =  "Error loading document from couch"
+                                msg += str(ex)
+                                msg += str(traceback.format_exc())
+                                self.logger.error(msg)
+                                continue
                         message['transferStatus'] = status
-
+                        message['transferError'] = transferError
             if message:
                 self.logger.info("publish this %s" %message)
-
                 try:
                     self.produce(message)
                 except Exception, ex:
@@ -370,7 +387,6 @@ class AnalyticsDaemon(BaseWorkerThread):
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-
                 try:
                     self.logger.info("remove this doc %s" %job_doc['_id'])
                     self.monitoring_db.queueDelete(job_doc)
