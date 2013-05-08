@@ -72,6 +72,7 @@ config.AsyncTransfer.summaries_expiration_days = 30
 config.AsyncTransfer.config_database = config_database
 config.AsyncTransfer.jobs_database = jobs_database
 config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
+config.AsyncTransfer.algoName = 'FIFOPriority'
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
 config.DBSPublisher.publication_pool_size = 1
@@ -90,6 +91,7 @@ config.DBSPublisher.serviceKey =  "/path/to/valid/host-key"
 config.DBSPublisher.max_files_per_block = 100
 config.DBSPublisher.workflow_expiration_time = 3
 config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
+config.DBSPublisher.algoName = 'FIFOPriority'
 config.component_('Analytics')
 config.Analytics.user_monitoring_db = user_monitoring_db
 config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
