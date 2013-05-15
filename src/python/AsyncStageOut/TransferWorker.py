@@ -163,7 +163,7 @@ class TransferWorker:
             # Use the operator's proxy when the user proxy in invalid.
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
-            self.userProxy = config.serviceCert
+            self.userProxy = config.opsProxy
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
