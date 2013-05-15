@@ -1,13 +1,15 @@
 """
 Insert dummy data into the AsyncTransfer CouchDB instance
 """
-
+from AsyncStageOut import getHashLfn
 import random
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Configuration import loadConfigurationFile
 import datetime
 
-config = loadConfigurationFile('../../../src/python/DefaultConfig.py')
+#config = loadConfigurationFile('../../../src/python/DefaultConfig.py')
+
+config = loadConfigurationFile('config/asyncstageout/config.py')
 
 server = CouchServer(config.AsyncTransfer.couch_instance)
 
@@ -30,7 +32,7 @@ sites = ['T2_AT_Vienna', 'T2_BE_IIHE', 'T2_BE_UCL', 'T2_BR_SPRACE',
 
 state = [ 'new', 'acquired', 'done', 'failed' ]
 
-size = 2000 #TODO: read from script input
+size = 200 #TODO: read from script input
 i = 1
 
 # lfn_base has store/temp in it twice to make sure that
@@ -39,21 +41,65 @@ lfn_base = '/store/temp/user/%s/my_cool_dataset/store/temp/file-%s-%s.root'
 now = str(datetime.datetime.now())
 
 while i <= size:
+    id = random.randint(1000, 9999)
     user = random.choice(users)
-    file_doc = {'_id': lfn_base % (user,
-                                   random.randint(1000, 9999),
-                                   i),
-                'source': random.choice(sites),
-                'destination': random.choice(sites),
-                'start_time' : now,
-                'end_time' : now,
-                'state' : random.choice(state),
-                'dbSource_update' : now,
-                'workflow': 'CmsRunAnalysis-%s' %(random.randint(1,3)),
-                'retry_count': [],
-                'user': user,
-                'size': random.randint(1, 9999)
-    }
+    _id = getHashLfn(lfn_base % (user, id, i))
+    states = random.choice(state)
+    if states == 'done' or states == 'failed':
+        file_doc = {'_id': '%s' % (_id) ,
+	       	    'lfn': lfn_base % (user,
+                                       id,
+                                       i),
+   		    'dn': '/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=spiga/CN=606831/CN=Daniele Spiga',
+		    'checksums': {'adler32': 'ad:b2378cab'},
+         	    'failure_reason': [],
+	            'source': random.choice(sites),
+                    'role': '',
+		    'type': 'output',
+		    'dbSource_url': 'Panda',
+		    'inputdataset': 'NULL',
+		    'publication_state': 'not_published',
+		    'publication_retry_count': [],
+		    'jobid': '%s' %(random.randint(1,1000)),
+		    'destination': random.choice(sites),
+                    'start_time' : now,
+                    'end_time' : now,
+                    'state' : states,
+                    'dbSource_update' : now,
+                    'workflow': 'CmsRunAnalysis-%s' %(random.randint(11,13)),
+                    'retry_count': [],
+                    'user': user,
+                    'size': random.randint(1, 9999)
+   		   }
+    if states == 'new' or states == 'acquired':
+        file_doc = {'_id': '%s' % (_id) ,
+                    'lfn': lfn_base % (user,
+                                       id,
+                                       i),
+                    'dn': '/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=spiga/CN=606831/CN=Daniele Spiga',
+                    'checksums': {
+                             "adler32": "ad:b2378cab"
+                    },
+                    "failure_reason": [
+                    ],
+                    'source': random.choice(sites),
+                    'role': '',
+                    'type': 'output',
+                    'dbSource_url': 'Panda',
+                    'inputdataset': 'NULL',
+                    'publication_state': 'not_published',
+                    'publication_retry_count': [
+                    ],
+                    'jobid': '%s' %(random.randint(1,1000)),
+                    'destination': random.choice(sites),
+                    'start_time' : now,
+                    'state' : states,
+                    'dbSource_update' : now,
+                    'workflow': 'CmsRunAnalysis-%s' %(random.randint(11,13)),
+                    'retry_count': [],
+                    'user': user,
+                    'size': random.randint(1, 9999)
+                   }
     db.queue(file_doc, True, ['AsyncTransfer/ftscp'])
     i += 1
 
