@@ -136,7 +136,11 @@ class PublisherWorker:
                                   'cert': self.userProxy,
                                   'key': self.userProxy})
         os.environ['X509_USER_PROXY'] = self.userProxy
-        self.phedexApi = PhEDEx(responseType='json')
+
+        try:
+            self.phedexApi = PhEDEx(responseType='json')
+        except Exception, e:
+            self.logger.exception('PhEDEx exception: %s' % e)
         self.max_files_per_block = self.config.max_files_per_block
 
 
@@ -150,6 +154,7 @@ class PublisherWorker:
         active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
         self.logger.debug('actives wfs %s' %active_workflows)
         for wf in active_workflows:
+            seName = ''
             lfn_ready = []
             wf_jobs_endtime = []
             workToDo = False
@@ -176,7 +181,10 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), str(file['key'][3]), str(file['key'][0]), str(file['value'][3]), str(file['value'][4]), str(seName), lfn_ready )
+                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), \
+                                                         str(file['key'][3]), str(file['key'][0]), \
+                                                         str(file['value'][3]), str(file['value'][4]), \
+                                                         str(seName), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
@@ -192,7 +200,8 @@ class PublisherWorker:
                 data = {}
                 data['publication_state'] = 'published'
                 data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + getHashLfn(lfn.replace('store', 'store/temp', 1))
+                updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + \
+                            getHashLfn(lfn.replace('store', 'store/temp', 1))
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
@@ -370,6 +379,7 @@ class PublisherWorker:
             to match the signature we need
             """
 
+
             def getRuns(self):
                 """
                 _getRuns_
@@ -474,7 +484,9 @@ class PublisherWorker:
             if len(dbsFiles) < self.max_files_per_block:
                 try:
                     block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                    status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), files=dbsFiles[count:count+blockSize], block=block, maxFiles=blockSize)
+                    status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                                         files=dbsFiles[count:count+blockSize], \
+                                         block=block, maxFiles=blockSize)
                     count += blockSize
                     blockCount += 1
                     status = closeBlock(apiRef=destApi, block=block)
@@ -493,7 +505,9 @@ class PublisherWorker:
                             count += blockSize
                             continue
                         block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                        status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), files=dbsFiles[count:count+blockSize], block=block, maxFiles=blockSize)
+                        status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                                             files=dbsFiles[count:count+blockSize], \
+                                             block=block, maxFiles=blockSize)
                         count += blockSize
                         blockCount += 1
                         status = closeBlock(apiRef=destApi, block=block)
@@ -507,5 +521,6 @@ class PublisherWorker:
             results[datasetPath]['files'] = len(dbsFiles)
             results[datasetPath]['blocks'] = blockCount
         published = filter(lambda x: x not in failed + publish_next_iteration, published)
-        self.logger.info("end of publication failed %s published %s publish_next_iteration %s results %s" %(failed, published, publish_next_iteration, results))
+        self.logger.info("end of publication failed %s published %s publish_next_iteration %s results %s" %\
+                         (failed, published, publish_next_iteration, results))
         return failed, published, results

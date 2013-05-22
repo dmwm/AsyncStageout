@@ -15,25 +15,20 @@ class Source:
         """
         Initialise class members
         """
-
         self.config = config
         self.logger = logger
-
         self.asyncServer = CouchServer(self.config.couch_instance)
         self.db = self.asyncServer.connectDatabase(self.config.files_database)
-
         try:
-
             query = {'limit' : 1, 'descending': True}
             last_pollTime = self.db.loadView('AsyncTransfer', 'lastPollTime', query)['rows'][0]['key']
-
             self.since = last_pollTime + 1
-
         except:
-
             self.since = 0
-
-        self.phedexApi = PhEDEx( secure = True, dict = {} )
+        try:
+            self.phedexApi = PhEDEx( secure = True, dict = {} )
+        except Exception, e:
+            self.logger.exception('PhEDEx object exception: %s' % e)
 
     def __call__(self):
         """
