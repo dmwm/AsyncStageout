@@ -583,9 +583,6 @@ class TransferWorker:
 
         for line in ftscp_file.readlines():
             try:
-                if line.strip() == 'Too many errors from status update, cancelling transfer':
-                    self.logger.debug("Problem to contact the FTS server!")
-                    break
                 if line.split(':')[0].strip() == 'Source':
                     lfn = self.get_lfn_from_pfn( siteSource, line.split('Source:')[1:][0].strip() )
                     # Now we have the lfn, skip to the next line
