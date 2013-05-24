@@ -276,6 +276,24 @@ while true; do
       errors=$(expr $errors + 1)
       if [ $errors -gt 10 ]; then
       	echo "Too many errors from status update, I give up!"
+        # Fail in the ASO canceled files.
+        count=true
+        for transfer in `cat $copyjobfile`
+        do
+          if $count
+          then
+            echo "Source:      $transfer"
+            count=false
+          else
+            echo "Destination: $transfer"
+            echo "State:       Failed"
+            echo "Retries:     0"
+            echo "Reason:      Unknown Transfer Error: Please ask support to check the logs! Hints: middleware problem, FTS server $server is unreachable."
+            echo "Duration:    0"
+            echo ""
+            count=true
+          fi
+        done
         exit 301
       elif [ $errors -gt 5 ]; then
 	    	echo "Too many errors from status update, cancelling transfer"
