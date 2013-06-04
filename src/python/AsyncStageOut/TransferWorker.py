@@ -588,7 +588,7 @@ class TransferWorker:
                     # Now we have the lfn, skip to the next line
                     continue
                 if line.split(':')[0].strip() == 'State' and lfn:
-                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done':
+                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done' or line.split(':')[1].strip() == 'Finishing':
                         transferred_files.append(lfn)
                     else:
                         failed_files.append(lfn)
