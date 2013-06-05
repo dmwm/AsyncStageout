@@ -227,7 +227,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         updateUri += "?db_update=%d" % ( end_time + 0.000001)
 
         try:
-            self.monitoring_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+            self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             query = { 'startkey': since, 'endkey': end_time + 1 }
             all_files = self.db.loadView('AsyncTransfer', 'LastUpdatePerFile', query)['rows']
         except Exception, e:
@@ -360,7 +360,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                         for file in files_to_publish:
                             if file['value'].find('temp') > 1:
                                 status[file['value']] = 'failed'
-                                lfn = status[file['value']]
+                                lfn = file['value']
                             else:
                                 status[file['value'].replace('store', 'store/temp', 1)] = 'failed'
                                 lfn = file['value'].replace('store', 'store/temp', 1)
