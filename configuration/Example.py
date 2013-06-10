@@ -29,7 +29,7 @@ userEmail = "Your mail address"
 agentName = "Agent name"
 teamName = "Your team name"
 credentialDir = "/tmp/credentials/"
-file_cache_endpoint = "https://cmsweb-testbed.cern.ch/crabcache/"
+cache_area = "url_to_CS_cache"
 ui_script = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 
 config = Configuration()
@@ -78,7 +78,7 @@ config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.AsyncTransfer.algoName = 'FIFOPriority'
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
-config.DBSPublisher.publication_pool_size = 1
+config.DBSPublisher.publication_pool_size = 2
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
@@ -86,7 +86,7 @@ config.DBSPublisher.log_level = logging.INFO
 config.DBSPublisher.files_database = files_database
 config.DBSPublisher.couch_instance = couchUrl
 config.DBSPublisher.publication_max_retry = 3
-config.DBSPublisher.userFileCacheEndpoint = file_cache_endpoint
+config.DBSPublisher.cache_area = cache_area
 config.DBSPublisher.credentialDir = credentialDir
 config.DBSPublisher.serverDN = hostDN
 config.DBSPublisher.serviceCert = serviceCert
