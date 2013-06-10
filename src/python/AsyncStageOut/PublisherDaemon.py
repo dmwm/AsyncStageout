@@ -23,7 +23,11 @@ def publish(user, config):
     Each worker executes this function.
     """
     worker = PublisherWorker(user, config)
-    return worker()
+    try:
+        worker ()
+    except:
+        pass
+    return user
 
 def log_result(result):
     """
@@ -46,7 +50,6 @@ class PublisherDaemon(BaseWorkerThread):
         #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
         #self.logger = logging.getLogger()
         # self.logger is set up by the BaseWorkerThread, we just set it's level
-
         self.config = config.DBSPublisher
         try:
             self.logger.setLevel(self.config.log_level)
@@ -54,9 +57,7 @@ class PublisherDaemon(BaseWorkerThread):
             import logging
             self.logger = logging.getLogger()
             self.logger.setLevel(self.config.log_level)
-
         self.logger.debug('Configuration loaded')
-
         server = CouchServer(self.config.couch_instance)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
@@ -64,7 +65,6 @@ class PublisherDaemon(BaseWorkerThread):
         self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
         self.pool = Pool(processes=self.config.publication_pool_size)
 
-    # Over riding setup() is optional, and not needed here
     def algorithm(self, parameters = None):
         """
 
@@ -81,13 +81,13 @@ class PublisherDaemon(BaseWorkerThread):
                 self.logger.debug('processing %s' %u)
                 current_running.append(u)
                 self.logger.debug('processing %s' %current_running)
-                self.pool.apply_async(ftscp,(u, self.config), callback = log_result)
+                self.pool.apply_async(publish,(u, self.config), callback = log_result)
 
     def active_users(self, db):
         """
         Query a view for users with files to transfer. Get this from the
         following view:
-            ftscp?group=true&group_level=1
+            publish?group=true&group_level=1
         """
         query = {'group': True, 'group_level': 3, 'stale': 'ok'}
         try:
@@ -114,11 +114,9 @@ class PublisherDaemon(BaseWorkerThread):
             active_users = users()
             self.logger.debug("users %s" % active_users)
             # TODO: Fallback to random algo
-            #active_users = random.sample(users['rows'], self.config.publication_pool_size)
-
+            #active_users = random.sample(users['rows'], self.config.pool_size)
         self.logger.info('%s active users' % len(active_users))
         self.logger.debug('Active users are: %s' % active_users)
-
         return active_users
 
     def terminate(self, parameters = None):
