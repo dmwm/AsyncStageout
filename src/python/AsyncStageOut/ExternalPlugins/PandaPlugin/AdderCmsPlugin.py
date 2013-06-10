@@ -30,12 +30,12 @@ class AdderCmsPlugin(AdderPluginBase):
 	"""
         AdderPluginBase.__init__(self, job, params)
         # Load and parse auth file
-        aso_auth_file = '/data/atlpan/srv/etc/panda/auth_aso_plugin.txt'
+        aso_auth_file = '/data/atlpan/srv/etc/panda/adder_secret.config'
         f = open(aso_auth_file)
         authParams = json.loads(f.read())
         self.proxy = authParams['PROXY']
         self.aso_db_url = authParams['ASO_DB_URL']
-        self.aso_cache = authParams['ASO_CACHE']
+        self.aso_cache = authParams['FWJR_CACHE']
         server = CouchServer(self.aso_db_url)
         self.db = server.connectDatabase("asynctransfer")
         self.mon_db = server.connectDatabase("user_monitoring_asynctransfer")
