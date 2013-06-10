@@ -19,6 +19,8 @@ def getHashLfn(lfn):
     """
     return hashlib.sha224(lfn).hexdigest()
 
+config = None
+
 class AdderCmsPlugin(AdderPluginBase):
     """
     _AdderCmsPlugin_
@@ -31,6 +33,8 @@ class AdderCmsPlugin(AdderPluginBase):
         AdderPluginBase.__init__(self, job, params)
         # Load and parse auth file
         aso_auth_file = '/data/atlpan/srv/etc/panda/adder_secret.config'
+        if config:
+           aso_auth_file = getattr(config.Adder, "authfile", "adder_secret.config")
         f = open(aso_auth_file)
         authParams = json.loads(f.read())
         self.proxy = authParams['PROXY']
@@ -39,15 +43,24 @@ class AdderCmsPlugin(AdderPluginBase):
         server = CouchServer(self.aso_db_url)
         self.db = server.connectDatabase("asynctransfer")
         self.mon_db = server.connectDatabase("user_monitoring_asynctransfer")
+        self.initlog()
+        self.logger.info("ASO plugin starts")
+
+    def initlog(self):
+        """
+        Setup the logger according to the config
+        """
+        adder_plugin_log = '/data/atlpan/srv/var/log/panda/ASOPlugin.log'
+        if config:
+            adder_plugin_log = getattr(config.Adder, "logfile", "./ASOPlugin.log")
         # Define the logger attribute
         self.logger = logging.getLogger('ASOPlugin')
-        hdlr = logging.FileHandler('/data/atlpan/srv/var/log/panda/ASOPlugin.log')
+        hdlr = logging.FileHandler(adder_plugin_log)
         formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
         hdlr.setFormatter(formatter)
         self.logger.addHandler(hdlr)
         # TODO: Get the log verbosity from a config file
         self.logger.setLevel(logging.DEBUG)
-        self.logger.info("ASO plugin starts")
 
     def execute(self):
         """
@@ -90,17 +103,17 @@ class AdderCmsPlugin(AdderPluginBase):
                         user = tmpFile.lfn.split('/')[4]
                     else:
                         user = tmpFile.lfn.split('/')[3]
-                        destination = self.job.computingSite.split("ANALY_")[1]
+                        destination = self.job.computingSite.split("ANALY_")[-1]
                         state = "done"
                         end_time = now
-                workflow = self.job.jobParameters.split(" ")[ len(self.job.jobParameters.split(" ")) - 1 ]
+                workflow = self.job.jobParameters.split(" ")[-1]
                 if not workflow:
-                    workflow = self.job.jobParameters.split(" ")[ len(self.job.jobParameters.split(" ")) - 2 ]
+                    workflow = self.job.jobParameters.split(" ")[-2]
                 # Build correctly the user dn
                 dn = self.job.prodUserID
                 if dn:
                     try:
-                        if dn.split("/")[len(dn.split("/")) - 1].split("=")[1] == 'proxy': dn = dn.replace("/CN=proxy","")
+                        if dn.split("/")[-1].split("=")[1] == 'proxy': dn = dn.replace("/CN=proxy","")
                     except:
                         pass
                 # Get the dbs_url params
@@ -132,7 +145,7 @@ class AdderCmsPlugin(AdderPluginBase):
                         "checksums": {'adler32': tmpFile.checksum},
                         "size": tmpFile.fsize,
                         "user": user,
-                        "source": self.job.computingSite.split("ANALY_")[1],
+                        "source": self.job.computingSite.split("ANALY_")[-1],
                         "destination": destination,
                         "last_update": last_update,
                         "state": state,
@@ -211,7 +224,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                                  str(self.job.destinationDBlock) + "&outlfn=" + \
                                                  str(doc['lfn']) + "&checksumadler32=" + \
                                                  str(doc['checksums']['adler32']).split(":")[1] + "&acquisitionera=null" + \
-                                                 "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[1])
+                                                 "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[-1])
                                 else:
                                     # TODO: Fix checksummd5 and checksumcksum retrieval
                                     str_report = "pandajobid=" + str(doc['jobid']) + "&outsize=" + str(doc['size']) + \
@@ -222,7 +235,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                                  str(self.job.destinationDBlock) + "&outlfn=" + str(doc['lfn']) + \
                                                  "&checksumadler32=" + str(doc['checksums']['adler32']).split(":")[1] + \
                                                  "&acquisitionera=null" + "&outtmplocation=" + \
-                                                 str(self.job.computingSite.split("ANALY_")[1])
+                                                 str(self.job.computingSite.split("ANALY_")[-1])
                                 # Uploading here
                                 command = "curl7280 -X PUT " + self.aso_cache + \
                                           " --key " + self.proxy + " --cert " + \
@@ -246,7 +259,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                      "&outdatasetname=" + str(self.job.destinationDBlock) + \
                                      "&outlfn=" + str(doc['lfn']) + "&checksumadler32=" + \
                                      str(doc['checksums']['adler32']).split(":")[1] + "&acquisitionera=null" + \
-                                     "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[1])
+                                     "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[-1])
                         # Uploading here
                         command = "curl7280 -X PUT " + self.aso_cache + " --key " + \
                                   self.proxy + " --cert " + self.proxy + " -k -d " + \
