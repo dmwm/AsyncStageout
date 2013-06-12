@@ -300,6 +300,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         self.logger.debug("Processing record...")
         cache_list = []
         for job in all_jobs:
+            files_to_publish = []
             message = {}
             status = {}
             cache_list.append(job['value'])
@@ -328,23 +329,21 @@ class AnalyticsDaemon(BaseWorkerThread):
                         return
                     self.logger.info("the jobid %s has to publish %s ended files" %(job, len(files_to_publish)))
                     message['PandaID'] = job['value']
-
-                    if len(files_to_publish) == number_ended_files:
-                        self.logger.info("the job %s has %s done files %s" %(job, number_ended_files, files_to_publish))
-                        for file in files_to_publish:
-                            status[file['value'].replace('store', 'store/temp', 1)] = 'done'
+                    self.logger.info("the job %s has %s done files %s" %(job, number_ended_files, files_to_publish))
+                    for file in files_to_publish:
+                        status[file['value'].replace('store', 'store/temp', 1)] = 'done'
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'done'
-                        message['transferStatus'] = status
-                    else:
+                    message['transferStatus'] = status
+                    if len(files_to_publish) != number_ended_files:
                         try:
                             files_to_publish = self.monitoring_db.loadView('UserMonitoring', 'LFNFailedByJobId', query)['rows']
                         except Exception, e:
                             self.logger.exception('A problem occured when contacting UserMonitoring - LFNFailedByJobId: %s' % e)
                             return
                         self.logger.info("the job %s has %s failed files %s" %(job, len(files_to_publish), files_to_publish))
-                        transferError = "Output transfer error"
+                        transferError = ""
                         for file in files_to_publish:
                             if file['value'].find('temp') > 1:
                                 status[file['value']] = 'failed'
@@ -355,7 +354,16 @@ class AnalyticsDaemon(BaseWorkerThread):
                                     document = self.monitoring_db.document( docId )
                                     #if (document['file_type'] == "output" and document.has_key('failure_reason')):
                                     if document.has_key('failure_reason'):
-                                        transferError = document['failure_reason']
+                                        if transferError:
+                                            transferError = transferError + "," + document['failure_reason']
+                                        else:
+                                            transferError = document['failure_reason']
+                                    if document.has_key('publication_state'):
+                                        if document['publication_state'] == 'publication_failed':
+                                            if transferError:
+                                                transferError = transferError + "," + 'Publication Failure'
+                                            else:
+                                                transferError = 'Publication Failure'
                                 except Exception, ex:
                                     msg =  "Error loading document from couch"
                                     msg += str(ex)
@@ -367,6 +375,8 @@ class AnalyticsDaemon(BaseWorkerThread):
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'failed'
+                        if not transferError:
+                            transferError = "Output transfer error"
                         message['transferStatus'] = status
                         message['transferError'] = transferError
                         message['transferErrorCode'] = 100

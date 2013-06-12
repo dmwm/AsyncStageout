@@ -142,18 +142,28 @@ class PublisherWorker:
                 if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
                     continue
                 else:#check the ASO queue
-                    workflow_expired = user_wf['key'][4]
-                    query = {'reduce':True, 'group': True, 'key':workflow_expired}
-                    try:
-                        active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
-                        if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
-                            self.logger.debug('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
+                    if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
+                        workflow_expired = user_wf['key'][4]
+                        query = {'reduce':True, 'group': True, 'key':workflow_expired}
+                        try:
+                            active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
+                            if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
+                                self.logger.debug('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
+                                continue
+                        except Exception, e:
+                            ('A problem occured when contacting couchDB for the workflow status: %s' % e)
                             continue
-                    except Exception, e:
-                        ('A problem occured when contacting couchDB for the workflow status: %s' % e)
+                    else:
+                        self.logger.debug('Unexpected problem! Force failing of the publication.')
+                        self.mark_failed( lfn_ready, True)
                         continue
             else:
-                self.not_expired_wf = True
+                if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
+                    self.not_expired_wf = True
+                else:
+                    self.logger.debug('Unexpected problem! Force the publication failure.')
+                    self.mark_failed( lfn_ready, True)
+                    continue
             if lfn_ready:
                 try:
                     seName = self.phedexApi.getNodeSE( str(file['value'][0]) )
@@ -201,7 +211,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def mark_failed( self, files=[] ):
+    def mark_failed( self, files=[], forceFailure=False ):
         """
         Something failed for these files so increment the retry count
         """
@@ -219,7 +229,7 @@ class PublisherWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
             # Prepare data to update the document in couch
-            if len(document['publication_retry_count']) + 1 > self.max_retry:
+            if len(document['publication_retry_count']) + 1 > self.max_retry or forceFailure:
                 data['publication_state'] = 'publication_failed'
             else:
                 data['publication_state'] = 'publishing'
