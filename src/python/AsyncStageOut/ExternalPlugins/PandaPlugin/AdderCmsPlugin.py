@@ -6,8 +6,22 @@ The CMS Component in Panda does the following:
         c. inject files into ASO.
 This should be called once the analysis job is done/failed.
 """
-from AdderPluginBase import AdderPluginBase
-from CouchAPI.CMSCouch import CouchServer
+try:
+    from AdderPluginBase import AdderPluginBase
+except:
+    # The below fake class is meant for allowing reuse in non-PanDA
+    # environments
+    class AdderPluginBaseFake:
+        def __init__(self, a, b):
+            pass
+
+    AdderPluginBase = AdderPluginBaseFake
+try:
+    # This seems to be what is present on the PanDA server
+    from CouchAPI.CMSCouch import CouchServer
+except ImportError:
+    # This seems to be the proper module from WMCore
+    from WMCore.Database.CMSCouch import CouchServer
 import time, datetime, traceback, logging
 import hashlib
 import simplejson as json
@@ -223,7 +237,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                                  str(destination) + "&taskname=" + str(workflow) + "&outdatasetname=" + \
                                                  str(self.job.destinationDBlock) + "&outlfn=" + \
                                                  str(doc['lfn']) + "&checksumadler32=" + \
-                                                 str(doc['checksums']['adler32']).split(":")[1] + "&acquisitionera=null" + \
+                                                 str(doc['checksums']['adler32']).split(":")[-1] + "&acquisitionera=null" + \
                                                  "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[-1])
                                 else:
                                     # TODO: Fix checksummd5 and checksumcksum retrieval
@@ -237,16 +251,21 @@ class AdderCmsPlugin(AdderPluginBase):
                                                  "&acquisitionera=null" + "&outtmplocation=" + \
                                                  str(self.job.computingSite.split("ANALY_")[-1])
                                 # Uploading here
-                                command = "curl7280 -X PUT " + self.aso_cache + \
-                                          " --key " + self.proxy + " --cert " + \
-                                          self.proxy + " -k -d " + "\"" + str_report + "\"" + " -v"
-                                proc = subprocess.Popen(command, shell=True, cwd=os.environ['PWD'],
-                                                        stdout=subprocess.PIPE,
-                                                        stderr=subprocess.PIPE,
-                                                        stdin=subprocess.PIPE,)
-                                stdout, stderr = proc.communicate()
-                                rc = proc.returncode
-                                self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
+                                if config and getattr(config.Adder, "skipcache", False):
+                                    # Allow us to skip CS integration for the sake of testing the ASO server only.
+                                    # This option is not meant to be used in production.
+                                    rc = 0
+                                else:
+                                    command = "curl7280 -X PUT " + self.aso_cache + \
+                                              " --key " + self.proxy + " --cert " + \
+                                              self.proxy + " -k -d " + "\"" + str_report + "\"" + " -v"
+                                    proc = subprocess.Popen(command, shell=True, cwd=os.environ['PWD'],
+                                                            stdout=subprocess.PIPE,
+                                                            stderr=subprocess.PIPE,
+                                                            stdin=subprocess.PIPE,)
+                                    stdout, stderr = proc.communicate()
+                                    rc = proc.returncode
+                                    self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
                     else:
                         self.logger.debug("LOG file...preparing the report")
                         out_type = 'LOG'
