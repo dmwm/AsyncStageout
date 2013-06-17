@@ -332,6 +332,8 @@ class AnalyticsDaemon(BaseWorkerThread):
                     self.logger.info("the job %s has %s done files %s" %(job, number_ended_files, files_to_publish))
                     for file in files_to_publish:
                         status[file['value'].replace('store', 'store/temp', 1)] = 'done'
+                    if job_doc.has_key('log_file'):
+                         status[job_doc['log_file']] = 'done'
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'done'
