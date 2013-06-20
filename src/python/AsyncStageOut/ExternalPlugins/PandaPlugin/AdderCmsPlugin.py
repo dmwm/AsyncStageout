@@ -48,7 +48,7 @@ class AdderCmsPlugin(AdderPluginBase):
         # Load and parse auth file
         aso_auth_file = '/data/atlpan/srv/etc/panda/adder_secret.config'
         if config:
-           aso_auth_file = getattr(config.Adder, "authfile", "adder_secret.config")
+            aso_auth_file = getattr(config.Adder, "authfile", "adder_secret.config")
         f = open(aso_auth_file)
         authParams = json.loads(f.read())
         self.proxy = authParams['PROXY']
@@ -99,14 +99,34 @@ class AdderCmsPlugin(AdderPluginBase):
             workflow = ''
             state = 'new'
             end_time = ""
+            save_logs = False
+            job_doc = {}
             # *** file info
-            job_doc = { "_id": str(self.job.PandaID),
-                        "files": len(self.job.Files)
-                      }
             for tmpFile in self.job.Files:
                 out_type = ''
                 destination = tmpFile.destinationSE
                 lfn = tmpFile.lfn
+                # Get the saveLogs option
+                try:
+                    saveLogs = self.job.jobParameters.split("saveLogs")[1].split("=")[1].split(" ")[0]
+                    if tmpFile.type == 'log':
+                        if saveLogs == 'True':
+                            job_doc = { "_id": str(self.job.PandaID),
+                                        "files": len(self.job.Files)
+                                      }
+                            save_logs = True
+                        else:
+                            job_doc = { "_id": str(self.job.PandaID),
+                                        "files": len(self.job.Files) - 1,
+                                        "log_file": lfn
+                                      }
+                except:
+                    if tmpFile.type == 'log':
+                        self.logger.debug("Cannot retrieve saveLogs option. Set to False!")
+                        job_doc = { "_id": str(self.job.PandaID),
+                                    "files": len(self.job.Files) - 1,
+                                    "log_file": lfn
+                                  }
                 if len(lfn.split('/')) < 2:
                     self.logger.debug("Fallback to destinationDBlock to get username!")
                     user_dataset = str(self.job.destinationDBlock)
@@ -293,6 +313,8 @@ class AdderCmsPlugin(AdderPluginBase):
                         self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
                 self.logger.debug("Trying to commit %s" % doc)
                 try:
+                    if doc['type'] == 'log' and not save_logs:
+                        continue
                     self.db.queue(doc, True)
                     self.db.commit()
                     # append LFN to the list of transferring files,
@@ -306,17 +328,18 @@ class AdderCmsPlugin(AdderPluginBase):
                     self.result.statusCode = 1
                     self.logger.info("ASOPlugin ends with error.")
                     return self.result
-            try:
-                self.mon_db.queue(job_doc, True)
-                self.mon_db.commit()
-            except Exception, ex:
-                msg =  "Error queuing doc in monitoring db"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-                self.result.statusCode = 1
-                self.logger.info("ASOPlugin ends with error.")
-                return self.result
+            if job_doc:
+                try:
+                    self.mon_db.queue(job_doc, True)
+                    self.mon_db.commit()
+                except Exception, ex:
+                    msg =  "Error queuing doc in monitoring db"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    self.result.statusCode = 1
+                    self.logger.info("ASOPlugin ends with error.")
+                    return self.result
 
             # TODO: Fix bulk commit of documents
 #            if doc:
