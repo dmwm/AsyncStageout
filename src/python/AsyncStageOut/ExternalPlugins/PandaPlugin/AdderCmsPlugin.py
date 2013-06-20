@@ -219,7 +219,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                 str_report = ""
                                 if out.has_key('ouput_module_class'):
                                     # Retrieve info. only for the actual EDM file
-                                    if out['pfn'].split('.')[0] != lfn.split('/')[(len(lfn.split('/'))-1)].split('_')[0]:
+                                    if out['pfn'].split('.root')[0] != lfn.split('/')[(len(lfn.split('/'))-1)].split('_')[0]:
                                         continue
                                     if out['ouput_module_class'] == 'PoolOutputModule':
                                         out_type = 'EDM'
