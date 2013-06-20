@@ -154,9 +154,7 @@ class PublisherWorker:
                             ('A problem occured when contacting couchDB for the workflow status: %s' % e)
                             continue
                     else:
-                        self.logger.debug('Unexpected problem! Force failing of the publication.')
-                        self.mark_failed( lfn_ready, True)
-                        continue
+                        self.logger.debug('Publish number of files minor of max_files_per_block.')
             else:
                 if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
                     self.not_expired_wf = True
