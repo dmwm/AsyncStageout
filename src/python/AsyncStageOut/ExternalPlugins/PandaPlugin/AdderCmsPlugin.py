@@ -235,9 +235,10 @@ class AdderCmsPlugin(AdderPluginBase):
                                                 else:
                                                     lumis_report = lumis_report + "&outfilelumis=" + str(lumi)
                                         str_report = lumis_report + runs_report
-                                        temp_out['in_parentlfns'] = out['input']
-                                        for parent_lfn in temp_out['in_parentlfns']:
-                                            str_report = str_report + "&inparentlfns=" + str(parent_lfn)
+                                        if out.has_key('input'):
+                                            temp_out['in_parentlfns'] = out['input']
+                                            for parent_lfn in temp_out['in_parentlfns']:
+                                                str_report = str_report + "&inparentlfns=" + str(parent_lfn)
                                         temp_out['events'] = out['events']
                                         str_report = str_report + "&globalTag=None&events=" + str(temp_out['events'])
                                 if out.has_key('Source'):

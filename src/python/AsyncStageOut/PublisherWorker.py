@@ -124,6 +124,7 @@ class PublisherWorker:
         self.logger.debug('actives user wfs %s' %active_user_workflows)
         for user_wf in active_user_workflows:
             self.not_expired_wf = False
+            self.forceFailure = False
             lfn_ready = []
             wf_jobs_endtime = []
             workToDo = False
@@ -137,7 +138,7 @@ class PublisherWorker:
                 lfn_ready.append(file['value'][1])
             self.logger.debug('LFNs %s ready %s %s' %(len(lfn_ready), lfn_ready, user_wf['value']))
             # If the number of files < max_files_per_block then check the oldness of the workflow
-            if user_wf['value'] < self.max_files_per_block:
+            if user_wf['value'] <= self.max_files_per_block:
                 wf_jobs_endtime.sort()
                 if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
                     continue
@@ -155,12 +156,13 @@ class PublisherWorker:
                             continue
                     else:
                         self.logger.debug('Publish number of files minor of max_files_per_block.')
+                        self.forceFailure = True
             else:
-                if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
+                if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
                     self.not_expired_wf = True
                 else:
-                    self.logger.debug('Unexpected problem! Force the publication failure.')
-                    self.mark_failed( lfn_ready, True)
+                    self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
+                    self.forceFailure = True
                     continue
             if lfn_ready:
                 try:
@@ -263,7 +265,12 @@ class PublisherWorker:
         except (tarfile.ReadError, RuntimeError):
             self.logger.error("Unable to read publication description files. ")
             return lfn_ready, []
-        if not toPublish: return [], []
+        if not toPublish:
+            if self.forceFailure:
+                self.logger.error("FWJR seems not in cache! Forcing the failure")
+                self.mark_failed(lfn_ready, True)
+            else:
+                return [], []
         self.logger.info("Starting data publication for: " + str(workflow))
         failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
@@ -440,7 +447,11 @@ class PublisherWorker:
         sourceApi = DbsApi({'url' : sourceURL, 'version' : 'DBS_2_0_9', 'mode' : 'POST'})
         destApi   = DbsApi({'url' : destURL,   'version' : 'DBS_2_0_9', 'mode' : 'POST'})
         try:
-            migrateAPI.migrateDataset(inputDataset)
+            if inputDataset and inputDataset != 'NULL':
+                migrateAPI.migrateDataset(inputDataset)
+            else:
+                inputDataset = None
+                self.logger.debug('Processing Monte Carlo production workflow! No input dataset')
         except Exception, ex:
             msg =  "Error migrating dataset"
             msg += str(ex)
@@ -481,8 +492,13 @@ class PublisherWorker:
                 for file in files:
                     published.append(file['lfn'])
                 continue
-            # This must exist because we just migrated it
-            primary = destApi.listPrimaryDatasets(primName)[0]
+            # This must exist for DATA because we just migrated it
+            primary = {}
+            if inputDataset:
+                self.logger.debug("Listing migrated data from %s" %primName)
+                primary = destApi.listPrimaryDatasets(primName)[0]
+            else:
+                primary = createPrimaryDataset(apiRef=destApi, primaryName=primName)
             algo = createAlgorithm(apiRef=destApi, appName=appName, appVer=appVer, appFam=appFam)
             processed = createProcessedDataset(algorithm=algo, apiRef=destApi, primary=primary, processedName=procName,
                                                dataTier=tier, group='Analysis', parent=inputDataset)
