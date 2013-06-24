@@ -284,8 +284,15 @@ class AdderCmsPlugin(AdderPluginBase):
                                                             stdout=subprocess.PIPE,
                                                             stderr=subprocess.PIPE,
                                                             stdin=subprocess.PIPE,)
+                                    for line in iter(proc.stdout.readline,''):
+                                        if "Service Unavailable" in line:
+                                            self.logger.debug("Cache Service %s is temporary unavailable" %self.aso_cache)
+                                            self.result.statusCode = 1
                                     stdout, stderr = proc.communicate()
                                     rc = proc.returncode
+                                    if rc:
+                                        self.logger.debug("Cache Service %s cannot be contacted trying next time" %self.aso_cache)
+                                        self.result.statusCode = 1
                                     self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
                     else:
                         self.logger.debug("LOG file...preparing the report")
@@ -308,9 +315,15 @@ class AdderCmsPlugin(AdderPluginBase):
                                                 stdout=subprocess.PIPE,
                                                 stderr=subprocess.PIPE,
                                                 stdin=subprocess.PIPE,)
-
+                        for line in iter(proc.stdout.readline,''):
+                            if "Service Unavailable" in line:
+                                self.logger.debug("Cache Service %s is temporary unavailable" %self.aso_cache)
+                                self.result.statusCode = 1
                         stdout, stderr = proc.communicate()
                         rc = proc.returncode
+                        if rc:
+                            self.logger.debug("Cache Service %s cannot be contacted trying next time" %self.aso_cache)
+                            self.result.statusCode = 1
                         self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
                 self.logger.debug("Trying to commit %s" % doc)
                 try:
