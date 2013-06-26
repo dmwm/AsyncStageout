@@ -126,6 +126,7 @@ class PublisherWorker:
             self.not_expired_wf = False
             self.forceFailure = False
             lfn_ready = []
+            active_files = []
             wf_jobs_endtime = []
             workToDo = False
             query = {'reduce':False, 'key': user_wf['key']}

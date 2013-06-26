@@ -127,7 +127,9 @@ class TransferDaemon(BaseWorkerThread):
         following view:
             ftscp?group=true&group_level=1
         """
-        query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        # TODO: Test stale=ok usage
+        #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        query = {'group': True, 'group_level': 3}
         try:
             users = db.loadView('AsyncTransfer', 'ftscp_all', query)
         except Exception, e:
@@ -145,7 +147,8 @@ class TransferDaemon(BaseWorkerThread):
             active_users = map(keys_map, active_users)
         else:
             #TODO: have a plugin algorithm here...
-            users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.pool_size], getFromCache = False, listFlag = True)
+            users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], \
+                                            self.config.pool_size], getFromCache = False, listFlag = True)
             #active_users = random.sample(users['rows'], self.config.pool_size)
             active_users = users()
             self.logger.debug("users %s" % active_users)
