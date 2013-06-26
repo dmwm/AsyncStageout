@@ -113,7 +113,6 @@ class PublisherDaemon(BaseWorkerThread):
             active_users = sorted_users()[:self.config.publication_pool_size]
         self.logger.info('%s active users' % len(active_users))
         self.logger.debug('Active users are: %s' % active_users)
-        return active_users
 
         return active_users
 
