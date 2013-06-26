@@ -163,7 +163,6 @@ class PublisherWorker:
                 else:
                     self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
                     self.forceFailure = True
-                    continue
             if lfn_ready:
                 try:
                     seName = self.phedexApi.getNodeSE( str(file['value'][0]) )
