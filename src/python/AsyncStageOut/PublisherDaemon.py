@@ -89,7 +89,9 @@ class PublisherDaemon(BaseWorkerThread):
         following view:
             publish?group=true&group_level=1
         """
-        query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        #TODO: Remove stale=ok for now until tested
+        #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        query = {'group': True, 'group_level': 3}
         try:
             users = db.loadView('DBSPublisher', 'publish', query)
         except Exception, e:
@@ -106,17 +108,13 @@ class PublisherDaemon(BaseWorkerThread):
                 return inputDict['key']
             active_users = map(keys_map, active_users)
         else:
-            #TODO: have a plugin algorithm here...
-            users = self.factory.loadObject(self.config.algoName,
-                                            args = [self.config, self.logger, users['rows'], self.config.publication_pool_size],
-                                            getFromCache = False,
-                                            listFlag = True)
-            active_users = users()
-            self.logger.debug("users %s" % active_users)
-            # TODO: Fallback to random algo
-            #active_users = random.sample(users['rows'], self.config.pool_size)
+            sorted_users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.publication_pool_size], getFromCache = False, listFlag = True)
+            #active_users = random.sample(users['rows'], self.config.publication_pool_size)
+            active_users = sorted_users()[:self.config.publication_pool_size]
         self.logger.info('%s active users' % len(active_users))
         self.logger.debug('Active users are: %s' % active_users)
+        return active_users
+
         return active_users
 
     def terminate(self, parameters = None):

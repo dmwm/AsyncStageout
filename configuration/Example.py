@@ -58,7 +58,7 @@ config.AsyncTransfer.db_source = database_src
 config.AsyncTransfer.pluginName = "CentralMonitoring"
 config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
 config.AsyncTransfer.max_files_per_transfer = 1000
-config.AsyncTransfer.pool_size = 3
+config.AsyncTransfer.pool_size = 4
 config.AsyncTransfer.max_retry = 3
 config.AsyncTransfer.credentialDir = credentialDir
 config.AsyncTransfer.UISetupScript = ui_script
@@ -78,7 +78,7 @@ config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.AsyncTransfer.algoName = 'FIFOPriority'
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
-config.DBSPublisher.publication_pool_size = 2
+config.DBSPublisher.publication_pool_size = 4
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
@@ -100,7 +100,7 @@ config.component_('Analytics')
 config.Analytics.user_monitoring_db = user_monitoring_db
 config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
 config.Analytics.analyticsPollingInterval = 900
-config.Analytics.log_level = 10
+config.Analytics.log_level = logging.INFO
 config.Analytics.componentDir = config.General.workDir
 config.Analytics.namespace = 'AsyncStageOut.Analytics'
 config.Analytics.files_database = files_database
@@ -109,7 +109,7 @@ config.Analytics.couch_instance = couchUrl
 config.Analytics.summaries_expiration_days = 6
 config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
 #config.component_('FilesCleaner')
-#config.FilesCleaner.log_level = 10
+#config.FilesCleaner.log_level = logging.INFO
 #config.FilesCleaner.componentDir = config.General.workDir
 #config.FilesCleaner.namespace = 'AsyncStageOut.FilesCleaner'
 #config.FilesCleaner.credentialDir = credentialDir
@@ -122,7 +122,7 @@ config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
 #config.FilesCleaner.couch_user_monitoring_instance = userMonitoringCouchUrl
 #config.FilesCleaner.opsProxy = opsProxy
 config.component_('Statistics')
-config.Statistics.log_level = 10
+config.Statistics.log_level = logging.INFO
 config.Statistics.componentDir = config.General.workDir
 config.Statistics.namespace = 'AsyncStageOut.Statistics'
 config.Statistics.files_database = files_database
