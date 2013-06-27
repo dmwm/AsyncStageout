@@ -73,7 +73,11 @@ class PublisherWorker:
         self.myproxyServer = 'myproxy.cern.ch'
         query = {'group': True,
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
-        self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
+        self.userDN = ''
+        try:
+            self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
+        except Exception, e:
+            self.logger.error('A problem occured when contacting couchDB to get the DN for %s: %s' % (self.user, e))
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
@@ -108,7 +112,6 @@ class PublisherWorker:
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
 
-
     def __call__(self):
         """
         1- check the nubmer of files in wf to publish if it is < max_files_per_block
@@ -117,7 +120,10 @@ class PublisherWorker:
         """
         active_user_workflows = []
         query = {'group':True}
-        active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+        try:
+            active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+        except Exception, e:
+            self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' %e)
         for wf in active_workflows:
             if wf['key'][0] == self.user:
                 active_user_workflows.append(wf)
@@ -129,7 +135,10 @@ class PublisherWorker:
             wf_jobs_endtime = []
             workToDo = False
             query = {'reduce':False, 'key': user_wf['key']}
-            active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+            try:
+                active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+            except Exception, e:
+                self.logger.error('A problem occured when contacting couchDB to get the list of active files for %s: %s' %(self.user, e))
             self.logger.debug('actives files %s' %active_files)
             for file in active_files:
                 wf_jobs_endtime.append(int(time.mktime(time.strptime(\
@@ -152,7 +161,7 @@ class PublisherWorker:
                                 self.logger.debug('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
                                 continue
                         except Exception, e:
-                            ('A problem occured when contacting couchDB for the workflow status: %s' % e)
+                            self.logger.debug('A problem occured when contacting couchDB for the workflow status: %s' % e)
                             continue
                     else:
                         self.logger.debug('Publish number of files minor of max_files_per_block.')
@@ -299,6 +308,7 @@ class PublisherWorker:
             return newDict
         self.logger.debug("Starting Read cache...")
         buf = cStringIO.StringIO()
+        res = []
         url = self.cache_area + '?taskname=' + workflow + '&filetype=EDM'
         try:
             c = pycurl.Curl()
@@ -315,9 +325,16 @@ class PublisherWorker:
             self.logger.error(msg)
             return {}
         self.logger.debug("Data read from cache...")
-        json_string = buf.getvalue()
-        buf.close()
-        res = json.loads(json_string)
+        try:
+            json_string = buf.getvalue()
+            buf.close()
+            res = json.loads(json_string)
+        except Exception, ex:
+            msg =  "Error loading results. Trying next time!"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            return {}
         self.logger.debug("results %s..." % res['result'])
         toPublish = {}
         for files in res['result']:
