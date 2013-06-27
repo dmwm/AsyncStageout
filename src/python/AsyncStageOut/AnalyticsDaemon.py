@@ -333,7 +333,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                     for file in files_to_publish:
                         status[file['value'].replace('store', 'store/temp', 1)] = 'done'
                     if job_doc.has_key('log_file'):
-                         status[job_doc['log_file']] = 'done'
+                        status[job_doc['log_file']] = 'done'
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'done'
@@ -373,12 +373,35 @@ class AnalyticsDaemon(BaseWorkerThread):
                                     self.logger.error(msg)
                                     continue
                             else:
-                                status[file['value'].replace('store', 'store/temp', 1)] = 'failed'
+                                lfn = file['value'].replace('store', 'store/temp', 1)
+                                status[lfn] = 'failed'
+                                docId = getHashLfn(lfn)
+                                # Load document to get the failure reason from output file
+                                try:
+                                    document = self.monitoring_db.document( docId )
+                                    #if (document['file_type'] == "output" and document.has_key('failure_reason')):
+                                    if document.has_key('failure_reason'):
+                                        if transferError:
+                                            transferError = transferError + "," + document['failure_reason']
+                                        else:
+                                            transferError = document['failure_reason']
+                                    if document.has_key('publication_state'):
+                                        if document['publication_state'] == 'publication_failed':
+                                            if transferError:
+                                                transferError = transferError + "," + 'Publication Failure'
+                                            else:
+                                                transferError = 'Publication Failure'
+                                except Exception, ex:
+                                    msg =  "Error loading document from couch"
+                                    msg += str(ex)
+                                    msg += str(traceback.format_exc())
+                                    self.logger.error(msg)
+                                    continue
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'failed'
                         if not transferError:
-                            transferError = "Output transfer error"
+                            transferError = "Outputs management error"
                         message['transferStatus'] = status
                         message['transferError'] = transferError
                         message['transferErrorCode'] = 100
