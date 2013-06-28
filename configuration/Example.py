@@ -84,6 +84,7 @@ config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
 config.DBSPublisher.log_level = logging.INFO
 config.DBSPublisher.files_database = files_database
+config.DBSPublisher.config_database = config_database
 config.DBSPublisher.couch_instance = couchUrl
 config.DBSPublisher.publication_max_retry = 3
 config.DBSPublisher.cache_area = cache_area
