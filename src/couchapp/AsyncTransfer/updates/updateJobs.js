@@ -13,6 +13,7 @@ function (doc,req) {
         }
         if (req.query.state == 'killed'){
                 doc.end_time = req.query.end_time;
+                doc.retry_count.push(req.query.retry);
         }
 	if (req.query.state == 'new'){
         	doc.end_time = req.query.end_time;
