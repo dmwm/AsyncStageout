@@ -300,7 +300,9 @@ class AnalyticsDaemon(BaseWorkerThread):
         self.logger.debug("Processing record...")
         cache_list = []
         for job in all_jobs:
-            files_to_publish = []
+            done_files = []
+            failed_files = []
+            killed_files = []
             message = {}
             status = {}
             cache_list.append(job['value'])
@@ -323,14 +325,14 @@ class AnalyticsDaemon(BaseWorkerThread):
                 if number_ended_files == job_doc['files']:
                     query = {'key':job['value'], 'reduce': False}
                     try:
-                        files_to_publish = self.monitoring_db.loadView('UserMonitoring', 'LFNDoneByJobId', query)['rows']
+                        done_files = self.monitoring_db.loadView('UserMonitoring', 'LFNDoneByJobId', query)['rows']
                     except Exception, e:
                         self.logger.exception('A problem occured when contacting UserMonitoring - LFNDoneByJobId: %s' % e)
                         return
-                    self.logger.info("the jobid %s has to publish %s ended files" %(job, len(files_to_publish)))
+                    self.logger.info("the jobid %s has to publish %s done files" %(job, len(done_files)))
                     message['PandaID'] = job['value']
-                    self.logger.info("the job %s has %s done files %s" %(job, number_ended_files, files_to_publish))
-                    for file in files_to_publish:
+                    self.logger.info("the job %s has %s done files %s" %(job, number_ended_files, done_files))
+                    for file in done_files:
                         status[file['value'].replace('store', 'store/temp', 1)] = 'done'
                     if job_doc.has_key('log_file'):
                         status[job_doc['log_file']] = 'done'
@@ -338,15 +340,15 @@ class AnalyticsDaemon(BaseWorkerThread):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'done'
                     message['transferStatus'] = status
-                    if len(files_to_publish) != number_ended_files:
+                    if len(done_files) != number_ended_files:
                         try:
-                            files_to_publish = self.monitoring_db.loadView('UserMonitoring', 'LFNFailedByJobId', query)['rows']
+                            failed_files = self.monitoring_db.loadView('UserMonitoring', 'LFNFailedByJobId', query)['rows']
                         except Exception, e:
                             self.logger.exception('A problem occured when contacting UserMonitoring - LFNFailedByJobId: %s' % e)
                             return
-                        self.logger.info("the job %s has %s failed files %s" %(job, len(files_to_publish), files_to_publish))
+                        self.logger.info("the job %s has %s failed files %s" %(job, len(failed_files), failed_files))
                         transferError = ""
-                        for file in files_to_publish:
+                        for file in failed_files:
                             if file['value'].find('temp') > 1:
                                 status[file['value']] = 'failed'
                                 lfn = file['value']
@@ -400,11 +402,26 @@ class AnalyticsDaemon(BaseWorkerThread):
                         ##if len(files_to_publish) < len(job_doc['files']):
                         ##    for out_lfn in job_doc['files']:
                         ##        if not status.has_key(out_lfn): status[out_lfn] = 'failed'
-                        if not transferError:
+                        if len(failed_files) and not transferError:
                             transferError = "Outputs management error"
                         message['transferStatus'] = status
                         message['transferError'] = transferError
                         message['transferErrorCode'] = 100
+                    if (len(done_files)+len(failed_files)) != number_ended_files:
+                        try:
+                            cancelled_files = self.monitoring_db.loadView('UserMonitoring', 'LFNKilledByJobId', query)['rows']
+                        except Exception, e:
+                            self.logger.exception('A problem occured when contacting UserMonitoring - LFNKilledByJobId: %s' % e)
+                            return
+                        self.logger.info("the jobid %s has to publish %s killed files" %(job, len(cancelled_files)))
+                        message['PandaID'] = job['value']
+                        self.logger.info("the job %s has %s killed files %s" %(job, number_ended_files, cancelled_files))
+                        for file in cancelled_files:
+                            if file['value'].find('temp') > 1:
+                                status[file['value']] = 'cancelled'
+                            else:
+                                status[file['value'].replace('store', 'store/temp', 1)] = 'cancelled'
+                        message['transferStatus'] = status
             if message:
                 self.logger.info("publish this %s" %message)
                 try:
@@ -414,12 +431,12 @@ class AnalyticsDaemon(BaseWorkerThread):
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                try:
-                    self.logger.info("remove this doc %s" %job_doc['_id'])
-                    self.monitoring_db.queueDelete(job_doc)
-                    self.monitoring_db.commit( )
-                except Exception, e:
-                    self.logger.exception('A problem occured when removing docs: %s %s' % (message['PandaID'], e))
+                #try:
+                #    self.logger.info("remove this doc %s" %job_doc['_id'])
+                #    self.monitoring_db.queueDelete(job_doc)
+                #    self.monitoring_db.commit( )
+                #except Exception, e:
+                #    self.logger.exception('A problem occured when removing docs: %s %s' % (message['PandaID'], e))
 
         try:
             self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
