@@ -163,12 +163,6 @@ inputes.data = [];
 inputes.stacked = [];
 inputes.status = ["resubmitted","killed"];
 
-inputess = [];
-inputess.data = [];
-inputess.stacked = [];
-inputess.status = ["resubmitted"];
-
-
 var startd = new Date();
 var endd = new Date();
 var defaultTime = true;
@@ -310,45 +304,9 @@ inputes.popolate = function(){
                         killfile.push(killF);
                         tslice.setHours(tslice.getHours()+1);   
                         }
-    inputes.stacked.push(killfile);
     inputes.stacked.push(empfile); 	
+    inputes.stacked.push(killfile);
 }
-
-inputess.popolate = function(){
-                inputess.stacked = [];
-                var h = timeSlice;
-                var hours = (endd.getTime() - startd.getTime())/h;
-                var startkey =  [startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
-                var endkey = [endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
-                        xmlhttp = new XMLHttpRequest();
-                        xmlhttp.open("GET", "_view/endedByTime?group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey +"]", false);
-                        xmlhttp.send();
-                        var response = eval("(" + xmlhttp.responseText + ")")["rows"];
-                        var rs = 0;
-                        var tslice = new Date(startd);
-                        var resubfile = [];
-                        var empfile2 = [];
-                        for(i=0; i<=hours; i++){
-                        
-                        var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()]
-;
-                        //alert(key.toString());
-                        var resubF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
-                        var empF2 = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
-                        
-                        if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
-                                resubF.value= response[rs].value.resubmitted;
-                                empF2.value=0;
-                                    rs = rs+1;
-                        }
-                        empfile2.push(empF2);
-                        resubfile.push(resubF);
-                        tslice.setHours(tslice.getHours()+1);   
-                        }
-    inputess.stacked.push(empfile2);      
-    inputess.stacked.push(resubfile);
-}
-
 
 function drawchart(){
 	
@@ -358,7 +316,6 @@ function drawchart(){
 	inputs.popolate();
 	inputes.popolate();
 	inpute.popolate();
-	inputess.popolate();	
 
     setTimeout(function() stackedArea("started", inputs) , 1000 );
     setTimeout(function() stackedArea("killed", inputes) , 1000 );

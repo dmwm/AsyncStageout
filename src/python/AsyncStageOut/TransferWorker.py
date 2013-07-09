@@ -662,7 +662,6 @@ class TransferWorker:
         Mark the list of files as tranferred
         """
         for lfn in files:
-
             try:
                 document = self.db.document( getHashLfn(lfn) )
             except Exception, ex:
@@ -670,52 +669,45 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
-            if good_logfile:
-                to_attach = file(good_logfile)
-                content = to_attach.read(-1)
-                retval = self.db.addAttachment(document["_id"],
-                                               document["_rev"],
-                                               content,
-                                               to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
-                                               "text/plain")
-
-                if retval.get('ok', False) != True:
-                    # Then we have a problem
-                    msg = "Adding an attachment to document failed\n"
-                    msg += str(retval)
-                    msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+            if document['state'] != 'killed':
+                if good_logfile:
+                    to_attach = file(good_logfile)
+                    content = to_attach.read(-1)
+                    retval = self.db.addAttachment(document["_id"],
+                                                   document["_rev"],
+                                                   content,
+                                                   to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
+                                                   "text/plain")
+                    if retval.get('ok', False) != True:
+                        # Then we have a problem
+                        msg = "Adding an attachment to document failed\n"
+                        msg += str(retval)
+                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                        self.logger.error(msg)
+                outputLfn = document['lfn'].replace('store/temp', 'store', 1)
+                try:
+                    now = str(datetime.datetime.now())
+                    last_update = time.time()
+                    data = {}
+                    data['end_time'] = now
+                    data['state'] = 'done'
+                    data['lfn'] = outputLfn
+                    data['last_update'] = last_update
+                    updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
+                    updateUri += "?" + urllib.urlencode(data)
+                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                except Exception, ex:
+                    msg =  "Error updating document in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
                     self.logger.error(msg)
-
-            outputLfn = document['lfn'].replace('store/temp', 'store', 1)
-
-            try:
-
-                now = str(datetime.datetime.now())
-                last_update = time.time()
-                data = {}
-                data['end_time'] = now
-                data['state'] = 'done'
-		data['lfn'] = outputLfn
-                data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
-                updateUri += "?" + urllib.urlencode(data)
-                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
-                msg =  "Error updating document in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-            try:
-                self.db.commit()
-            except Exception, ex:
-                msg =  "Error commiting documents in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-
+                try:
+                    self.db.commit()
+                except Exception, ex:
+                    msg =  "Error commiting documents in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
 #            outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
 #            pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
 #            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['job_end_time'], \
@@ -762,54 +754,48 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
-            if bad_logfile:
-                to_attach = file(bad_logfile)
-                content = to_attach.read(-1)
-                retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
-
-                if retval.get('ok', False) != True:
-                    # Then we have a problem
-                    msg = "Adding an attachment to document failed\n"
-                    msg += str(retval)
-                    msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
-                    self.logger.error(msg)
-
-            now = str(datetime.datetime.now())
-            last_update = time.time()
-
-            # Prepare data to update the document in couch
-            if force_fail or len(document['retry_count']) + 1 > self.max_retry:
-                data['state'] = 'failed'
-                if self.failures_reasons[lfn]:
-                    data['failure_reason'] = self.failures_reasons[lfn]
+            if document['state'] != 'killed':
+                if bad_logfile:
+                    to_attach = file(bad_logfile)
+                    content = to_attach.read(-1)
+                    retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
+                    if retval.get('ok', False) != True:
+                        # Then we have a problem
+                        msg = "Adding an attachment to document failed\n"
+                        msg += str(retval)
+                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                        self.logger.error(msg)
+                now = str(datetime.datetime.now())
+                last_update = time.time()
+                # Prepare data to update the document in couch
+                if force_fail or len(document['retry_count']) + 1 > self.max_retry:
+                    data['state'] = 'failed'
+                    if self.failures_reasons[lfn]:
+                        data['failure_reason'] = self.failures_reasons[lfn]
+                    else:
+                        data['failure_reason'] = "User Proxy has expired."
+                    data['end_time'] = now
                 else:
-                    data['failure_reason'] = "User Proxy has expired."
-                data['end_time'] = now
-            else:
-                data['state'] = 'acquired'
-
-            data['last_update'] = last_update
-            data['retry'] = now
-
-            # Update the document in couch
-            try:
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
-                updateUri += "?" + urllib.urlencode(data)
-                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
-                msg =  "Error in updating document in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-            try:
-                self.db.commit()
-            except Exception, ex:
-                msg =  "Error commiting documents in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
+                    data['state'] = 'acquired'
+                data['last_update'] = last_update
+                data['retry'] = now
+                # Update the document in couch
+                try:
+                    updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
+                    updateUri += "?" + urllib.urlencode(data)
+                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                except Exception, ex:
+                    msg =  "Error in updating document in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                try:
+                    self.db.commit()
+                except Exception, ex:
+                    msg =  "Error commiting documents in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
              # TODO: Evaluate message per file
 #            try:
 #                self.logger.debug("Worker producing %s" %(str(document["jobid"]) + ":" + document["state"]))
