@@ -78,6 +78,7 @@ class PublisherWorker:
             self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
         except Exception, e:
             self.logger.error('A problem occured when contacting couchDB to get the DN for %s: %s' % (self.user, e))
+            raise Exception(msg)
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
