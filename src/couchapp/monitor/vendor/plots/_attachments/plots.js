@@ -11,7 +11,7 @@ function fullpieActive(data, canvas, labels) {
     .height(h)
     .def("s", -1)
     .canvas(canvas || 'pie')
-   
+
   .add(pv.Wedge)
     .data(data.sort(pv.reverseOrder))
     .outerRadius(r-20)
@@ -58,8 +58,8 @@ function fullpieActiveTest(canvas, input) {
       r = h / 2,
       a = pv.Scale.linear(0, pv.sum(input.data)).range(0, 2 * Math.PI);
 
- 
-   
+
+
   var vis = new pv.Panel()
     .width(w)
     .height(h)
@@ -114,8 +114,8 @@ function fullpieActive2(canvas, input) {
       r = h / 2,
       a = pv.Scale.linear(0, pv.sum(input.data)).range(0, 2 * Math.PI);
 
- 
-   
+
+
   var vis = new pv.Panel()
     .width(w)
     .height(h)
@@ -161,7 +161,7 @@ function fullpieActiveLegend(canvas, input) {
     .width(w)
     .height(h)
     .canvas(canvas || 'pie');
-   
+
   var vis = root.add(pv.Panel)
     .width(h)
     .height(h)
@@ -244,7 +244,7 @@ var w = 400,
           	return d.toFixed(0);
         	}
         	});
-      
+
   vis.render();
 };
 
@@ -311,7 +311,7 @@ function simpleActivePie(canvas, input) {
 	.anchor("right").add(pv.Label)
         .font(textfont)
 	.text(function(d) d);
-      
+
   root.render();
 };
 
@@ -394,7 +394,7 @@ root.add(pv.Label)
   .font("bold 14px sans-serif")
   .top(75)
   .left(w/1.75)
-  .text("Number of Jobs");
+  .text("Number of Files");
 
 
 root.render();
@@ -472,7 +472,7 @@ var vis = new pv.Panel()
       .canvas(canvas || 'pie')
       .width(w)
       .height(h);
-      
+
 var extpie = vis.add(pv.Wedge)
       .data(input.dataop)
       .bottom(h / 2)
@@ -547,7 +547,7 @@ function update(i) {
 	.anchor("right").add(pv.Label)
         .font("13px sans-serif")
 	.text(function(d) d);
-  
+
   vis.render();
 
 }
@@ -628,7 +628,7 @@ root.add(pv.Label)
   .bottom(h/3)
   .left(20)
   .textAngle(1.5 * Math.PI)
-  .text("Number of Jobs")
+  .text("Number of Files")
 
 root.add(pv.Label)
   .font("bold 13px sans-serif")
@@ -649,7 +649,7 @@ root.add(pv.Dot)
 	.text(function(d) d);
 
 root.render();
- 
+
 
 };
 
@@ -702,7 +702,7 @@ vis.add(pv.Rule)
 
 
 function matrix(canvas, input){
-	
+
 	Array.prototype.unique =  function() {
     var a = [];
     var l = this.length;
@@ -716,7 +716,7 @@ function matrix(canvas, input){
     }
     return a;
   };
-	
+
 var source = clone(input.data);
 source = source.map(function(d) {return d.key[1]} );
 source = source.unique();
@@ -727,7 +727,7 @@ dest = dest.map(function(d) {return d.key[0]} );
 dest = dest.unique();
 
 
-	
+
 	/* Sizing and scales. */
 var w = 30*dest.length,
     h = 30*source.length,
@@ -735,7 +735,7 @@ var w = 30*dest.length,
     x = pv.Scale.ordinal(pv.range(dest.length)).splitBanded(0, w),
     dim = pv.Scale.linear(1, pv.max(input.data, function(d) d.value.total)).range(1, (pv.min([w/dest.length, h/source.length]))/2),
     c = pv.Scale.linear(0, 1).range('red', 'green');
-    
+
 var lg =    new pv.Panel()
     .width(340)
     .height(20)
@@ -747,7 +747,7 @@ var lg =    new pv.Panel()
     .width(4)
     .fillStyle(pv.Scale.linear(0, .5, 1).range('red', 'yellow', 'green'));
 
-    
+
 var dimmax = pv.min([(w/dest.length), (h/source.length)]);
 var valuemax = pv.max(input.data, function(d) d.value.total);
 
@@ -760,7 +760,7 @@ var vis = new pv.Panel()
     .left(150)
     .right(150)
     .top(80);
-    
+
     var lg = vis.add(pv.Panel)
     .left(-150)
     .height(20)
@@ -770,17 +770,17 @@ var vis = new pv.Panel()
     .left(function() this.index * 4)
     .width(4)
     .fillStyle(pv.Scale.linear(0, .5, 1).range('red', 'yellow', 'green'));
-    
+
     /*
     lg.anchor("left").add(pv.Label)
 		.font("13px bold sans-serif")
 		.text("0%");
-		
+
 	lg.anchor("right").add(pv.Label)
 		.font("13px bold sans-serif")
 		.text("100%");
 	 */
-    
+
     vis.add(pv.Panel)
     .left(-150)
     .height(30)
@@ -788,7 +788,7 @@ var vis = new pv.Panel()
     .anchor("left").add(pv.Label)
 		.font("12px sans-serif")
 		.text("Dot color range according to link efficiency from 0% to 100%");
-    
+
 var dot = vis.add(pv.Dot)
     .data(input.data)
     .left(function(d) x(d.key[0]))
@@ -798,11 +798,11 @@ var dot = vis.add(pv.Dot)
     .fillStyle(function(d) c(d.value.done/(d.value.done+d.value.failed)))
     .lineWidth(3)
     .strokeStyle(function(d) c(d.value.done/(d.value.done+d.value.failed)));
-    
+
     dot.anchor("left").add(pv.Label)
     .left(-dimmax-20)
     .text(function(d) (d.key[1]));
-    
+
 vis.add(pv.Panel)
     .left(w/3)
     .height(30)
@@ -810,7 +810,7 @@ vis.add(pv.Panel)
     .anchor("left").add(pv.Label)
 		.font("12px sans-serif")
 		.text("Destination Site");
-    
+
 
 vis.add(pv.Rule)
     .data(dest)
@@ -822,14 +822,14 @@ vis.add(pv.Rule)
     .textAlign("left")
     .textAngle(.25 * Math.PI)
     .text(function(d) d);
-    
+
     vis.add(pv.Label)
     .left(-dimmax)
     .textAngle(1.5 * Math.PI)
     .bottom(h/2)
     .font("12px sans-serif")
 	.text("Source Site");
-    
+
     vis.add(pv.Rule)
     .data(source)
     .left(-dimmax-20);
@@ -864,7 +864,7 @@ vis.add(pv.Panel)
 */
 vis.render();
 
-	
+
 	}
 
 function clone(o) {

@@ -5,17 +5,17 @@
     <link rel="stylesheet" href="style/main.css" type="text/css">
     <script language="JavaScript" src="calendar_db.js"></script>
 	<link rel="stylesheet" href="calendar.css">
-    
+
   </head>
   <body>
   <div id="main">
     <div id="head"><h2>AsyncTransfer Monitor System</h2></div>
-    
-    
+
+
     <div id="sidebar"><p></p></div>
 
 	<div id="items">
-	
+
 	    <form name="selectionform">
 
 	<!-- calendar attaches to existing form element -->
@@ -28,11 +28,11 @@
 		// input name
 		'controlname': 'start'
 	});
-	
+
 	// individual template parameters can be modified via the calendar variable
 	o_cal.a_tpl.yearscroll = false;
 	o_cal.a_tpl.weekstart = 1;
-	
+
 	</script>
 	<a>Start Time</a>
 	<select id="starttime">
@@ -73,7 +73,7 @@
 		'centyear'  : 70,
 		'imgpath' : 'img/'
 	}
-	
+
 	new tcal ({
 		// if referenced by ID then form name is not required
 		'controlname': 'end'
@@ -106,20 +106,20 @@
   		<option value="22">22:00</option>
   		<option value="23">23:00</option>
 	</select>
-	
+
 	<INPUT TYPE="button" NAME="button" Value="View" onClick='setTime($("input#start").val(),$("input#end").val())'>
 	<INPUT TYPE="button" NAME="buttonreset" Value="Default" onClick='resetTime()'>
 
 
-	</form>	
-	
+	</form>
+
 <h3>Status of Active Files</h3>
 <div id="started"> Retriving Data... </div>
 <br>
 <h3>Status of Ended Files</h3>
 <div id="ended"> Retriving Data... </div>
 <br>
-<h3>Status of Killed and Resubmitted Jobs</h3>
+<h3>Status of Killed and Resubmitted Files</h3>
 <div id="killed"> Retriving Data... </div>
 <br>
 	</div>
@@ -137,15 +137,15 @@
   $.couch.app(function(app) {
     $("#sidebar").evently("menu", app);
     $("#head").evently("head", app);
-    //$("#items").evently("main", app);    
+    //$("#items").evently("main", app);
   });
-  
+
   $(document).ready(function() {
 	    drawchart();
 		setInterval(function() drawchart(), 60000);
 });
- 
-			
+
+
 var timeSlice = 3600000;
 
 inpute = [];
@@ -177,16 +177,16 @@ function setTime(start, end){
 			}else{
 				startd = startdate;
 				endd = enddate;
-				
+
 				}
 				defaultTime = false;
 				drawchart();
 			}
-			
+
 function resetTime(){
 	defaultTime = true;
 	drawchart();
-	
+
 	}
 
 function calcInterval(){
@@ -195,7 +195,7 @@ function calcInterval(){
     start.setDate(start.getDate()-1);
 	startd = start;
 	endd = now;
-	
+
 	}
 
 inpute.popolate = function(){
@@ -214,7 +214,7 @@ inpute.popolate = function(){
 			var failfile = [];
 			var killfile=[];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var killF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
@@ -222,16 +222,16 @@ inpute.popolate = function(){
 				"value": 0};
 			var failF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
-			
+
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
 				doneF.value= response[rs].value.done;
 				failF.value= response[rs].value.failed;
 				rs = rs+1;
 			}
-			
+
 			donefile.push(doneF);
 			failfile.push(failF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inpute.stacked.push(donefile);
 		inpute.stacked.push(failfile);
@@ -252,14 +252,14 @@ inputs.popolate = function(){
 			var newfile = [];
 			var acqfile = [];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var newF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
 			var acqF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
-			
+
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
 				newF.value= response[rs].value.new;
 				acqF.value= response[rs].value.acquired;
@@ -267,7 +267,7 @@ inputs.popolate = function(){
 			}
 			newfile.push(newF);
 			acqfile.push(acqF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inputs.stacked.push(newfile);
 		inputs.stacked.push(acqfile);
@@ -288,13 +288,13 @@ inputes.popolate = function(){
                         var killfile = [];
                         var empfile = [];
                         for(i=0; i<=hours; i++){
-                        
+
                         var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()]
 ;
                         //alert(key.toString());
                         var killF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
                         var empF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00","value": 0};
-                        
+
                         if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
                                 killF.value= response[rs].value.killed;
                                 empF.value=response[rs].value.resubmitted;
@@ -302,14 +302,14 @@ inputes.popolate = function(){
                         }
 			empfile.push(empF);
                         killfile.push(killF);
-                        tslice.setHours(tslice.getHours()+1);   
+                        tslice.setHours(tslice.getHours()+1);
                         }
-    inputes.stacked.push(empfile); 	
+    inputes.stacked.push(empfile);
     inputes.stacked.push(killfile);
 }
 
 function drawchart(){
-	
+
 	if(defaultTime){
 		calcInterval();
 	}
@@ -319,7 +319,7 @@ function drawchart(){
 
     setTimeout(function() stackedArea("started", inputs) , 1000 );
     setTimeout(function() stackedArea("killed", inputes) , 1000 );
-    setTimeout(function() stackedArea("ended", inpute) , 1000 );	
+    setTimeout(function() stackedArea("ended", inpute) , 1000 );
 }
 
 
