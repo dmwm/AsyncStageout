@@ -126,8 +126,14 @@ class TransferWorker:
         query = {'group': True,
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
         #         'stale': 'ok'}
-        self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
-
+        try:
+            self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
+        except Exception, ex:
+            self.logger.error("Failed to get the user DN!")
+            msg =  "Error contacting couch"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            raise Exception(msg)
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
