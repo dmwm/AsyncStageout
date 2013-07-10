@@ -20,7 +20,7 @@ from AsyncStageOut.TransferWorker import TransferWorker
 from multiprocessing import Pool
 from WMCore.WMFactory import WMFactory
 #import random
-#import logging
+import logging
 #import time
 
 result_list = []
