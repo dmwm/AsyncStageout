@@ -22,11 +22,14 @@ def publish(user, config):
     """
     Each worker executes this function.
     """
-    worker = PublisherWorker(user, config)
+    logging.debug("Trying to start the publication worker")
     try:
+        worker = PublisherWorker(user, config)
+        logging.debug("Starting %s" %worker)
         worker ()
-    except:
-        pass
+    except Exception, e:
+        logging.debug("Worker cannot start!:" %e)
+        return user
     return user
 
 def log_result(result):

@@ -30,11 +30,14 @@ def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
-    worker = TransferWorker(user, tfc_map, config)
+    logging.debug("Trying to start the worker")
     try:
+        worker = TransferWorker(user, tfc_map, config)
+        logging.debug("Starting %s" %worker)
         worker ()
-    except:
-        pass
+    except Exception, e:
+        logging.debug("Worker cannot start!:" %e)
+        return user
     return user
 
 def log_result(result):
