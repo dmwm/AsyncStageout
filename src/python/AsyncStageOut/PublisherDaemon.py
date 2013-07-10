@@ -14,6 +14,7 @@ from AsyncStageOut.PublisherWorker import PublisherWorker
 from multiprocessing import Pool
 from WMCore.WMFactory import WMFactory
 #import random
+import logging
 
 result_list = []
 current_running = []
