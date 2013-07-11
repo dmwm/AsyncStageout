@@ -33,11 +33,16 @@ def ftscp(user, tfc_map, config):
     logging.debug("Trying to start the worker")
     try:
         worker = TransferWorker(user, tfc_map, config)
-        logging.debug("Starting %s" %worker)
-        worker ()
     except Exception, e:
-        logging.debug("Worker cannot start!:" %e)
+        logging.debug("Worker cannot be created!:" %e)
         return user
+    if worker.init:
+       logging.debug("Starting %s" %worker)
+       try:
+           worker ()
+       except Exception, e:
+           logging.debug("Worker cannot start!:" %e)
+           return user
     return user
 
 def log_result(result):
