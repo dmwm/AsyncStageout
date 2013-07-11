@@ -71,14 +71,21 @@ class PublisherWorker:
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.proxyDir = config.credentialDir
         self.myproxyServer = 'myproxy.cern.ch'
+        self.init = True
+        self.userDN = ''
         query = {'group': True,
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
-        self.userDN = ''
+        self.logger.debug("Trying to get DN")
         try:
             self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
-        except Exception, e:
-            self.logger.error('A problem occured when contacting couchDB to get the DN for %s: %s' % (self.user, e))
-            raise Exception(msg)
+        except Exception, ex:
+            self.logger.error("Failed to get the user DN!")
+            msg =  "Error contacting couch"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            self.init = False
+            return
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \

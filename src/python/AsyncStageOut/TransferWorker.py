@@ -119,6 +119,8 @@ class TransferWorker:
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
         self.cleanEnvironment = ''
+        self.userDN = ''
+        self.init = True
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         # TODO: improve how the worker gets a log
@@ -126,6 +128,7 @@ class TransferWorker:
         query = {'group': True,
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
         #         'stale': 'ok'}
+        self.logger.debug("Trying to get DN")
         try:
             self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
         except Exception, ex:
@@ -133,7 +136,9 @@ class TransferWorker:
             msg =  "Error contacting couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
-            raise Exception(msg)
+            self.logger.error(msg)
+            self.init = False
+            return
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
