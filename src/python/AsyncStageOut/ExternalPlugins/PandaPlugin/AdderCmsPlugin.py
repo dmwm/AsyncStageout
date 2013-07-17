@@ -140,9 +140,7 @@ class AdderCmsPlugin(AdderPluginBase):
                         destination = self.job.computingSite.split("ANALY_")[-1]
                         state = "done"
                         end_time = now
-                workflow = self.job.jobParameters.split(" ")[-1]
-                if not workflow:
-                    workflow = self.job.jobParameters.split(" ")[-2]
+                workflow = self.job.jobName
                 # Build correctly the user dn
                 dn = self.job.prodUserID
                 if dn:
