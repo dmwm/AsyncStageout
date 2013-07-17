@@ -227,7 +227,7 @@ class TransferWorker:
 
                     lcgdel_file = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
+                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv --connect-timeout 20 --sendreceive-timeout 240 %s'  % \
                               (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
                     self.logger.debug("Running remove command %s" % command)
                     self.logger.debug("log file: %s" % lcgdel_file.name)
