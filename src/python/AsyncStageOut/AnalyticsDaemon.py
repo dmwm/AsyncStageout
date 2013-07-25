@@ -451,13 +451,22 @@ class AnalyticsDaemon(BaseWorkerThread):
 
         return
 
-
     def produce(self, message ):
         """
         Produce state messages: jobid:state
         """
-        f = open(self.amq_auth_file)
-        authParams = json.loads(f.read())
+        opened = False
+        while not opened:
+            try:
+                f = open(self.amq_auth_file)
+                authParams = json.loads(f.read())
+                opened = True
+            except Exception, ex:
+                msg =  "Error loading auth params"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+                pass
         connected = False
         while not connected:
             try:
@@ -472,7 +481,11 @@ class AnalyticsDaemon(BaseWorkerThread):
                 # disconnect from the stomp server
                 conn.disconnect()
                 connected = True
-            except socket.error:
+            except Exception, ex:
+                msg =  "Error contacting Message Broker"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
                 pass
 
     def cleanOldDocs(self):
