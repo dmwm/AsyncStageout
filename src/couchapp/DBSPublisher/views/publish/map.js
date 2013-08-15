@@ -10,7 +10,7 @@ function(doc) {
                         if (publish == 1){
                                 var dbs_url = doc.dbs_url
                                 var publish_dbs_url = doc.publish_dbs_url
-                                        emit([doc.user, doc.group, doc.role, doc.dn, doc.workflow], [doc.destination, lfn, publish_dbs_url, doc.inputdataset, dbs_url, doc.job_end_time]);
+                                        emit([doc.user, doc.group, doc.role, doc.dn, doc.workflow], [doc.destination, lfn, publish_dbs_url, doc.inputdataset, dbs_url, doc.end_time.split('.')[0]]);
                         }
                 }
         }
