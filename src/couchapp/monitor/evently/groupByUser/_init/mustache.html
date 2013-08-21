@@ -1,5 +1,5 @@
 <div style="text-align: center">
-<h3>File transfer grouped by User</h3>
+<h3>File transfer by User</h3>
 <br />
 <INPUT TYPE="button" NAME="buttonb" Value="View bar" onClick='setChart(1)'>
 <INPUT TYPE="button" NAME="buttonp" Value="View pie" onClick='setChart(2)'>
@@ -36,9 +36,9 @@ input.popolate = function(){
 		var killfile = [];
 		var newfile=[];
 		var resubfile=[];
-		var acqfile=[];			
+		var acqfile=[];
 
-	
+
 		xmlhttp = new XMLHttpRequest();
   		xmlhttp.open("GET", "_view/filesCountByUser?group_level=1", false);
   		xmlhttp.send();
@@ -52,7 +52,7 @@ input.popolate = function(){
 		newfile.push(response[i].value.new);
 		killfile.push(response[i].value.killed);
 	        acqfile.push(response[i].value.acquired);
-		resubfile.push(response[i].value.resubmitted);			
+		resubfile.push(response[i].value.resubmitted);
 		input.labels.push(response[i].key);
 		input.data.push(value);
 		input.info.push(rowinfo);
@@ -69,16 +69,16 @@ input.popolate = function(){
 
 input.update = function(){
 		var DB = $.couch.db(dbname);
-		DB.view('monitor/filesCountByUser', { 
+		DB.view('monitor/filesCountByUser', {
 		      group_level: 1,
 		      success: function(data) {
 				var labels = [];
 				var dati = [];
 				var info = [];
-                                var stacked = [];					
+                                var stacked = [];
 
 		      		for (i in data.rows) {
-		                        
+
 					var value = data.rows[i].value.total;
 		                        var rowinfo = "Done: "+data.rows[i].value.done+" Failed: "+data.rows[i].value.failed+" Other: "+data.rows[i].value.other;
 					var stackedrow = { "key": data.rows[i].key,
@@ -121,7 +121,7 @@ function drawchart(){
 			setTimeout(function() stackedBarH("pie", input) , 500 );
 			}
         */
-        
+
 }
 
 drawchart();
