@@ -44,12 +44,12 @@ class AnalyticsDaemon(BaseWorkerThread):
             self.logger = logging.getLogger()
             self.logger.setLevel(self.config.log_level)
         self.logger.debug('Configuration loaded')
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to local couchDB')
         self.config_db = server.connectDatabase(self.config.config_database)
         self.amq_auth_file = self.config.amq_auth_file
-        monitoring_server = CouchServer(self.config.couch_user_monitoring_instance)
+        monitoring_server = CouchServer(dburl=self.config.couch_user_monitoring_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.monitoring_db = monitoring_server.connectDatabase(self.config.user_monitoring_db)
         self.logger.debug('Connected to user_monitoring_db in couchDB')
 
