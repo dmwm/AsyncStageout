@@ -87,6 +87,8 @@ class AdderCmsPlugin(AdderPluginBase):
         elif self.job.jobStatus == 'failed':
             self.logger.debug("Skipping failed jobs")
             # TODO:Evaluate what we want to do with failed jobs: inject only the log file?
+        elif self.job.transExitCode != '0':
+            self.logger.debug("Skipping finished jobs with EXIT CODE %s" %self.job.transExitCode)
         else:
             # inject the metada for data report and publication
             report = None
