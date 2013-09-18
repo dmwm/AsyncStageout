@@ -67,7 +67,7 @@ class PublisherDaemon(BaseWorkerThread):
             self.logger = logging.getLogger()
             self.logger.setLevel(self.config.log_level)
         self.logger.debug('Configuration loaded')
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
         # Set up a factory for loading plugins
