@@ -150,6 +150,16 @@ class AdderCmsPlugin(AdderPluginBase):
                         if dn.split("/")[-1].split("=")[1] == 'proxy': dn = dn.replace("/CN=proxy","")
                     except:
                         pass
+                # Get role and group
+                try:
+                    voGroup = self.job.jobParameters.split("group")[1].split("=")[1].split(" ")[0]
+                except:
+                    self.logger.debug("Cannot retrieve user vo group")
+                try:
+                    voRole = self.job.jobParameters.split("role")[1].split("=")[1].split(" ")[0]
+                except:
+                    self.logger.debug("Cannot retrieve user vo role")
+
                 # Get the dbs_url params
                 try:
                     publish_dbs_url = self.job.jobParameters.split("publish_dbs_url")[1].split("=")[1].split(" ")[0]
@@ -174,7 +184,7 @@ class AdderCmsPlugin(AdderPluginBase):
                 # Prepare the file document and queue it
                 doc = { "_id": getHashLfn( lfn ),
                         "inputdataset": self.job.prodDBlock,
-                        "group": "",
+                        "group": voGroup,
                         "lfn": lfn,
                         "checksums": {'adler32': tmpFile.checksum},
                         "size": tmpFile.fsize,
@@ -183,7 +193,7 @@ class AdderCmsPlugin(AdderPluginBase):
                         "destination": destination,
                         "last_update": last_update,
                         "state": state,
-                        "role": "",
+                        "role": voRole,
                         "dbSource_url": "Panda",
                         "publish_dbs_url": publish_dbs_url,
                         "dbs_url": dbs_url,
