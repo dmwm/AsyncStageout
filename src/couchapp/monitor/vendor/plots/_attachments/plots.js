@@ -93,14 +93,14 @@ function fullpieActiveTest(canvas, input) {
     .top(20)
     .textAlign("center")
     .font("bold 12px sans-serif")
-    .text(function() this.parent.s() > -1 ? "Selected - "+input.labels[this.parent.s()]+": "+input.data[this.parent.s()] : "No Selected");
+    .text(function() this.parent.s() > -1 ? "Selected - "+input.labels[this.parent.s()]+": "+input.data[this.parent.s()]+" files" : "No Selected");
 
     vis.add(pv.Label)
     .left(600)
     .top(40)
     .textAlign("center")
     .font("bold 12px sans-serif")
-    .text(function() this.parent.s() > -1 ? "Info - "+input.info[this.parent.s()] : "");
+    .text(function() this.parent.s() > -1 ? input.info[this.parent.s()] : "");
 
 
  vis.render();

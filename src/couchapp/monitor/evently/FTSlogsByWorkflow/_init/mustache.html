@@ -1,5 +1,5 @@
 <div style="text-align: center">
-<h3>Logs grouped by Workflow</h3>
+<h3>Logs by Workflow</h3>
 <FORM NAME = frmOne>
 Workflow Name: <INPUT TYPE = Text NAME = WorkflowName SIZE = 50 value ="">
 <P>
@@ -22,11 +22,11 @@ function calculate_failed() {
             var value = response[i].value.docid;
             var attach = response[i].value.attachments;
             var host = window.location.hostname
-            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach; 
+            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach;
             url.push(url_link);
             }
-            } 
-document.frmOne.LogFileName.value = url 
+            }
+document.frmOne.LogFileName.value = url
 }
 </SCRIPT>
 
@@ -43,11 +43,11 @@ function calculate_done() {
             var value = response[i].value.docid;
             var attach = response[i].value.attachments;
             var host = window.location.hostname
-            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach; 
+            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach;
             url.push(url_link);
             }
-            } 
-document.frmOne.LogFileName.value = url 
+            }
+document.frmOne.LogFileName.value = url
 }
     </SCRIPT>
 
