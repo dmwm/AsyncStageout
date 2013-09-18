@@ -54,7 +54,7 @@ class AdderCmsPlugin(AdderPluginBase):
         self.proxy = authParams['PROXY']
         self.aso_db_url = authParams['ASO_DB_URL']
         self.aso_cache = authParams['FWJR_CACHE']
-        server = CouchServer(self.aso_db_url)
+        server = CouchServer(dburl = self.aso_db_url, ckey = self.proxy, cert = self.proxy)
         self.db = server.connectDatabase("asynctransfer")
         self.mon_db = server.connectDatabase("user_monitoring_asynctransfer")
         self.initlog()
