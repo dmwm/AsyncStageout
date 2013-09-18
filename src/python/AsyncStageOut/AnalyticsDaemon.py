@@ -422,6 +422,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                             else:
                                 status[file['value'].replace('store', 'store/temp', 1)] = 'cancelled'
                         message['transferStatus'] = status
+                        message['transferError'] = "Output files killed"
             if message:
                 self.logger.info("publish this %s" %message)
                 try:
