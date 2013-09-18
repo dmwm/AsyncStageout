@@ -1,5 +1,5 @@
 <div style="text-align: center">
-<h3>File transfer grouped by WorkFlow</h3>
+<h3>File transfer by WorkFlow</h3>
 <INPUT TYPE="button" NAME="buttonb" Value="View bar" onClick='setChart(1)'>
 <INPUT TYPE="button" NAME="buttonp" Value="View pie" onClick='setChart(2)'>
 <div id="pie"></div>
@@ -10,7 +10,7 @@
 var dbname = document.location.href.split('/')[3];
 var charttype = 1;
 var input = [];
-input.url = "";
+input.url = document.location.href.split('monitor/')[0]+"monitor/workflowStat.html";
 input.data = [];
 input.labels = [];
 input.info = [];
@@ -30,14 +30,14 @@ input.popolate = function(){
 		var newfile = [];
                 var acqfile = [];
                 var resubfile=[];
-		
+
 		xmlhttp = new XMLHttpRequest();
   		xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 		for (i in response) {
 		var value = response[i].value.total;
-		var rowinfo = "WorkFlow: "+response[i].key+" Jobs: "+response[i].value.total;
+		var rowinfo = "WorkFlow: "+response[i].key+" Files: "+response[i].value.total;
 
 		donefile.push(response[i].value.done);
 		failfile.push(response[i].value.failed);
@@ -60,16 +60,16 @@ input.popolate = function(){
 
 input.update = function(){
 		var DB = $.couch.db(dbname);
-		DB.view('monitor/filesCountByTask', { 
+		DB.view('monitor/filesCountByTask', {
 		      group_level: 1,
 		      success: function(data) {
 				var labels = [];
 				var dati = [];
 				var info = [];
-                                var stacked = [];					
+                                var stacked = [];
 
 		      		for (i in data.rows) {
-		                        
+
 					var value = data.rows[i].value.total;
 		                        var rowinfo = "Done: "+data.rows[i].value.done+" Failed: "+data.rows[i].value.failed+" Other: "+data.rows[i].value.other;
 					var stackedrow = { "key": data.rows[i].key,
@@ -112,7 +112,7 @@ function drawchart(){
 			setTimeout(function() stackedBarH("pie", input) , 500 );
 			}
         */
-        
+
 }
 /*
 function drawchart(){
