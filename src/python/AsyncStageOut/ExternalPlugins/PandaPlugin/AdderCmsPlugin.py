@@ -236,6 +236,7 @@ class AdderCmsPlugin(AdderPluginBase):
                                         temp_out['runs'] = out['runs']
                                         first = True
                                         runs_report = ''
+                                        lumis_report = ''
                                         for run, value in temp_out['runs'].iteritems() :
                                             for lumi in temp_out['runs'][run]:
                                                 runs_report = runs_report + "&outfileruns=" + str(run)
