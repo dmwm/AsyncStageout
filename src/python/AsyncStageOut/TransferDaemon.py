@@ -19,9 +19,9 @@ from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 from AsyncStageOut.TransferWorker import TransferWorker
 from multiprocessing import Pool
 from WMCore.WMFactory import WMFactory
-import random
+#import random
 import logging
-import time
+#import time
 
 result_list = []
 current_running = []
@@ -30,11 +30,19 @@ def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
-    worker = TransferWorker(user, tfc_map, config)
+    logging.debug("Trying to start the worker")
     try:
-        worker ()
-    except:
-        pass
+        worker = TransferWorker(user, tfc_map, config)
+    except Exception, e:
+        logging.debug("Worker cannot be created!:" %e)
+        return user
+    if worker.init:
+       logging.debug("Starting %s" %worker)
+       try:
+           worker ()
+       except Exception, e:
+           logging.debug("Worker cannot start!:" %e)
+           return user
     return user
 
 def log_result(result):
@@ -68,13 +76,15 @@ class TransferDaemon(BaseWorkerThread):
             self.logger.setLevel(self.config.log_level)
 
         self.logger.debug('Configuration loaded')
-
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.config_db = server.connectDatabase(self.config.config_database)
         self.logger.debug('Connected to CouchDB')
         self.pool = Pool(processes=self.config.pool_size)
-        self.phedex = PhEDEx(responseType='xml')
+        try:
+            self.phedex = PhEDEx(responseType='xml')
+        except Exception, e:
+            self.logger.exception('PhEDEx exception: %s' % e)
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
 
@@ -91,7 +101,7 @@ class TransferDaemon(BaseWorkerThread):
         query = {'stale':'ok'}
         try:
             params = self.config_db.loadView('asynctransfer_config', 'GetTransferConfig', query)
-        #    self.pool = Pool(processes=params['rows'][0]['key'][0]) 
+            #self.pool = Pool(processes=params['rows'][0]['key'][0])
             self.config.max_files_per_transfer = params['rows'][0]['key'][1]
             self.config.algoName = params['rows'][0]['key'][2]
         except Exception, e:
@@ -105,24 +115,28 @@ class TransferDaemon(BaseWorkerThread):
 
         site_tfc_map = {}
         for site in sites:
+            # TODO: Remove the Workaround for FNAL
             if site == 'T1_US_FNAL':
                 site = 'T1_US_FNAL_Buffer'
-##            if site == 'T2_IT_Legnaro':
-##                site = 'None'
+            if site == 'T1_ES_PIC':
+                site = 'T1_ES_PIC_Buffer'
+            if site == 'T1_DE_KIT':
+                site = 'T1_DE_KIT_Buffer'
+            if site == 'T1_FR_CCIN2P3':
+                site = 'T1_FR_CCIN2P3_Buffer'
+            if site == 'T1_IT_CNAF':
+                site = 'T1_IT_CNAF_Buffer'
+            if site == 'T1_RU_JINR':
+                site = 'T1_RU_JINR_Buffer'
+            if site == 'T1_TW_ASGC':
+                site = 'T1_TW_ASGC_Buffer'
+            if site == 'T1_UK_RAL':
+                site = 'T1_UK_RAL_Buffer'
+            if site == 'T1_CH_CERN':
+                site = 'T1_CH_CERN_Buffer'
             if site and str(site) != 'None':
                 site_tfc_map[site] = self.get_tfc_rules(site)
-
-#        site_tfc_map = {}
-#        for site in sites:
-#            if site == 'T1_US_FNAL':
-#                site = 'T1_US_FNAL_Buffer'
-#            site_tfc_map[site] = self.get_tfc_rules(site)
-
         self.logger.debug('kicking off pool')
-
-#        r = [self.pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
-
-
         for u in users:
             self.logger.debug('current_running %s' %current_running)
             if u not in current_running:
@@ -130,9 +144,6 @@ class TransferDaemon(BaseWorkerThread):
                 current_running.append(u)
                 self.logger.debug('processing %s' %current_running)
                 self.pool.apply_async(ftscp,(u, site_tfc_map, self.config), callback = log_result)
- 
-#        for result in r:
-#            self.logger.info(result.get())
 
     def active_users(self, db):
         """
@@ -140,13 +151,15 @@ class TransferDaemon(BaseWorkerThread):
         following view:
             ftscp?group=true&group_level=1
         """
-        query = {'group': True, 'group_level': 3, 'stale': 'ok'}
-        try: 
+        #TODO: Remove stale=ok for now until tested
+        #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        query = {'group': True, 'group_level': 3}
+        try:
             users = db.loadView('AsyncTransfer', 'ftscp_all', query)
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
-   
+
         active_users = []
         if len(users['rows']) <= self.config.pool_size:
             active_users = users['rows']
@@ -157,12 +170,11 @@ class TransferDaemon(BaseWorkerThread):
                 return inputDict['key']
             active_users = map(keys_map, active_users)
         else:
-            #TODO: have a plugin algorithm here...
-            users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.pool_size], getFromCache = False, listFlag = True)
-            active_users = users()
-            self.logger.debug("users %s" % active_users)
+            sorted_users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.pool_size], getFromCache = False, listFlag = True)
             #active_users = random.sample(users['rows'], self.config.pool_size)
-
+            active_users = sorted_users()[:self.config.pool_size]
+        self.logger.info('%s active users' % len(active_users))
+        self.logger.debug('Active users are: %s' % active_users)
         return active_users
 
     def active_sites(self):
@@ -188,9 +200,15 @@ class TransferDaemon(BaseWorkerThread):
         """
         Get the TFC regexp for a given site.
         """
-        self.phedex.getNodeTFC(site)
-        tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-
+        tfc_file = None
+        try:
+            self.phedex.getNodeTFC(site)
+        except Exception, e:
+            self.logger.exception('PhEDEx exception: %s' % e)
+        try:
+            tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
+        except Exception, e:
+            self.logger.exception('PhEDEx cache exception: %s' % e)
         return readTFC(tfc_file)
 
     def terminate(self, parameters = None):

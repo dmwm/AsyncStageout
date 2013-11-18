@@ -8,7 +8,7 @@ import random
 class UserPool(Pool):
     def __init__(self, config, logger):
         self.config = config.CRABAsyncTransfer
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger = logger
         self.size = 0

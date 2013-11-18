@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AsyncTransfer Monitor System</title>
+    <link rel="stylesheet" href="style/main.css" type="text/css">
+    <script language="JavaScript" src="calendar_db.js"></script>
+	<link rel="stylesheet" href="calendar.css">
+
+  </head>
+  <body>
+  <div id="main">
+    <div id="head"><h2>AsyncTransfer Monitor System</h2></div>
+
+
+    <div id="sidebar"><p></p></div>
+
+	<div id="items">
+
+	    <form name="selectionform">
+
+	<!-- calendar attaches to existing form element -->
+	<a>Start Date&nbsp;</a>
+	<input type="text" id="start" />
+	<script language="JavaScript">
+	var o_cal = new tcal ({
+		// form name
+		//'formname': 'testform',
+		// input name
+		'controlname': 'start'
+	});
+
+	// individual template parameters can be modified via the calendar variable
+	o_cal.a_tpl.yearscroll = false;
+	o_cal.a_tpl.weekstart = 1;
+
+	</script>
+	<a>Start Time</a>
+	<select id="starttime">
+  		<option value="0">00:00</option>
+  		<option value="1">01:00</option>
+  		<option value="2">02:00</option>
+  		<option value="3">03:00</option>
+  		<option value="4">04:00</option>
+		<option value="5">05:00</option>
+  		<option value="6">06:00</option>
+  		<option value="7">07:00</option>
+  		<option value="8">08:00</option>
+  		<option value="9">09:00</option>
+  		<option value="10">10:00</option>
+  		<option value="11">11:00</option>
+  		<option value="12">12:00</option>
+		<option value="13">13:00</option>
+  		<option value="14">14:00</option>
+  		<option value="15">15:00</option>
+  		<option value="16">16:00</option>
+  		<option value="17">17:00</option>
+  		<option value="18">18:00</option>
+  		<option value="19">19:00</option>
+  		<option value="20">20:00</option>
+		<option value="21">21:00</option>
+  		<option value="22">22:00</option>
+  		<option value="23">23:00</option>
+	</select>
+
+	<a>&nbsp;&nbsp;End Date&nbsp;</a>
+	<input type="text" name="testinput2" id="end" />
+	<script language="JavaScript">
+	var A_CALTPL = {
+		'months' : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+		'weekdays' : ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sa'],
+		'yearscroll': true,
+		'weekstart': 0,
+		'centyear'  : 70,
+		'imgpath' : 'img/'
+	}
+
+	new tcal ({
+		// if referenced by ID then form name is not required
+		'controlname': 'end'
+	}, A_CALTPL);
+	</script>
+	<a>End Time</a>
+	<select id="endtime">
+  		<option value="0">00:00</option>
+  		<option value="1">01:00</option>
+  		<option value="2">02:00</option>
+  		<option value="3">03:00</option>
+  		<option value="4">04:00</option>
+		<option value="5">05:00</option>
+  		<option value="6">06:00</option>
+  		<option value="7">07:00</option>
+  		<option value="8">08:00</option>
+  		<option value="9">09:00</option>
+  		<option value="10">10:00</option>
+  		<option value="11">11:00</option>
+  		<option value="12">12:00</option>
+		<option value="13">13:00</option>
+  		<option value="14">14:00</option>
+  		<option value="15">15:00</option>
+  		<option value="16">16:00</option>
+  		<option value="17">17:00</option>
+  		<option value="18">18:00</option>
+  		<option value="19">19:00</option>
+  		<option value="20">20:00</option>
+		<option value="21">21:00</option>
+  		<option value="22">22:00</option>
+  		<option value="23">23:00</option>
+	</select>
+
+	<INPUT TYPE="button" NAME="button" Value="View" onClick='setTime($("input#start").val(),$("input#end").val())'>
+	<INPUT TYPE="button" NAME="buttonreset" Value="Default" onClick='resetTime()'>
+
+
+	</form>
+
+<h3>Status of Publication</h3>
+<div id="started"> Retriving Data... </div>
+<br>
+	</div>
+
+  </div>
+  </body>
+
+
+<script src="vendor/couchapp/loader.js"></script>
+
+
+<script type="text/javascript" charset="utf-8">
+
+
+  $.couch.app(function(app) {
+    $("#sidebar").evently("menu", app);
+    $("#head").evently("head", app);
+    //$("#items").evently("main", app);
+  });
+
+  $(document).ready(function() {
+	    drawchart();
+		setInterval(function() drawchart(), 60000);
+});
+
+
+var timeSlice = 3600000;
+
+inpute = [];
+inpute.data = [];
+inpute.stacked = [];
+inpute.status = ["done","failed"];
+
+var endd = new Date();
+var defaultTime = true;
+
+function setTime(start, end){
+			var startdate = new Date(start);
+			startdate.setUTCHours($("#starttime").val());
+			var enddate = new Date(end);
+			enddate.setUTCHours($("#endtime").val());
+			if(enddate<startdate){
+				alert("Error: start time bigger than end time");
+			}else{
+				startd = startdate;
+				endd = enddate;
+
+				}
+				defaultTime = false;
+				drawchart();
+			}
+
+function resetTime(){
+	defaultTime = true;
+	drawchart();
+
+	}
+
+function calcInterval(){
+	var now = new Date();
+    var start = new Date(now);
+    start.setDate(start.getDate()-1);
+	startd = start;
+	endd = now;
+
+	}
+
+inpute.popolate = function(){
+		inpute.stacked = [];
+		var h = timeSlice;
+		var hours = (endd.getTime() - startd.getTime())/h;
+		var startkey =  [startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
+			var endkey = [endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
+			xmlhttp = new XMLHttpRequest();
+  			xmlhttp.open("GET", "_view/publicationState?group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.send();
+                	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
+			var rs = 0;
+			var tslice = new Date(startd);
+			var donefile = [];
+			var failfile = [];
+			var killfile=[];
+			for(i=0; i<=hours; i++){
+
+			var key = [tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
+			//alert(key.toString());
+			var doneF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
+				"value": 0};
+			var failF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
+				"value": 0};
+
+			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
+				doneF.value= response[rs].value.published;
+				failF.value= response[rs].value.not_published;
+				rs = rs+1;
+			}
+
+			donefile.push(doneF);
+			failfile.push(failF);
+			tslice.setHours(tslice.getHours()+1);
+			}
+		inpute.stacked.push(donefile);
+		inpute.stacked.push(failfile);
+}
+
+
+function drawchart(){
+
+	if(defaultTime){
+		calcInterval();
+	}
+	inpute.popolate();
+
+    setTimeout(function() stackedArea("started", inpute) , 1000 );
+}
+
+
+</script>
+
+
+</html>
+

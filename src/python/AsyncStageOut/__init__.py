@@ -1,4 +1,6 @@
 import hashlib
+import subprocess
+import os
 
 __version__ = '1.0.0'
 

@@ -112,13 +112,15 @@ class TransferWorker:
                 raise
 
 
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.config_db = server.connectDatabase(self.config.config_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
         self.cleanEnvironment = ''
+        self.userDN = ''
+        self.init = True
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         # TODO: improve how the worker gets a log
@@ -126,8 +128,17 @@ class TransferWorker:
         query = {'group': True,
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
         #         'stale': 'ok'}
-        self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
-
+        self.logger.debug("Trying to get DN")
+        try:
+            self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
+        except Exception, ex:
+            self.logger.error("Failed to get the user DN!")
+            msg =  "Error contacting couch"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            self.init = False
+            return
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
@@ -163,7 +174,7 @@ class TransferWorker:
             # Use the operator's proxy when the user proxy in invalid.
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
-            self.userProxy = config.serviceCert
+            self.userProxy = config.opsProxy
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
@@ -216,7 +227,7 @@ class TransferWorker:
 
                     lcgdel_file = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
+                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv --connect-timeout 20 --sendreceive-timeout 240 %s'  % \
                               (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
                     self.logger.debug("Running remove command %s" % command)
                     self.logger.debug("log file: %s" % lcgdel_file.name)
@@ -371,15 +382,27 @@ class TransferWorker:
         except Exception, e:
             self.logger.error('it does not seem to be an lfn %s' %file.split(':'))
             return None
-
         if site == 'T1_US_FNAL':
             site = 'T1_US_FNAL_Buffer'
-
+        if site == 'T1_ES_PIC':
+            site = 'T1_ES_PIC_Buffer'
+        if site == 'T1_DE_KIT':
+            site = 'T1_DE_KIT_Buffer'
+        if site == 'T1_FR_CCIN2P3':
+            site = 'T1_FR_CCIN2P3_Buffer'
+        if site == 'T1_IT_CNAF':
+            site = 'T1_IT_CNAF_Buffer'
+        if site == 'T1_RU_JINR':
+            site = 'T1_RU_JINR_Buffer'
+        if site == 'T1_TW_ASGC':
+            site = 'T1_TW_ASGC_Buffer'
+        if site == 'T1_UK_RAL':
+            site = 'T1_UK_RAL_Buffer'
+        if site == 'T1_CH_CERN':
+            site = 'T1_CH_CERN_Buffer'
         if self.tfc_map.has_key(site):
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
-
             if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
-
             #TODO: improve fix for wrong tfc on sites
             try:
                 if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
@@ -391,11 +414,9 @@ class TransferWorker:
             except AttributeError:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
-
             # Add the pfn key into pfn-to-lfn mapping
             if not self.pfn_to_lfn_mapping.has_key(pfn):
                 self.pfn_to_lfn_mapping[pfn] = lfn
-
             return pfn
         else:
             self.logger.error('Wrong site %s!' % site)
@@ -583,15 +604,12 @@ class TransferWorker:
 
         for line in ftscp_file.readlines():
             try:
-                if line.strip() == 'Too many errors from status update, cancelling transfer':
-                    self.logger.debug("Problem to contact the FTS server!")
-                    break
                 if line.split(':')[0].strip() == 'Source':
                     lfn = self.get_lfn_from_pfn( siteSource, line.split('Source:')[1:][0].strip() )
                     # Now we have the lfn, skip to the next line
                     continue
                 if line.split(':')[0].strip() == 'State' and lfn:
-                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done':
+                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done' or line.split(':')[1].strip() == 'Finishing':
                         transferred_files.append(lfn)
                     else:
                         failed_files.append(lfn)
@@ -655,7 +673,6 @@ class TransferWorker:
         Mark the list of files as tranferred
         """
         for lfn in files:
-
             try:
                 document = self.db.document( getHashLfn(lfn) )
             except Exception, ex:
@@ -663,52 +680,45 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
-            if good_logfile:
-                to_attach = file(good_logfile)
-                content = to_attach.read(-1)
-                retval = self.db.addAttachment(document["_id"],
-                                               document["_rev"],
-                                               content,
-                                               to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
-                                               "text/plain")
-
-                if retval.get('ok', False) != True:
-                    # Then we have a problem
-                    msg = "Adding an attachment to document failed\n"
-                    msg += str(retval)
-                    msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+            if document['state'] != 'killed':
+                if good_logfile:
+                    to_attach = file(good_logfile)
+                    content = to_attach.read(-1)
+                    retval = self.db.addAttachment(document["_id"],
+                                                   document["_rev"],
+                                                   content,
+                                                   to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
+                                                   "text/plain")
+                    if retval.get('ok', False) != True:
+                        # Then we have a problem
+                        msg = "Adding an attachment to document failed\n"
+                        msg += str(retval)
+                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                        self.logger.error(msg)
+                outputLfn = document['lfn'].replace('store/temp', 'store', 1)
+                try:
+                    now = str(datetime.datetime.now())
+                    last_update = time.time()
+                    data = {}
+                    data['end_time'] = now
+                    data['state'] = 'done'
+                    data['lfn'] = outputLfn
+                    data['last_update'] = last_update
+                    updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
+                    updateUri += "?" + urllib.urlencode(data)
+                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                except Exception, ex:
+                    msg =  "Error updating document in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
                     self.logger.error(msg)
-
-            outputLfn = document['lfn'].replace('store/temp', 'store', 1)
-
-            try:
-
-                now = str(datetime.datetime.now())
-                last_update = time.time()
-                data = {}
-                data['end_time'] = now
-                data['state'] = 'done'
-		data['lfn'] = outputLfn
-                data['last_update'] = last_update
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
-                updateUri += "?" + urllib.urlencode(data)
-                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
-                msg =  "Error updating document in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-            try:
-                self.db.commit()
-            except Exception, ex:
-                msg =  "Error commiting documents in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-
+                try:
+                    self.db.commit()
+                except Exception, ex:
+                    msg =  "Error commiting documents in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
 #            outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
 #            pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
 #            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['job_end_time'], \
@@ -755,54 +765,48 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-
-            if bad_logfile:
-                to_attach = file(bad_logfile)
-                content = to_attach.read(-1)
-                retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
-
-                if retval.get('ok', False) != True:
-                    # Then we have a problem
-                    msg = "Adding an attachment to document failed\n"
-                    msg += str(retval)
-                    msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
-                    self.logger.error(msg)
-
-            now = str(datetime.datetime.now())
-            last_update = time.time()
-
-            # Prepare data to update the document in couch
-            if force_fail or len(document['retry_count']) + 1 > self.max_retry:
-                data['state'] = 'failed'
-                if self.failures_reasons[lfn]:
-                    data['failure_reason'] = self.failures_reasons[lfn]
+            if document['state'] != 'killed':
+                if bad_logfile:
+                    to_attach = file(bad_logfile)
+                    content = to_attach.read(-1)
+                    retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
+                    if retval.get('ok', False) != True:
+                        # Then we have a problem
+                        msg = "Adding an attachment to document failed\n"
+                        msg += str(retval)
+                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                        self.logger.error(msg)
+                now = str(datetime.datetime.now())
+                last_update = time.time()
+                # Prepare data to update the document in couch
+                if force_fail or len(document['retry_count']) + 1 > self.max_retry:
+                    data['state'] = 'failed'
+                    if self.failures_reasons[lfn]:
+                        data['failure_reason'] = self.failures_reasons[lfn]
+                    else:
+                        data['failure_reason'] = "User Proxy has expired."
+                    data['end_time'] = now
                 else:
-                    data['failure_reason'] = "User Proxy has expired."
-                data['end_time'] = now
-            else:
-                data['state'] = 'acquired'
-
-            data['last_update'] = last_update
-            data['retry'] = now
-
-            # Update the document in couch
-            try:
-                updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
-                updateUri += "?" + urllib.urlencode(data)
-                self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
-                msg =  "Error in updating document in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-
-            try:
-                self.db.commit()
-            except Exception, ex:
-                msg =  "Error commiting documents in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
+                    data['state'] = 'acquired'
+                data['last_update'] = last_update
+                data['retry'] = now
+                # Update the document in couch
+                try:
+                    updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
+                    updateUri += "?" + urllib.urlencode(data)
+                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                except Exception, ex:
+                    msg =  "Error in updating document in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                try:
+                    self.db.commit()
+                except Exception, ex:
+                    msg =  "Error commiting documents in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
              # TODO: Evaluate message per file
 #            try:
 #                self.logger.debug("Worker producing %s" %(str(document["jobid"]) + ":" + document["state"]))

@@ -4,15 +4,14 @@ function(keys, values, rereduce) {
       for (var someValue in values) {
       output['done'] += values[someValue]['done'];
       output['failed'] += values[someValue]['failed'];
-      output['killed'] += values[someValue]['killed'];
-      output['resubmitted'] += values[someValue]['resubmitted'];
+      output['killed'] += values[someValue]['killed'];	
+      output['resubmitted'] += values[someValue]['resubmitted'];	
       }
   } else {
       for (var someValue in values) {
-        output[values[someValue]['state']] += 1;
-        }
-
+      	output[values[someValue]['state']] += 1;
+	}
+      
     }
   return output;
 }
-
