@@ -308,7 +308,10 @@ class TransferWorker:
         query = {'group': True,
                  'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
                  #'stale': 'ok'}
-        sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+        try:
+            sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+        except:
+            return []
 
         def keys_map(dict):
             return dict['key'][4], dict['key'][3]
@@ -334,18 +337,17 @@ class TransferWorker:
                      'limit': self.config.max_files_per_transfer,
                      'key':[self.user, self.group, self.role, destination, source, self.userDN]}
                      #'stale': 'ok'}
-
-                if not retry:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
-                else:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp_retry', query)['rows']
-
+                try:
+                    if not retry:
+                        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+                    else:
+                        active_files = self.db.loadView('AsyncTransfer', 'ftscp_retry', query)['rows']
+                except:
+                    return {}
                 # Prepare the list of active files updating the status to in transfer if the proxy is valid.
                 acquired_files = self.mark_acquired(active_files)
-
                 if not acquired_files:
                     continue
-
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
                                                                                  len(acquired_files),
                                                                                  source,
@@ -482,7 +484,7 @@ class TransferWorker:
 
             ftslog_file = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
 
-            logs_pool[link[0]] = ftslog_file
+            logs_pool[link] = ftslog_file
 
             self.logger.debug("Running FTSCP command")
             self.logger.debug("FTS server: %s" % fts_server_for_transfer)
@@ -507,7 +509,7 @@ class TransferWorker:
                         )
 
             processes.add(proc)
-            mapping_link_process[proc] = link[0]
+            mapping_link_process[proc] = link
 
             # now populate results by parsing the copy job's log file.
             # results is a tuple of lists, 1st list is transferred files, second is failed
@@ -532,6 +534,10 @@ class TransferWorker:
         self.logger.debug("WORK DONE WAITING and CLEANING")
 
         for p in processes:
+            self.logger.debug("Process list %s" %processes)
+            self.logger.debug("Link to Process %s" %mapping_link_process)
+            self.logger.debug("Link to Log %s" %logs_pool)
+            self.logger.debug("Current process %s" %p)
             if p.poll() is None:
                 p.wait();
                 link = mapping_link_process[p]
