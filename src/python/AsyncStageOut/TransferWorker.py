@@ -101,7 +101,6 @@ class TransferWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
         self.pfn_to_lfn_mapping = {}
-
         try:
             os.makedirs(self.log_dir)
         except OSError, e:
@@ -110,11 +109,10 @@ class TransferWorker:
             else:
                 self.logger.error('Unknown error in mkdir' % e.errno)
                 raise
-
-
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
-        self.config_db = server.connectDatabase(self.config.config_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')

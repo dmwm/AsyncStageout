@@ -35,7 +35,8 @@ class StatisticDaemon(BaseWorkerThread):
 
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
-        self.config_db = server.connectDatabase(self.config.config_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.logger.debug('Connected to CouchDB')
 
         statserver = CouchServer(self.config.couch_statinstance)

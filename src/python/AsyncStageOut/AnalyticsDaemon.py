@@ -47,7 +47,8 @@ class AnalyticsDaemon(BaseWorkerThread):
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to local couchDB')
-        self.config_db = server.connectDatabase(self.config.config_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.amq_auth_file = self.config.amq_auth_file
         monitoring_server = CouchServer(dburl=self.config.couch_user_monitoring_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.monitoring_db = monitoring_server.connectDatabase(self.config.user_monitoring_db)
@@ -67,7 +68,8 @@ class AnalyticsDaemon(BaseWorkerThread):
         except Exception, e:
             self.logger.exception('A problem occured when contacting config DB in couch: %s' % e)
         self.logger.debug('Analytics starts at: %s' %str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
-        self.updateDatabaseSource()
+        if self.amq_auth_file:
+            self.updateDatabaseSource()
         # TODO: Evaluate if we still need for crab -status
         #self.updateWorkflowSummaries()
         self.updateFilesSummaries()
@@ -211,7 +213,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         updateUri = "/" + self.config_db.name + "/_design/asynctransfer_config/_update/lastDBUpdate/MONITORING_DB_UPDATE"
         updateUri += "?db_update=%d" % ( end_time + 0.000001)
         try:
-            self.monitoring_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+            self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             query = { 'startkey': since, 'endkey': end_time + 1 }
             all_files = self.db.loadView('AsyncTransfer', 'LastUpdatePerFile', query)['rows']
         except Exception, e:
