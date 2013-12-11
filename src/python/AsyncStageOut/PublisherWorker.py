@@ -127,6 +127,7 @@ class PublisherWorker:
         3- then call publish, mark_good, mark_failed for each wf
         """
         active_user_workflows = []
+        self.lfn_map = {}
         query = {'group':True}
         try:
             active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
@@ -153,7 +154,11 @@ class PublisherWorker:
                 wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                        str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
                                        - time.timezone)
-                lfn_ready.append(file['value'][1])
+                # To move once the view is fixed
+                lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
+                lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                self.lfn_map[lfn_orig] = file['value'][1]
+                lfn_ready.append(lfn_orig)
             self.logger.debug('LFNs %s ready %s %s' %(len(lfn_ready), lfn_ready, user_wf['value']))
             # If the number of files < max_files_per_block then check the oldness of the workflow
             if user_wf['value'] <= self.max_files_per_block:
@@ -210,8 +215,9 @@ class PublisherWorker:
                 data = {}
                 data['publication_state'] = 'published'
                 data['last_update'] = last_update
+                lfn_db = self.lfn_map[lfn]
                 updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + \
-                            getHashLfn(lfn.replace('store', 'store/temp', 1))
+                            getHashLfn(lfn_db)
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
@@ -236,7 +242,8 @@ class PublisherWorker:
         last_update = int(time.time())
         for lfn in files:
             data = {}
-            docId = getHashLfn(lfn)
+            lfn_db = self.lfn_map[lfn]
+            docId = getHashLfn(lfn_db)
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
