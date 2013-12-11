@@ -355,8 +355,8 @@ class TransferWorker:
                 def tfc_map(item):
                     source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                       item['value'].replace('store/temp', 'store', 1)))
-
+                                                                       item['value'].replace('store/temp', 'store', 1).replace(\
+                                                                       '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
                     new_job.append('%s %s' % (source_pfn, destination_pfn))
 
                 map(tfc_map, acquired_files)
