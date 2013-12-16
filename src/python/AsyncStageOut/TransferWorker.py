@@ -24,6 +24,7 @@ import urllib
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
+from AsyncStageOut import getDNFromUserName
 #import json
 #import socket
 #import stomp
@@ -128,13 +129,15 @@ class TransferWorker:
         #         'stale': 'ok'}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
+            self.userDN = getDNFromUserName(self.user)
         except Exception, ex:
-            self.logger.error("Failed to get the user DN!")
-            msg =  "Error contacting couch"
+            msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+            self.init = False
+            return
+        if not self.userDN:
             self.init = False
             return
         defaultDelegation = {
@@ -333,7 +336,7 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, self.group, self.role, destination, source, self.userDN]}
+                     'key':[self.user, self.group, self.role, destination, source]}
                      #'stale': 'ok'}
                 try:
                     if not retry:

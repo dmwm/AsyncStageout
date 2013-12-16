@@ -27,6 +27,7 @@ from DBSAPI.dbsMigrateApi import DbsMigrateApi
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
+from AsyncStageOut import getDNFromUserName
 from WMCore.DataStructs.Run import Run
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 import pycurl
@@ -77,13 +78,15 @@ class PublisherWorker:
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
+            self.userDN = getDNFromUserName(self.user)
         except Exception, ex:
-            self.logger.error("Failed to get the user DN!")
-            msg =  "Error contacting couch"
+            msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+            self.init = False
+            return
+        if not self.userDN:
             self.init = False
             return
         defaultDelegation = {
@@ -167,7 +170,7 @@ class PublisherWorker:
                     continue
                 else:#check the ASO queue
                     if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
-                        workflow_expired = user_wf['key'][4]
+                        workflow_expired = user_wf['key'][3]
                         query = {'reduce':True, 'group': True, 'key':workflow_expired}
                         try:
                             active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
@@ -197,8 +200,8 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), \
-                                                         str(file['key'][3]), str(file['key'][0]), \
+                failed_files, good_files = self.publish( str(file['key'][3]), str(file['value'][2]), \
+                                                         self.userDN, str(file['key'][0]), \
                                                          str(file['value'][3]), str(file['value'][4]), \
                                                          str(seName), lfn_ready )
                 self.mark_failed( failed_files )
