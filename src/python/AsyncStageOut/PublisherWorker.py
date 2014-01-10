@@ -29,6 +29,7 @@ from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from WMCore.DataStructs.Run import Run
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
+import dbs.apis.dbsClient as dbsClient
 import pycurl
 import cStringIO
 
@@ -289,7 +290,7 @@ class PublisherWorker:
             else:
                 return [], []
         self.logger.info("Starting data publication for: " + str(workflow))
-        failed, done, dbsResults = self.publishInDBS(userdn=userdn, sourceURL=sourceurl,
+        failed, done, dbsResults = self.publishInDBS2(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
                                                      destURL=dbsurl, targetSE=targetSE, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
@@ -317,6 +318,7 @@ class PublisherWorker:
         self.logger.debug("Starting Read cache...")
         buf = cStringIO.StringIO()
         res = []
+        # TODO: input sanitization
         url = self.cache_area + '?taskname=' + workflow + '&filetype=EDM'
         try:
             c = pycurl.Curl()
@@ -430,7 +432,8 @@ class PublisherWorker:
             DBSFilesFormat.append(temp_dbs_file)
         return DBSFilesFormat
 
-    def publishInDBS(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
+
+    def publishInDBS2(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
         """
         Actually do the publishing
         """
@@ -466,7 +469,7 @@ class PublisherWorker:
         failed = []
         published = []
         results = {}
-        # Start of publishInDBS
+        # Start of publishInDBS2
         blockSize = self.max_files_per_block
         migrateAPI = DbsMigrateApi(sourceURL, destURL)
         sourceApi = DbsApi({'url' : sourceURL, 'version' : 'DBS_2_0_9', 'mode' : 'POST'})
@@ -589,3 +592,195 @@ class PublisherWorker:
         self.logger.info("end of publication failed %s published %s publish_next_iteration %s results %s" \
                          %(failed, published, publish_next_iteration, results))
         return failed, published, results
+
+
+    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
+        """
+        Publish files into DBS3
+        """
+        publish_next_iteration = []
+        failed = []
+        published = []
+        results = {}
+        blockSize = self.max_files_per_block
+
+        # TODO: Migration of datasets.
+        proxy = os.environ.get("SOCKS5_PROXY")
+        destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
+
+        # Submit migration
+        existing_datasets = destApi.api.listDatasets(dataset=inputDataset)
+        if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
+            data = {'migration_url': sourceURL, 'migration_input': inputDataset}
+            result = destApi.submitMigration(data)
+            self.logger.info("Result of migration request %s" % str(result))
+            id = result.get("migration_details", {}).get("migration_request_id")
+            if id == None:
+                self.logger.error("Migration request failed to submit.")
+                self.logger.error("Migration request results: %s" % str(result)
+                return [], [], []
+            time.sleep(1)
+            # Wait for up to 60 seconds, then return to the main loop.  Note we don't
+            # fail or cancel anything.  Just retry later.
+            # States:
+            # 0=PENDING
+            # 1=IN PROGRESS
+            # 2=COMPLETED
+            # 3=FAILED
+            for i in range(60):
+                status = destApi.statusMigration(migration_rqst_id=id)
+                state = status.get("migration_status")
+                if state == 0 or state == 1: time.sleep(1)
+
+            if state == 0 or state == 1:
+                self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
+                return [], [], []
+            if state == 3:
+                self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status))
+                return [], [], []
+            self.logger.info("Migration of %s is complete." % inputDataset)
+            existing_datasets = destApi.api.listDatasets(dataset=inputDataset, detail=True)
+
+        # Get basic data about the parent dataset
+        if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
+            self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
+            return [], [], []
+        primary_ds_type = existing_datasets[0]['primary_ds_type']
+        primary_ds_name = existing_datasets[0]['primary_ds_name']
+        acquisition_era_name = existing_datasets[0]['acquisition_era_name']
+
+        # There's little chance this is correct, but it's our best guess for now.
+        existing_output = destApi.api.listOutputConfigs(dataset=inputDataset)
+        if not existing_output:
+            slf.logger.error("Unable to list output config for input dataset %s." % inputDataset)
+        global_tag = existing_output['global_tag']
+
+        # Upload as much basic information as we can
+        destApi.insertPrimaryDataset({'primary_ds_name': primary_ds_name, 'primary_ds_type': 'test'})[0]
+
+        for datasetPath, files in toPublish.iteritems():
+            results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
+
+            if not files:
+                continue
+
+            appName = 'cmsRun'
+            appVer  = files[0]["swversion"]
+            appFam  = 'output'
+            seName  = targetSE
+            # TODO: this is invalid:
+            pset_hash = files[0]['publish_name'].split("-")[-1]
+            gtag = str(files[0]['global_tag'])
+            if gtag == "None":
+                gtag = global_tag
+            acquisitionera = str(files[0]['acquisitionera'])
+            if acquisitionera == "null":
+                acquisitionera = acquisition_era_name
+            empty, primName, procName, tier =  datasetPath.split('/')
+
+            # Find any files already in the dataset so we can skip them
+            try:
+                existingDBSFiles = destApi.listFiles(path=datasetPath)
+                existingFiles = [x['logical_file_name'] for x in existingDBSFiles]
+                results[datasetPath]['existingFiles'] = len(existingFiles)
+            except DbsException, ex:
+                existingDBSFiles = []
+                existingFiles = []
+                msg =  "Error when listing files in DBS"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+            workToDo = False
+
+            # Is there anything to do?
+            for file in files:
+                if not file['lfn'] in existingFiles:
+                    workToDo = True
+                    break
+            if not workToDo:
+                self.logger.info("Nothing uploaded, %s has these files already or not enough files" % datasetPath)
+                for file in files:
+                    published.append(file['lfn'])
+                continue
+
+            # Note: DBS3 allows for us to re-add most things without throwing an exception.
+            self.logger.debug("Adding acquisition era %s" % acquisitionera)
+            destApi.insertAcquisitionEra(acquisitionera)
+
+            output_config = {'release_version': appVer,
+                             'pset_hash': pset_hash,
+                             'app_name': appName,
+                             'output_module_label': 'o', #TODO
+                             'global_tag': global_tag,
+                             'pset_name': 'pset.py', #TODO
+                            }
+            self.logger.debug("Adding output config %s" % str(output_config))
+
+            dataset_config = {'primary_ds_name': primary_ds_name,
+                              'dataset': datasetPath,
+                              'processed_ds_name': procName,
+                              'data_tier_name': tier,
+                              'acquisition_era_name': acquisitionera,
+                              'processing_version': 'v1' # TODO
+                             }
+            results = destApi.insertDataset(dataset_config)
+
+            # TODO - this is as far as I have gotten in the DBS2->3 conversion as of 1/09.
+            dbsFiles = []
+            for file in files:
+                if not file['lfn'] in existingFiles:
+                    dbsFiles.append(self.format_file_3(file))
+                published.append(file['lfn'])
+            count = 0
+            blockCount = 0
+            self.logger.debug("Blocks creation of %s is effectively starting here..." % dbsFiles)
+            if len(dbsFiles) < self.max_files_per_block:
+                self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                if not self.not_expired_wf:
+                    try:
+                        destApi.insertBlock() # TODO
+                        #block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
+                        #status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                        #                     files=dbsFiles[count:count+blockSize], \
+                        #                     block=block, maxFiles=blockSize)
+                        destApi.insertFiles() # TODO
+                        count += blockSize
+                        blockCount += 1
+                        status = closeBlock(apiRef=destApi, block=block)
+                    except Exception, ex:
+                        failed = self.dbsFiles_to_failed(dbsFiles)
+                        msg =  "Error when publishing"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+                else:
+                    self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                    return [], [], []
+            else:
+                while count < len(dbsFiles):
+                    try:
+                        if len(dbsFiles[count:len(dbsFiles)]) < self.max_files_per_block:
+                            for file in dbsFiles[count:len(dbsFiles)]:
+                                publish_next_iteration.append(file['LogicalFileName'])
+                            count += blockSize
+                            continue
+                        block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
+                        status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
+                                             files=dbsFiles[count:count+blockSize], \
+                                             block=block, maxFiles=blockSize)
+                        count += blockSize
+                        blockCount += 1
+                        status = closeBlock(apiRef=destApi, block=block)
+                    except Exception, ex:
+                        failed = self.dbsFiles_to_failed(dbsFiles)
+                        msg =  "Error when publishing"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+            results[datasetPath]['files'] = len(dbsFiles)
+            results[datasetPath]['blocks'] = blockCount
+        published = filter(lambda x: x not in failed + publish_next_iteration, published)
+        self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \
+                         %(failed, published, publish_next_iteration, results))
+        return failed, published, results
+
