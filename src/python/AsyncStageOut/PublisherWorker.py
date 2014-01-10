@@ -18,6 +18,7 @@ import tarfile
 import urllib
 import json
 import types
+import uuid
 from WMComponent.DBSUpload.DBSInterface import createProcessedDataset, createAlgorithm, insertFiles
 from WMComponent.DBSUpload.DBSInterface import createPrimaryDataset,   createFileBlock, closeBlock
 from WMComponent.DBSUpload.DBSInterface import createDBSFileFromBufferFile
@@ -433,6 +434,26 @@ class PublisherWorker:
         return DBSFilesFormat
 
 
+    def format_file_3(self, file, output_config, dataset):
+        nf = {'logical_file_name': file['lfn'],
+              'dataset': file['outdataset'],
+              'file_type': 'EDM',
+              'check_sum': file['cksum'],
+              'event_count': file['inevents'],
+              'file_size': file['filesize'],
+              'adler32': file['adler32'],
+              'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
+              'file_output_config_list': [output_config],
+             }
+        file_lumi_list = []
+        for run, lumis in file['runlumi'].items():
+            for lumi in lumis:
+                file_lumi_list.append({'lumi_section_num': lumi, 'run_num': run})
+        nf['file_lumi_list'] = file_lumi_list
+        if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
+            nf['md5'] = file['md5']
+        return nf
+
     def publishInDBS2(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
         """
         Actually do the publishing
@@ -617,7 +638,7 @@ class PublisherWorker:
             id = result.get("migration_details", {}).get("migration_request_id")
             if id == None:
                 self.logger.error("Migration request failed to submit.")
-                self.logger.error("Migration request results: %s" % str(result)
+                self.logger.error("Migration request results: %s" % str(result))
                 return [], [], []
             time.sleep(1)
             # Wait for up to 60 seconds, then return to the main loop.  Note we don't
@@ -636,7 +657,7 @@ class PublisherWorker:
                 self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
                 return [], [], []
             if state == 3:
-                self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status))
+                self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status)))
                 return [], [], []
             self.logger.info("Migration of %s is complete." % inputDataset)
             existing_datasets = destApi.api.listDatasets(dataset=inputDataset, detail=True)
@@ -729,26 +750,30 @@ class PublisherWorker:
             dbsFiles = []
             for file in files:
                 if not file['lfn'] in existingFiles:
-                    dbsFiles.append(self.format_file_3(file))
+                    dbsFiles.append(self.format_file_3(file, output_config, datasetPath))
                 published.append(file['lfn'])
             count = 0
             blockCount = 0
-            self.logger.debug("Blocks creation of %s is effectively starting here..." % dbsFiles)
+            self.logger.debug("Block creation for files %s is starting." % dbsFiles)
             if len(dbsFiles) < self.max_files_per_block:
                 self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
                 if not self.not_expired_wf:
+                    block_name = "%s#%s" % (datasetPath, str(uuid.uuid4()))
+                    files_to_publish = dbsFiles[count:count+blockSize]
                     try:
-                        destApi.insertBlock() # TODO
-                        #block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                        #status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
-                        #                     files=dbsFiles[count:count+blockSize], \
-                        #                     block=block, maxFiles=blockSize)
-                        destApi.insertFiles() # TODO
+                        self.logger.debug("Inserting block %s." % block_name)
+                        destApi.insertBlock({'block_name': block_name, 'origin_site_name': seName})
+                        for file in files_to_publish:
+                            file['block'] = block_name
+                        self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                        destApi.insertFiles(filesList=files_to_publish)
                         count += blockSize
                         blockCount += 1
-                        status = closeBlock(apiRef=destApi, block=block)
+                        self.logger.debug("Closing block %s." % block_name)
+                        status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
+                        self.logger.debug("Block closing status: %s.", str(status))
                     except Exception, ex:
-                        failed = self.dbsFiles_to_failed(dbsFiles)
+                        failed = [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -758,22 +783,26 @@ class PublisherWorker:
                     return [], [], []
             else:
                 while count < len(dbsFiles):
+                    block_name = "%s#%s" % (datasetPath, str(uuid.uuid4()))
+                    files_to_publish = dbsFiles[count:count+blockSize]
                     try:
                         if len(dbsFiles[count:len(dbsFiles)]) < self.max_files_per_block:
                             for file in dbsFiles[count:len(dbsFiles)]:
-                                publish_next_iteration.append(file['LogicalFileName'])
+                                publish_next_iteration.append(file['logical_file_name'])
                             count += blockSize
                             continue
-                        block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
-                        status = insertFiles(apiRef=destApi, datasetPath=str(datasetPath), \
-                                             files=dbsFiles[count:count+blockSize], \
-                                             block=block, maxFiles=blockSize)
+                        self.logger.debug("Inserting block %s." % block_name)
+                        destApi.insertBlock({'block_name': block_name, 'origin_site_name': seName})
+                        self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                        destApi.insertFiles(filesList=files_to_publish)
                         count += blockSize
                         blockCount += 1
-                        status = closeBlock(apiRef=destApi, block=block)
+                        self.logger.debug("Closing block %s." % block_name)
+                        status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
+                        self.logger.debug("Block closing status: %s.", str(status))
                     except Exception, ex:
-                        failed = self.dbsFiles_to_failed(dbsFiles)
-                        msg =  "Error when publishing"
+                        failed = [i['logical_file_name'] for i in files_to_publish]
+                        msg =  "Error when publishing (%s) " % ", ".join(failed)
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
@@ -781,6 +810,6 @@ class PublisherWorker:
             results[datasetPath]['blocks'] = blockCount
         published = filter(lambda x: x not in failed + publish_next_iteration, published)
         self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \
-                         %(failed, published, publish_next_iteration, results))
+                         % (failed, published, publish_next_iteration, results))
         return failed, published, results
 
