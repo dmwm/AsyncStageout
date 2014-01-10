@@ -43,6 +43,8 @@ function(newDoc, oldDoc, userCtx) {
     var allowed = isGlobalAdm ||
                   matchesRole("operator", "group:aso") ||
                   matchesRole("web-service", "group:facops");
+                  (((typeof newDoc.user === "undefined" && oldDoc) || newDoc.user === userCtx.name) &&
+                  (!oldDoc || oldDoc.user === userCtx.name));
 
     // Throw if user not validated
     if (!allowed) {
