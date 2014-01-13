@@ -449,11 +449,11 @@ class PublisherWorker:
 
     def format_file_3(self, file, output_config, dataset):
         nf = {'logical_file_name': file['lfn'],
-              'dataset': file['outdataset'],
+              'dataset': dataset,
               'file_type': 'EDM',
-              'check_sum': file['cksum'],
-              'event_count': file['inevents'],
-              'file_size': file['filesize'],
+              'check_sum': unicode(file['cksum']),
+              'event_count': unicode(file['inevents']),
+              'file_size': unicode(file['filesize']),
               'adler32': file['adler32'],
               'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
               'file_output_config_list': [output_config],
@@ -465,6 +465,7 @@ class PublisherWorker:
         nf['file_lumi_list'] = file_lumi_list
         if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
             nf['md5'] = file['md5']
+        self.logger.debug("File for DBS3: %s" % str(nf))
         return nf
 
     def publishInDBS2(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
@@ -840,13 +841,14 @@ class PublisherWorker:
                         status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
                         self.logger.debug("Block closing status: %s.", str(status))
                     except HTTPError, he:
-                        failed = [i['logical_file_name'] for i in files_to_publish]
+                        failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing."
                         self.logger.exception(msg)
                         self.logger.error("HTTP header: %s" % he.header)
                         self.logger.error("HTTP body: %s" % he.body)
+                        break
                     except Exception, ex:
-                        failed = [i['logical_file_name'] for i in files_to_publish]
+                        failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -866,20 +868,31 @@ class PublisherWorker:
                             continue
                         self.logger.debug("Inserting block %s." % block_name)
                         destApi.insertBlock({'block_name': block_name, 'origin_site_name': seName})
+                        for file in files_to_publish:
+                            file['block'] = block_name
                         self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                        print files_to_publish[0]
                         destApi.insertFiles(filesList=files_to_publish)
                         count += blockSize
                         blockCount += 1
                         self.logger.debug("Closing block %s." % block_name)
                         status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
                         self.logger.debug("Block closing status: %s.", str(status))
+                    except HTTPError, he:
+                        failed += [i['logical_file_name'] for i in files_to_publish]
+                        msg =  "Error when publishing."
+                        self.logger.exception(msg)
+                        self.logger.error("HTTP header: %s" % he.header)
+                        self.logger.error("HTTP body: %s" % he.body)
+                        count += blockSize
                     except Exception, ex:
-                        failed = [i['logical_file_name'] for i in files_to_publish]
+                        failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing (%s) " % ", ".join(failed)
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
-            results[datasetPath]['files'] = len(dbsFiles)
+                        count += blockSize
+            results[datasetPath]['files'] = len(dbsFiles) - len(failed)
             results[datasetPath]['blocks'] = blockCount
         published = filter(lambda x: x not in failed + publish_next_iteration, published)
         self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \

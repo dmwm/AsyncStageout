@@ -4,6 +4,7 @@ This module is meant to be a stand-alone way to the DBS3 publication code.
 """
 
 import os
+import time
 import json
 import logging
 import unittest
@@ -55,7 +56,7 @@ class TestDBS3Publication(unittest.TestCase):
         config.DBSPublisher.couch_instance = os.getenv("COUCHURL")
         config.DBSPublisher.publication_max_retry = 0
         config.DBSPublisher.serviceCert = orig_x509_user_proxy
-        config.DBSPublisher.max_files_per_block = 100
+        config.DBSPublisher.max_files_per_block = 10
         config.DBSPublisher.workflow_expiration_time = 3
 
         return config
@@ -70,6 +71,9 @@ class TestDBS3Publication(unittest.TestCase):
         toPublish = {}
         for files in res['result']:
             outdataset = str(files['outdataset'])
+            outdataset_info = outdataset.split("-")
+            outdataset_info[1] += "_%d" % int(time.time())
+            outdataset = "-".join(outdataset_info)
             if toPublish.has_key(outdataset):
                 toPublish[outdataset].append(files)
             else:
@@ -85,6 +89,7 @@ class TestDBS3Publication(unittest.TestCase):
                                                                 inputDataset=TEST_INPUT_DATASET, toPublish=toPublish,
                                                                 destURL=TEST_DBS3_WRITER, targetSE=TEST_SE_NAME, workflow=TEST_WORKFLOW)
         self.publisher.logger.debug("DBS publication results %s" % dbsResults)
+        self.assertFalse(failed)
 
 
 if __name__ == '__main__':
