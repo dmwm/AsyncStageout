@@ -42,8 +42,8 @@ function(newDoc, oldDoc, userCtx) {
     // The following rule aplies for all operation types
     var allowed = isGlobalAdm ||
                   matchesRole("operator", "group:aso") ||
-                  matchesRole("web-service", "group:facops");
-                  (((typeof newDoc.user === "undefined" && oldDoc) || newDoc.user === userCtx.name) &&
+                  matchesRole("web-service", "group:facops") ||
+                  ((newDoc._deleted === true || newDoc.user === userCtx.name) &&
                   (!oldDoc || oldDoc.user === userCtx.name));
 
     // Throw if user not validated
