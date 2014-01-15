@@ -79,6 +79,11 @@ class TestDBS3Publication(unittest.TestCase):
             else:
                 toPublish[outdataset] = []
                 toPublish[outdataset].append(files)
+            lfn_dir, name = os.path.split(files['lfn'])
+            name = name.split(".")
+            name = ".".join(name[:-1]) + "_%d.%s" % (int(time.time()), name[-1])
+            files['lfn'] = os.path.join(lfn_dir, name)
+
         # Publish all given files
         lfn_ready = [i['lfn'] for i in res['result']]
         fail_files, toPublish = self.publisher.clean(lfn_ready, toPublish)

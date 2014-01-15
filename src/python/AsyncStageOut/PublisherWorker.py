@@ -19,6 +19,7 @@ import urllib
 import json
 import types
 import uuid
+import pprint
 from WMComponent.DBSUpload.DBSInterface import createProcessedDataset, createAlgorithm, insertFiles
 from WMComponent.DBSUpload.DBSInterface import createPrimaryDataset,   createFileBlock, closeBlock
 from WMComponent.DBSUpload.DBSInterface import createDBSFileFromBufferFile
@@ -376,13 +377,13 @@ class PublisherWorker:
         """
         Clean before publishing
         """
-        self.logger.debug('File to publish %s' %toPublish)
+        #self.logger.debug('File to publish %s' %toPublish)
         fail_files = []
         new_toPublish = {}
         files_to_publish = []
         lfn_to_publish = []
         for ready in lfn_ready:
-            self.logger.debug('Checking LFN %s' %ready)
+            #self.logger.debug('Checking LFN %s' %ready)
             if toPublish:
                 for datasetPath, files in toPublish.iteritems():
                     new_temp_files = []
@@ -449,23 +450,20 @@ class PublisherWorker:
 
     def format_file_3(self, file, output_config, dataset):
         nf = {'logical_file_name': file['lfn'],
-              'dataset': dataset,
               'file_type': 'EDM',
               'check_sum': unicode(file['cksum']),
-              'event_count': unicode(file['inevents']),
-              'file_size': unicode(file['filesize']),
+              'event_count': file['inevents'],
+              'file_size': file['filesize'],
               'adler32': file['adler32'],
               'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
-              'file_output_config_list': [output_config],
              }
         file_lumi_list = []
         for run, lumis in file['runlumi'].items():
             for lumi in lumis:
-                file_lumi_list.append({'lumi_section_num': lumi, 'run_num': run})
+                file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
         nf['file_lumi_list'] = file_lumi_list
         if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
             nf['md5'] = file['md5']
-        self.logger.debug("File for DBS3: %s" % str(nf))
         return nf
 
     def publishInDBS2(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
@@ -676,6 +674,31 @@ class PublisherWorker:
             existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True)
         return existing_datasets
 
+    def createBulkBlock(self, output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files):
+        file_conf_list = []
+        file_parent_list = []
+        for file in files:
+            file_conf = output_config.copy()
+            file_conf_list.append(file_conf)
+            file_conf['lfn'] = file['logical_file_name']
+            for parent_lfn in file.get('file_parent_list', []):
+                file_parent_list.append({'logical_file_name': file['logical_file_name'], 'parent_logical_file_name': parent_lfn['file_parent_lfn']})
+            del file['file_parent_list']
+        blockDump = { \
+            'dataset_conf_list': [output_config],
+            'file_conf_list': file_conf_list,
+            'files': files,
+            'processing_era': processing_era_config,
+            'primds': primds_config,
+            'dataset': dataset_config,
+            'acquisition_era': acquisition_era_config,
+            'block': block_config,
+            'file_parent_list': file_parent_list,
+        }
+        blockDump['block']['file_count'] = len(files)
+        blockDump['block']['block_size'] = sum([int(file[u'file_size']) for file in files])
+        return blockDump
+
     def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
         """
         Publish files into DBS3
@@ -718,7 +741,6 @@ class PublisherWorker:
             self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
             return [], [], []
         primary_ds_type = existing_datasets[0]['primary_ds_type']
-        primary_ds_name = existing_datasets[0]['primary_ds_name']
         acquisition_era_name = existing_datasets[0]['acquisition_era_name']
         acquisition_era_name = "CRAB3"
 
@@ -729,9 +751,7 @@ class PublisherWorker:
         existing_output = existing_output[0]
         global_tag = existing_output['global_tag']
 
-        # Upload as much basic information as we can
-        result = destApi.insertPrimaryDataset({'primary_ds_name': primary_ds_name, 'primary_ds_type': 'test'})
-        self.logger.debug("Successfully inserting primary dataset %s" % primary_ds_name)
+        processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
@@ -746,7 +766,6 @@ class PublisherWorker:
             seName  = targetSE
             # TODO: this is invalid:
             pset_hash = files[0]['publishname'].split("-")[-1]
-            #print files[0]
             gtag = str(files[0]['globaltag'])
             if gtag == "None":
                 gtag = global_tag
@@ -756,8 +775,14 @@ class PublisherWorker:
             empty, primName, procName, tier =  dbsDatasetPath.split('/')
             # Change bbockelm-name-pset to bbockelm_name-pset
             procName = "_".join(procName.split("-")[:2]) + "-" + "-".join(procName.split("-")[2:])
-            procName = acquisition_era_name + "-" + procName + "-v1" # NOTE: DBS3 currently chokes if we don't include a processing version / acquisition era
+            # NOTE: DBS3 currently chokes if we don't include a processing version / acquisition era
+            procName = "%s-%s-v%d" % (acquisition_era_name, procName, processing_era_config['processing_version'])
             dbsDatasetPath = "/".join([empty, primName, procName, tier])
+
+            primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
+            self.logger.debug("About to insert primary dataset: %s" % str(primds_config))
+            destApi.insertPrimaryDataset(primds_config)
+            self.logger.debug("Successfully inserting primary dataset %s" % primName)
 
             # Find any files already in the dataset so we can skip them
             try:
@@ -784,37 +809,29 @@ class PublisherWorker:
                     published.append(file['lfn'])
                 continue
 
-            self.logger.debug("Adding acquisition era %s" % acquisitionera)
-            try:
-                destApi.insertAcquisitionEra({'acquisition_era_name': acquisitionera})
-            except HTTPError, he:
-                if he.msg.find("Invalid input: acquisition_era_name already exists in DB") >= 0:
-                    self.logger.info("Acquisition era already exists; proceeding.")
-                else:
-                    self.logger.exception("Error when inserting acquisition era.")
-                    return [], [], []
+            acquisition_era_config = {'acquisition_era_name': acquisitionera, 'start_date': 0}
 
             output_config = {'release_version': appVer,
                              'pset_hash': pset_hash,
                              'app_name': appName,
                              'output_module_label': 'o', #TODO
                              'global_tag': global_tag,
-                             'pset_name': 'pset.py', #TODO
                             }
-            self.logger.debug("Adding output config %s" % str(output_config))
+            self.logger.debug("Published output config.")
 
-            dataset_config = {'primary_ds_name': primary_ds_name,
-                              'dataset': dbsDatasetPath,
+            dataset_config = {'dataset': dbsDatasetPath,
                               'processed_ds_name': procName,
                               'data_tier_name': tier,
                               'acquisition_era_name': acquisitionera,
-                              'processing_version': '1', # TODO
                               'dataset_access_type': 'PRODUCTION', # TODO
+                              'physics_group_name': 'CRAB3',
+                              'last_modification_date': int(time.time()),
                              }
             self.logger.debug("About to insert dataset: %s" % str(dataset_config))
-            destApi.insertDataset(dataset_config)
+            #destApi.insertDataset(dataset_config)
+            del dataset_config['acquisition_era_name']
+            #dataset_config['acquisition_era'] = acquisition_era_config
 
-            # TODO - this is as far as I have gotten in the DBS2->3 conversion as of 1/09.
             dbsFiles = []
             for file in files:
                 if not file['lfn'] in existingFiles:
@@ -822,31 +839,18 @@ class PublisherWorker:
                 published.append(file['lfn'])
             count = 0
             blockCount = 0
-            self.logger.debug("Block creation for files %s is starting." % dbsFiles)
             if len(dbsFiles) < self.max_files_per_block:
                 self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
                 if not self.not_expired_wf:
                     block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
                     files_to_publish = dbsFiles[count:count+blockSize]
                     try:
-                        self.logger.debug("Inserting block %s." % block_name)
-                        destApi.insertBlock({'block_name': block_name, 'origin_site_name': seName})
-                        for file in files_to_publish:
-                            file['block'] = block_name
+                        block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
                         self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
-                        destApi.insertFiles(filesList=files_to_publish)
+                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files_to_publish)
+                        destApi.insertBulkBlock(blockDump)
                         count += blockSize
                         blockCount += 1
-                        self.logger.debug("Closing block %s." % block_name)
-                        status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
-                        self.logger.debug("Block closing status: %s.", str(status))
-                    except HTTPError, he:
-                        failed += [i['logical_file_name'] for i in files_to_publish]
-                        msg =  "Error when publishing."
-                        self.logger.exception(msg)
-                        self.logger.error("HTTP header: %s" % he.header)
-                        self.logger.error("HTTP body: %s" % he.body)
-                        break
                     except Exception, ex:
                         failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing"
@@ -866,25 +870,14 @@ class PublisherWorker:
                                 publish_next_iteration.append(file['logical_file_name'])
                             count += blockSize
                             continue
-                        self.logger.debug("Inserting block %s." % block_name)
-                        destApi.insertBlock({'block_name': block_name, 'origin_site_name': seName})
-                        for file in files_to_publish:
-                            file['block'] = block_name
-                        self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
-                        print files_to_publish[0]
-                        destApi.insertFiles(filesList=files_to_publish)
+                        block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
+                        #self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files_to_publish)
+                        self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
+                        destApi.insertBulkBlock(blockDump)
+                        
                         count += blockSize
                         blockCount += 1
-                        self.logger.debug("Closing block %s." % block_name)
-                        status = destApi.updateBlockStatus(block_name=block_name, open_for_writing=0)
-                        self.logger.debug("Block closing status: %s.", str(status))
-                    except HTTPError, he:
-                        failed += [i['logical_file_name'] for i in files_to_publish]
-                        msg =  "Error when publishing."
-                        self.logger.exception(msg)
-                        self.logger.error("HTTP header: %s" % he.header)
-                        self.logger.error("HTTP body: %s" % he.body)
-                        count += blockSize
                     except Exception, ex:
                         failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing (%s) " % ", ".join(failed)
