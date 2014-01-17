@@ -448,24 +448,6 @@ class PublisherWorker:
         return DBSFilesFormat
 
 
-    def format_file_3(self, file, output_config, dataset):
-        nf = {'logical_file_name': file['lfn'],
-              'file_type': 'EDM',
-              'check_sum': unicode(file['cksum']),
-              'event_count': file['inevents'],
-              'file_size': file['filesize'],
-              'adler32': file['adler32'],
-              'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
-             }
-        file_lumi_list = []
-        for run, lumis in file['runlumi'].items():
-            for lumi in lumis:
-                file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
-        nf['file_lumi_list'] = file_lumi_list
-        if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
-            nf['md5'] = file['md5']
-        return nf
-
     def publishInDBS2(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
         """
         Actually do the publishing
@@ -625,6 +607,25 @@ class PublisherWorker:
         self.logger.info("end of publication failed %s published %s publish_next_iteration %s results %s" \
                          %(failed, published, publish_next_iteration, results))
         return failed, published, results
+
+
+    def format_file_3(self, file, output_config, dataset):
+        nf = {'logical_file_name': file['lfn'],
+              'file_type': 'EDM',
+              'check_sum': unicode(file['cksum']),
+              'event_count': file['inevents'],
+              'file_size': file['filesize'],
+              'adler32': file['adler32'],
+              'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
+             }
+        file_lumi_list = []
+        for run, lumis in file['runlumi'].items():
+            for lumi in lumis:
+                file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
+        nf['file_lumi_list'] = file_lumi_list
+        if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
+            nf['md5'] = file['md5']
+        return nf
 
 
     def migrateDBS3(self, migrateApi, destReadApi, sourceURL, inputDataset):
