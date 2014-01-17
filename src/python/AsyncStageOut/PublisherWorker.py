@@ -631,7 +631,23 @@ class PublisherWorker:
     def migrateDBS3(self, migrateApi, destReadApi, sourceURL, inputDataset):
         # Submit migration
         existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True)
-        if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
+        should_migrate = False
+        if not existing_datasets or (existing_datasets[0]['dataset'] != inputDataset):
+            should_migrate = True
+            self.logger.debug("Dataset %s must be migrated; not in the destination DBS." % inputDataset)
+        if not should_migrate:
+            # The dataset exists in the destination; make sure source and destination
+            # have the same blocks.
+            existing_blocks = set([i['block_name'] for i in destReadApi.listBlocks(dataset=inputDataset)])
+            proxy = os.environ.get("SOCKS5_PROXY")
+            sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
+            source_blocks = set([i['block_name'] for i in sourceApi.listBlocks(dataset=inputDataset)])
+            blocks_to_migrate = source_blocks - existing_blocks
+            self.logger.debug("Dataset %s in destination DBS with %d blocks; %d blocks in source." % (inputDataset, len(existing_blocks), len(source_blocks)))
+            if blocks_to_migrate:
+                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(existing_blocks), ", ".join(existing_blocks), inputDataset) )
+                should_migrate = True
+        if should_migrate:
             data = {'migration_url': sourceURL, 'migration_input': inputDataset}
             self.logger.debug("About to submit migrate request for %s" % str(data))
             try:
