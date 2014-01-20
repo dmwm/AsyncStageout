@@ -41,7 +41,7 @@ def execute_command(command):
 
     return stdout, stderr, rc
 
-def getDNFromUserName(username):
+def getDNFromUserName(username, log):
     """
     Parse site string to know the fts server to use
     """
