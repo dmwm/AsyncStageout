@@ -78,7 +78,7 @@ class PublisherWorker:
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = getDNFromUserName(self.user)
+            self.userDN = getDNFromUserName(self.user, self.logger)
         except Exception, ex:
             msg =  "Error retrieving the user DN"
             msg += str(ex)
