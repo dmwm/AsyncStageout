@@ -138,4 +138,4 @@ config.Statistics.pollStatInterval = 1800
 config.Statistics.couch_statinstance = statCouchUrl
 config.Statistics.expiration_days = 3
 config.Statistics.statitics_database = statitics_database
-config.Statistics..opsProxy = opsProxy
+config.Statistics.opsProxy = opsProxy
