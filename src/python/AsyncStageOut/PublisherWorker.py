@@ -27,6 +27,7 @@ from DBSAPI.dbsMigrateApi import DbsMigrateApi
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
+from AsyncStageOut import getDNFromUserName
 from WMCore.DataStructs.Run import Run
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 import pycurl
@@ -65,7 +66,7 @@ class PublisherWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('DBSPublisher-Worker-%s' % self.user)
         self.pfn_to_lfn_mapping = {}
-        server = CouchServer(self.config.couch_instance)
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.max_retry = config.publication_max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
@@ -77,13 +78,15 @@ class PublisherWorker:
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = self.db.loadView('DBSPublisher', 'publish', query)['rows'][0]['key'][3]
+            self.userDN = getDNFromUserName(self.user, self.logger)
         except Exception, ex:
-            self.logger.error("Failed to get the user DN!")
-            msg =  "Error contacting couch"
+            msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+            self.init = False
+            return
+        if not self.userDN:
             self.init = False
             return
         defaultDelegation = {
@@ -127,6 +130,7 @@ class PublisherWorker:
         3- then call publish, mark_good, mark_failed for each wf
         """
         active_user_workflows = []
+        self.lfn_map = {}
         query = {'group':True}
         try:
             active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
@@ -153,7 +157,11 @@ class PublisherWorker:
                 wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                        str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
                                        - time.timezone)
-                lfn_ready.append(file['value'][1])
+                # To move once the view is fixed
+                lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
+                lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                self.lfn_map[lfn_orig] = file['value'][1]
+                lfn_ready.append(lfn_orig)
             self.logger.debug('LFNs %s ready %s %s' %(len(lfn_ready), lfn_ready, user_wf['value']))
             # If the number of files < max_files_per_block then check the oldness of the workflow
             if user_wf['value'] <= self.max_files_per_block:
@@ -162,7 +170,7 @@ class PublisherWorker:
                     continue
                 else:#check the ASO queue
                     if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
-                        workflow_expired = user_wf['key'][4]
+                        workflow_expired = user_wf['key'][3]
                         query = {'reduce':True, 'group': True, 'key':workflow_expired}
                         try:
                             active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
@@ -192,8 +200,8 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][4]), str(file['value'][2]), \
-                                                         str(file['key'][3]), str(file['key'][0]), \
+                failed_files, good_files = self.publish( str(file['key'][3]), str(file['value'][2]), \
+                                                         self.userDN, str(file['key'][0]), \
                                                          str(file['value'][3]), str(file['value'][4]), \
                                                          str(seName), lfn_ready )
                 self.mark_failed( failed_files )
@@ -210,8 +218,9 @@ class PublisherWorker:
                 data = {}
                 data['publication_state'] = 'published'
                 data['last_update'] = last_update
+                lfn_db = self.lfn_map[lfn]
                 updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + \
-                            getHashLfn(lfn.replace('store', 'store/temp', 1))
+                            getHashLfn(lfn_db)
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
@@ -236,7 +245,8 @@ class PublisherWorker:
         last_update = int(time.time())
         for lfn in files:
             data = {}
-            docId = getHashLfn(lfn)
+            lfn_db = self.lfn_map[lfn]
+            docId = getHashLfn(lfn_db)
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )

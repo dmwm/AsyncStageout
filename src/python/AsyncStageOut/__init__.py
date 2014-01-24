@@ -1,8 +1,9 @@
 import hashlib
 import subprocess
 import os
+from WMCore.Services.SiteDB.SiteDB import SiteDBJSON
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 def getHashLfn(lfn):
     """
@@ -39,3 +40,20 @@ def execute_command(command):
     rc = proc.returncode
 
     return stdout, stderr, rc
+
+def getDNFromUserName(username, log):
+    """
+    Parse site string to know the fts server to use
+    """
+    dn = ''
+    site_db = SiteDBJSON()
+    try:
+       dn = site_db.userNameDn(username)
+    except IndexError:
+       log.error("user does not exist")
+       return dn
+    except RuntimeError:
+       log.error("SiteDB URL cannot be accessed")
+       return dn
+    return dn
+

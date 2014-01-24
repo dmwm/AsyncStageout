@@ -24,6 +24,7 @@ import urllib
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
+from AsyncStageOut import getDNFromUserName
 #import json
 #import socket
 #import stomp
@@ -101,7 +102,6 @@ class TransferWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
         self.pfn_to_lfn_mapping = {}
-
         try:
             os.makedirs(self.log_dir)
         except OSError, e:
@@ -110,11 +110,10 @@ class TransferWorker:
             else:
                 self.logger.error('Unknown error in mkdir' % e.errno)
                 raise
-
-
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
-        self.config_db = server.connectDatabase(self.config.config_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
@@ -130,13 +129,15 @@ class TransferWorker:
         #         'stale': 'ok'}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows'][0]['key'][5]
+            self.userDN = getDNFromUserName(self.user, self.logger)
         except Exception, ex:
-            self.logger.error("Failed to get the user DN!")
-            msg =  "Error contacting couch"
+            msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+            self.init = False
+            return
+        if not self.userDN:
             self.init = False
             return
         defaultDelegation = {
@@ -308,7 +309,10 @@ class TransferWorker:
         query = {'group': True,
                  'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
                  #'stale': 'ok'}
-        sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+        try:
+            sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+        except:
+            return []
 
         def keys_map(dict):
             return dict['key'][4], dict['key'][3]
@@ -332,20 +336,19 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, self.group, self.role, destination, source, self.userDN]}
+                     'key':[self.user, self.group, self.role, destination, source]}
                      #'stale': 'ok'}
-
-                if not retry:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
-                else:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp_retry', query)['rows']
-
+                try:
+                    if not retry:
+                        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
+                    else:
+                        active_files = self.db.loadView('AsyncTransfer', 'ftscp_retry', query)['rows']
+                except:
+                    return {}
                 # Prepare the list of active files updating the status to in transfer if the proxy is valid.
                 acquired_files = self.mark_acquired(active_files)
-
                 if not acquired_files:
                     continue
-
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
                                                                                  len(acquired_files),
                                                                                  source,
@@ -355,8 +358,8 @@ class TransferWorker:
                 def tfc_map(item):
                     source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                       item['value'].replace('store/temp', 'store', 1)))
-
+                                                                       item['value'].replace('store/temp', 'store', 1).replace(\
+                                                                       '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
                     new_job.append('%s %s' % (source_pfn, destination_pfn))
 
                 map(tfc_map, acquired_files)
@@ -482,7 +485,7 @@ class TransferWorker:
 
             ftslog_file = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
 
-            logs_pool[link[0]] = ftslog_file
+            logs_pool[link] = ftslog_file
 
             self.logger.debug("Running FTSCP command")
             self.logger.debug("FTS server: %s" % fts_server_for_transfer)
@@ -507,7 +510,7 @@ class TransferWorker:
                         )
 
             processes.add(proc)
-            mapping_link_process[proc] = link[0]
+            mapping_link_process[proc] = link
 
             # now populate results by parsing the copy job's log file.
             # results is a tuple of lists, 1st list is transferred files, second is failed
@@ -532,6 +535,10 @@ class TransferWorker:
         self.logger.debug("WORK DONE WAITING and CLEANING")
 
         for p in processes:
+            self.logger.debug("Process list %s" %processes)
+            self.logger.debug("Link to Process %s" %mapping_link_process)
+            self.logger.debug("Link to Log %s" %logs_pool)
+            self.logger.debug("Current process %s" %p)
             if p.poll() is None:
                 p.wait();
                 link = mapping_link_process[p]
