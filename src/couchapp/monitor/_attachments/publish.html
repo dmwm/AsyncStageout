@@ -188,7 +188,7 @@ inpute.popolate = function(){
 		var startkey =  [startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
 			var endkey = [endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
 			xmlhttp = new XMLHttpRequest();
-  			xmlhttp.open("GET", "_view/publicationState?group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.open("GET", "_view/publicationState?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
   			xmlhttp.send();
                 	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 			var rs = 0;
