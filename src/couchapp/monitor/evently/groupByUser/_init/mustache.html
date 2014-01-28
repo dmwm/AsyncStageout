@@ -40,7 +40,7 @@ input.popolate = function(){
 
 
 		xmlhttp = new XMLHttpRequest();
-  		xmlhttp.open("GET", "_view/filesCountByUser?group_level=1", false);
+  		xmlhttp.open("GET", "_view/filesCountByUser?stale=ok&group_level=1", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 		for (i in response) {

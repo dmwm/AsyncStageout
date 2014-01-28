@@ -61,7 +61,7 @@ inputs.popolate = function(){
                 var resubfile=[];
 
                 xmlhttp = new XMLHttpRequest();
-                xmlhttp.open("GET", "_view/filesCountByTask?group_level=1", false);
+                xmlhttp.open("GET", "_view/filesCountByTask?stale=ok&group_level=1", false);
                 xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
                 for (i in response) {

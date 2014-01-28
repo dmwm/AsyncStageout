@@ -12,8 +12,7 @@ Workflow Name: <INPUT TYPE = Text NAME = WorkflowName SIZE = 50 value ="">
 function calculate_failed() {
             var url = [];
             xmlhttp = new XMLHttpRequest();
-//            xmlhttp.open("GET", "_view/FailedAttachmentsByDocId?stale=ok", false);
-            xmlhttp.open("GET", "_view/FailedAttachmentsByDocId", false);
+            xmlhttp.open("GET", "_view/FailedAttachmentsByDocId?stale=ok", false);
             xmlhttp.send();
             var response = eval("(" + xmlhttp.responseText + ")")["rows"];
             var j = 0
@@ -34,7 +33,7 @@ document.frmOne.LogFileName.value = url
 function calculate_done() {
             var url = [];
             xmlhttp = new XMLHttpRequest();
-            xmlhttp.open("GET", "_view/DoneAttachmentsByDocId", false);
+            xmlhttp.open("GET", "_view/DoneAttachmentsByDocId?stale=ok", false);
             xmlhttp.send();
             var response = eval("(" + xmlhttp.responseText + ")")["rows"];
             var j = 0
