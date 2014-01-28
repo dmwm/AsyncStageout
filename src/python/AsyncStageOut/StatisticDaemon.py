@@ -123,8 +123,8 @@ class StatisticDaemon(BaseWorkerThread):
         Get the list of finished jobs older than the exptime.
         """
         query = {'reduce': False,
-                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}#,
-                # 'stale': 'ok'}
+                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute],
+                 'stale': 'ok'}
         try:
             oldJobs = self.db.loadView('monitor', 'endedByTime', query)['rows']
         except Exception, e:
