@@ -21,6 +21,7 @@ import datetime
 import traceback
 from WMCore.WMFactory import WMFactory
 import urllib
+import re
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
@@ -150,6 +151,7 @@ class TransferWorker:
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript,
                                   'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False),
+                                  'myproxyAccount' : re.compile('https?://([^/]*)/.*').findall(config.config.cache_area)[0],
                             }
 
         if getattr(self.config, 'serviceCert', None):

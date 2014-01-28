@@ -18,6 +18,7 @@ import tarfile
 import urllib
 import json
 import types
+import re
 from WMComponent.DBSUpload.DBSInterface import createProcessedDataset, createAlgorithm, insertFiles
 from WMComponent.DBSUpload.DBSInterface import createPrimaryDataset,   createFileBlock, closeBlock
 from WMComponent.DBSUpload.DBSInterface import createDBSFileFromBufferFile
@@ -98,6 +99,7 @@ class PublisherWorker:
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript,
+                                  'myproxyAccount' : re.compile('https?://([^/]*)/.*').findall(config.config.cache_area)[0],
                             }
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
