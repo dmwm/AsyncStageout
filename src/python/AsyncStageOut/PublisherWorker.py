@@ -78,7 +78,7 @@ class PublisherWorker:
             self.db = server.connectDatabase(self.config.files_database)
         self.max_retry = config.publication_max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
-        self.file_catalog = getattr(self.config, 'file_catalog', 'DBS2')
+        self.file_catalog = getattr(self.config, 'file_catalog', 'DBS3')
         self.proxyDir = config.credentialDir
         self.myproxyServer = 'myproxy.cern.ch'
         self.init = True
@@ -314,12 +314,12 @@ class PublisherWorker:
             else:
                 return [], []
         self.logger.info("Starting data publication for: " + str(workflow))
-        if self.file_catalog == 'DBS2':
-            failed, done, dbsResults = self.publishInDBS2(userdn=userdn, sourceURL=sourceurl,
+        if self.file_catalog == 'DBS3':
+            failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
                                                      destURL=dbsurl, targetSE=targetSE, workflow=workflow)
         else:
-            failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
+            failed, done, dbsResults = self.publishInDBS2(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
                                                      destURL=dbsurl, targetSE=targetSE, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
