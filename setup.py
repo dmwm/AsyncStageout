@@ -6,6 +6,8 @@ To build    : python setup.py build
 To install  : python setup.py install --prefix=<some dir>
 To clean    : python setup.py clean
 To run tests: python setup.py test
+
+Test Andres
 """
 
 import sys
