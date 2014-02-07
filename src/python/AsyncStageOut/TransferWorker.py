@@ -385,29 +385,11 @@ class TransferWorker:
         except Exception, e:
             self.logger.error('it does not seem to be an lfn %s' %file.split(':'))
             return None
-        if site == 'T1_US_FNAL':
-            site = 'T1_US_FNAL_Buffer'
-        if site == 'T1_ES_PIC':
-            site = 'T1_ES_PIC_Buffer'
-        if site == 'T1_DE_KIT':
-            site = 'T1_DE_KIT_Buffer'
-        if site == 'T1_FR_CCIN2P3':
-            site = 'T1_FR_CCIN2P3_Buffer'
-        if site == 'T1_IT_CNAF':
-            site = 'T1_IT_CNAF_Buffer'
-        if site == 'T1_RU_JINR':
-            site = 'T1_RU_JINR_Buffer'
-        if site == 'T1_TW_ASGC':
-            site = 'T1_TW_ASGC_Buffer'
-        if site == 'T1_UK_RAL':
-            site = 'T1_UK_RAL_Buffer'
-        if site == 'T1_CH_CERN':
-            site = 'T1_CH_CERN_Buffer'
         if self.tfc_map.has_key(site):
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
-            if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
-            #TODO: improve fix for wrong tfc on sites
+            # TODO: improve fix for wrong tfc on sites
             try:
+                if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
                 if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
                     self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                     return None
