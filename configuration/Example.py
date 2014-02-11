@@ -77,6 +77,7 @@ config.AsyncTransfer.jobs_database = jobs_database
 config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.AsyncTransfer.algoName = 'FIFOPriority'
 config.AsyncTransfer.config_couch_instance = couchUrl
+config.AsyncTransfer.cache_area = cache_area
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
 config.DBSPublisher.publication_pool_size = 4
