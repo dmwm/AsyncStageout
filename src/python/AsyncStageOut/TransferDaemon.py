@@ -83,7 +83,7 @@ class TransferDaemon(BaseWorkerThread):
         self.logger.debug('Connected to CouchDB')
         self.pool = Pool(processes=self.config.pool_size)
         try:
-            self.phedex = PhEDEx(responseType='xml')
+            self.phedex = PhEDEx(responseType='xml', dict = {'key': self.config.opsProxy, 'cert': self.config.opsProxy})
         except Exception, e:
             self.logger.exception('PhEDEx exception: %s' % e)
         # Set up a factory for loading plugins

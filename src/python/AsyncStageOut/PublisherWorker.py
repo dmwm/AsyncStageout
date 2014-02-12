@@ -89,7 +89,7 @@ class PublisherWorker:
         self.logger.debug("Trying to get DN")
         try:
             if not os.getenv("TEST_ASO"):
-                self.userDN = getDNFromUserName(self.user, self.logger)
+                self.userDN = getDNFromUserName(self.user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
         except Exception, ex:
             self.logger.error("Failed to get the user DN!")
             msg =  "Error contacting couch"
