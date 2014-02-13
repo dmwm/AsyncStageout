@@ -34,29 +34,28 @@ inputm.url = document.location.href.split(app)[0]+app+"/dest-source-stat.html";
 
 
 popolate = function(){
-		
+
 		inputm.data = [];
 		input.stacked = [];
 		input.labels = [];
                 var donefile = [];
 		var failfile = [];
 		var otherfile = [];
-		
+
 		xmlhttp = new XMLHttpRequest();
-//  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2?stale=ok", false);
-                xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
+                xmlhttp.open("GET", "_view/filesCountByDestSource?stale=ok&group_level=2", false);
   		xmlhttp.send();
                 var response = eval("(" + xmlhttp.responseText + ")")["rows"];
-	
+
 		for (i=0; i<response.length; i++) {
 
 		donefile.push(response[i].value.done);
 		failfile.push(response[i].value.failed);
 		otherfile.push(response[i].value.other);
 		input.labels.push(response[i].key);
-		
+
 		inputm.data.push(response[i]);
-		
+
 			}
 
 		input.stacked.push(donefile);
@@ -69,13 +68,12 @@ inputm.popolate = function(){
         var donefile = [];
 		var failfile = [];
 		var otherfile = [];
-		
+
 		xmlhttp = new XMLHttpRequest();
-//  		xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2?stale=ok", false);
-                xmlhttp.open("GET", "_view/filesCountByDestSource?group_level=2", false);
+                xmlhttp.open("GET", "_view/filesCountByDestSource?stale=ok&group_level=2", false);
   		xmlhttp.send();
         var response = eval("(" + xmlhttp.responseText + ")")["rows"];
-	
+
 		for (r in response) {
 
 		inputm.data.push(response[r]);
@@ -107,7 +105,7 @@ function drawchart(){
 			setTimeout(function() stackedBarH("pie", input) , 500 );
 			}
         */
-        
+
 }
 /*
 function drawchart(){

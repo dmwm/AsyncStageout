@@ -77,6 +77,7 @@ config.AsyncTransfer.jobs_database = jobs_database
 config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.AsyncTransfer.algoName = 'FIFOPriority'
 config.AsyncTransfer.config_couch_instance = couchUrl
+config.AsyncTransfer.cache_area = cache_area
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
 config.DBSPublisher.publication_pool_size = 4
@@ -99,20 +100,20 @@ config.DBSPublisher.max_files_per_block = 100
 config.DBSPublisher.workflow_expiration_time = 3
 config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
-config.component_('Analytics')
-config.Analytics.user_monitoring_db = user_monitoring_db
-config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
-config.Analytics.analyticsPollingInterval = 900
-config.Analytics.log_level = logging.INFO
-config.Analytics.componentDir = config.General.workDir
-config.Analytics.namespace = 'AsyncStageOut.Analytics'
-config.Analytics.files_database = files_database
-config.Analytics.config_database = config_database
-config.Analytics.config_couch_instance = couchUrl
-config.Analytics.couch_instance = couchUrl
-config.Analytics.config_couch_instance = couchUrl
-config.Analytics.summaries_expiration_days = 6
-config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
+#config.component_('Analytics')
+#config.Analytics.user_monitoring_db = user_monitoring_db
+#config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
+#config.Analytics.analyticsPollingInterval = 900
+#config.Analytics.log_level = logging.INFO
+#config.Analytics.componentDir = config.General.workDir
+#config.Analytics.namespace = 'AsyncStageOut.Analytics'
+#config.Analytics.files_database = files_database
+#config.Analytics.config_database = config_database
+#config.Analytics.config_couch_instance = couchUrl
+#config.Analytics.couch_instance = couchUrl
+#config.Analytics.config_couch_instance = couchUrl
+#config.Analytics.summaries_expiration_days = 6
+#config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
 #config.component_('FilesCleaner')
 #config.FilesCleaner.log_level = logging.INFO
 #config.FilesCleaner.componentDir = config.General.workDir

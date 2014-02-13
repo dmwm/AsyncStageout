@@ -5,13 +5,13 @@
     <link rel="stylesheet" href="style/main.css" type="text/css">
     <script language="JavaScript" src="calendar_db.js"></script>
 	<link rel="stylesheet" href="calendar.css">
-    
+
   </head>
   <body>
   <div id="main">
     <div id="head"><h2>AsyncTransfer Monitor System</h2></div>
-    
-    
+
+
     <div id="sidebar"><p></p></div>
 
     <div id="items">
@@ -27,11 +27,11 @@
 		// input name
 		'controlname': 'start'
 	});
-	
+
 	// individual template parameters can be modified via the calendar variable
 	o_cal.a_tpl.yearscroll = false;
 	o_cal.a_tpl.weekstart = 1;
-	
+
 	</script>
 	<a>Start Time</a>
 	<select id="starttime">
@@ -72,7 +72,7 @@
 		'centyear'  : 70,
 		'imgpath' : 'img/'
 	}
-	
+
 	new tcal ({
 		// if referenced by ID then form name is not required
 		'controlname': 'end'
@@ -105,7 +105,7 @@
   		<option value="22">22:00</option>
   		<option value="23">23:00</option>
 	</select>
-	
+
 	<INPUT TYPE="button" NAME="button" Value="View" onClick='setTime($("input#start").val(),$("input#end").val())'>
 	<INPUT TYPE="button" NAME="buttonreset" Value="Default" onClick='resetTime()'>
 
@@ -122,7 +122,7 @@
 	<div id="starteds"> Retriving Data... </div>
 	<h3>Status of Ended Files</h3>
 	<div id="endeds"> Retriving Data... </div>
-    
+
     </div>
   </div>
   </body>
@@ -135,9 +135,9 @@
     //$("#items").evently("destsourcetime", app);
     $("#sidebar").evently("menu", app)
     $("#head").evently("head", app)
-    
+
   });
-  
+
   $(document).ready(function() {
           // put all your jQuery goodness in here.
 	$("h2#dest").html("Destination Site Monitoring ["+dest+"]");
@@ -197,16 +197,16 @@ function setTime(start, end){
 			}else{
 				startd = startdate;
 				endd = enddate;
-				
+
 				}
 				defaultTime = false;
 				drawchart();
 			}
-			
+
 function resetTime(){
 	defaultTime = true;
 	drawchart();
-	
+
 	}
 
 function calcInterval(){
@@ -215,7 +215,7 @@ function calcInterval(){
     start.setDate(start.getDate()-1);
 	startd = start;
 	endd = now;
-	
+
 	}
 
 
@@ -226,7 +226,7 @@ inputes.popolate = function(){
 		var startkey =  ['"'+src+'"', startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
 			var endkey = ['"'+src+'"', endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
 			xmlhttp = new XMLHttpRequest();
-  			xmlhttp.open("GET", "_view/endedByTimeSource?group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.open("GET", "_view/endedByTimeSource?stale=ok&group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
   			xmlhttp.send();
                 	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 			var rs = 0;
@@ -234,14 +234,14 @@ inputes.popolate = function(){
 			var donefile = [];
 			var failfile = [];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [src, tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var doneF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
 			var failF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
-			
+
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
 				doneF.value= response[rs].value.done;
 				failF.value= response[rs].value.failed;
@@ -249,7 +249,7 @@ inputes.popolate = function(){
 			}
 			donefile.push(doneF);
 			failfile.push(failF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inputes.stacked.push(donefile);
 		inputes.stacked.push(failfile);
@@ -262,7 +262,7 @@ inputss.popolate = function(){
 			var startkey =  ['"'+src+'"', startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
 			var endkey = ['"'+src+'"', endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
 			xmlhttp = new XMLHttpRequest();
-  			xmlhttp.open("GET", "_view/startedByTimeSource?group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.open("GET", "_view/startedByTimeSource?stale=ok&group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
   			xmlhttp.send();
                 	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 			var rs = 0;
@@ -270,14 +270,14 @@ inputss.popolate = function(){
 			var newfile = [];
 			var acqfile = [];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [src, tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var newF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
 			var acqF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
-			
+
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
 				newF.value= response[rs].value.new;
 				acqF.value= response[rs].value.acquired;
@@ -285,7 +285,7 @@ inputss.popolate = function(){
 			}
 			newfile.push(newF);
 			acqfile.push(acqF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inputss.stacked.push(newfile);
 		inputss.stacked.push(acqfile);
@@ -298,7 +298,7 @@ inputed.popolate = function(){
 		var startkey =  ['"'+dest+'"', startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
 			var endkey = ['"'+dest+'"', endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
 			xmlhttp = new XMLHttpRequest();
-  			xmlhttp.open("GET", "_view/endedByTimeDest?group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.open("GET", "_view/endedByTimeDest?stale=ok&group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
   			xmlhttp.send();
                 	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 			var rs = 0;
@@ -306,7 +306,7 @@ inputed.popolate = function(){
 			var donefile = [];
 			var failfile = [];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [dest, tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var doneF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
@@ -320,7 +320,7 @@ inputed.popolate = function(){
 			}
 			donefile.push(doneF);
 			failfile.push(failF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inputed.stacked.push(donefile);
 		inputed.stacked.push(failfile);
@@ -333,7 +333,7 @@ inputsd.popolate = function(){
 			var startkey =  ['"'+dest+'"', startd.getUTCFullYear(), startd.getUTCMonth()+1, startd.getUTCDate(), startd.getUTCHours()];
 			var endkey = ['"'+dest+'"', endd.getUTCFullYear(), endd.getUTCMonth()+1, endd.getUTCDate(), endd.getUTCHours()];
 			xmlhttp = new XMLHttpRequest();
-  			xmlhttp.open("GET", "_view/startedByTimeDest?group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+  			xmlhttp.open("GET", "_view/startedByTimeDest?stale=ok&group_level=5&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
   			xmlhttp.send();
                 	var response = eval("(" + xmlhttp.responseText + ")")["rows"];
 			var rs = 0;
@@ -341,23 +341,23 @@ inputsd.popolate = function(){
 			var newfile = [];
 			var acqfile = [];
 			for(i=0; i<=hours; i++){
-			
+
 			var key = [dest, tslice.getUTCFullYear(), tslice.getUTCMonth()+1, tslice.getUTCDate(), tslice.getUTCHours()];
 			//alert(key.toString());
 			var newF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
 			var acqF = {"time": tslice.getUTCMonth()+1+"/"+tslice.getUTCDate()+" "+tslice.getUTCHours()+":00",
 				"value": 0};
-			
+
 			if((rs<response.length)&&(key.toString() == response[rs].key.toString())){
-				
+
 				newF.value= response[rs].value.new;
 				acqF.value= response[rs].value.acquired;
 				rs = rs+1;
 			}
 			newfile.push(newF);
 			acqfile.push(acqF);
-			tslice.setHours(tslice.getHours()+1);	
+			tslice.setHours(tslice.getHours()+1);
 			}
 		inputsd.stacked.push(newfile);
 		inputsd.stacked.push(acqfile);
