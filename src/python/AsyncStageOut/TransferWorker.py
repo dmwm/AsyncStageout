@@ -392,7 +392,7 @@ class TransferWorker:
             if pfn == None:
                 pfn_temp = self.tfc_map[site].matchLFN('direct', lfn, follow_chain=False)
                 if pfn_temp:
-                    pfn = sel.tfc_map[site].matchLFN('srmv2', pfn_temp, follow_chain=False)
+                    pfn = self.tfc_map[site].matchLFN('srmv2', pfn_temp, follow_chain=False)
             # TODO: improve fix for wrong tfc on sites
             try:
                 if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
