@@ -30,13 +30,13 @@ from DBSAPI.dbsMigrateApi import DbsMigrateApi
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
-from AsyncStageOut import getDNFromUserName
 from WMCore.DataStructs.Run import Run
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from RestClient.ErrorHandling.RestClientExceptions import HTTPError
 import dbs.apis.dbsClient as dbsClient
 import pycurl
 import cStringIO
+from AsyncStageOut import getDNFromUserName
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
@@ -88,18 +88,14 @@ class PublisherWorker:
                  'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
-            if not os.getenv("TEST_ASO"):
-                self.userDN = getDNFromUserName(self.user, self.logger)
+            self.userDN = getDNFromUserName(self.user, self.logger)
         except Exception, ex:
-            self.logger.error("Failed to get the user DN!")
-            msg =  "Error contacting couch"
+            msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-            # If we're just testing publication, we can skip the userDN step and just use the ops proxy.
-            if not os.getenv("TEST_ASO"):
-                self.init = False
-                return
+            self.init = False
+            return
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
@@ -108,9 +104,14 @@ class PublisherWorker:
                                   'myProxySvr': 'myproxy.cern.ch',
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
-                                  'uisource' : self.uiSetupScript,
-                                  'myproxyAccount' : re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0],
+                                  'uisource' : self.uiSetupScript
                             }
+        if hasattr(self.config, "cache_area"):
+            try:
+                defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+            except IndexError:
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
+                pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -156,7 +157,8 @@ class PublisherWorker:
         for wf in active_workflows:
             if wf['key'][0] == self.user:
                 active_user_workflows.append(wf)
-        self.logger.debug('actives user wfs %s' %active_user_workflows)
+        self.logger.debug('actives user wfs %s' % active_user_workflows)
+        self.logger.info('actives files %s' %len(active_files))
         for user_wf in active_user_workflows:
             self.not_expired_wf = False
             self.forceFailure = False
@@ -169,6 +171,7 @@ class PublisherWorker:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
                 self.logger.error('A problem occured when contacting couchDB to get the list of active files for %s: %s' %(self.user, e))
+            self.logger.info('actives files %s' %len(active_files))
             self.logger.debug('actives files %s' %active_files)
             for file in active_files:
                 wf_jobs_endtime.append(int(time.mktime(time.strptime(\
@@ -192,13 +195,13 @@ class PublisherWorker:
                         try:
                             active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
                             if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
-                                self.logger.debug('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
+                                self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
                                 continue
                         except Exception, e:
-                            self.logger.debug('A problem occured when contacting couchDB for the workflow status: %s' % e)
+                            self.logger.error('A problem occured when contacting couchDB for the workflow status: %s' % e)
                             continue
                     else:
-                        self.logger.debug('Publish number of files minor of max_files_per_block.')
+                        self.logger.info('Publish number of files minor of max_files_per_block.')
                         self.forceFailure = True
             else:
                 if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
@@ -207,6 +210,7 @@ class PublisherWorker:
                     self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
                     self.forceFailure = True
             if lfn_ready:
+                self.logger.debug("Retrieving SE Name from Phedex %s" %str(file['value'][0]))
                 try:
                     seName = self.phedexApi.getNodeSE( str(file['value'][0]) )
                     if not seName:
@@ -283,6 +287,7 @@ class PublisherWorker:
             try:
                 updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + docId
                 updateUri += "?" + urllib.urlencode(data)
+                self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             except Exception, ex:
                 msg =  "Error in updating document in couch"
@@ -315,7 +320,7 @@ class PublisherWorker:
                 self.mark_failed(lfn_ready, True)
             else:
                 return [], []
-        self.logger.info("Starting data publication for: " + str(workflow))
+        self.logger.info("Starting data publication in %s of %s" % (self.file_catalog, str(workflow)))
         if self.file_catalog == 'DBS3':
             failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                      inputDataset=inputDataset, toPublish=toPublish,
@@ -346,7 +351,7 @@ class PublisherWorker:
                     value = str(value)
                 newDict.update({key : value})
             return newDict
-        self.logger.debug("Starting Read cache...")
+        self.logger.info("Starting Read cache...")
         buf = cStringIO.StringIO()
         res = []
         # TODO: input sanitization
@@ -365,7 +370,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
             return {}
-        self.logger.debug("Data read from cache...")
+        self.logger.info("Data read from cache...")
         try:
             json_string = buf.getvalue()
             buf.close()
@@ -376,6 +381,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
             return {}
+        self.logger.info("%s records got from cache" % len(res['result']))
         self.logger.debug("results %s..." % res['result'])
         toPublish = {}
         for files in res['result']:
@@ -386,6 +392,7 @@ class PublisherWorker:
                 toPublish[outdataset] = []
                 toPublish[outdataset].append(files)
         fail_files, toPublish = self.clean(lfn_ready, toPublish)
+        self.logger.info('to_publish %s files' %len(toPublish))
         self.logger.debug('to_publish %s' %toPublish)
         return toPublish
 
@@ -393,13 +400,11 @@ class PublisherWorker:
         """
         Clean before publishing
         """
-        self.logger.debug('File to publish %s' %toPublish)
         fail_files = []
         new_toPublish = {}
         files_to_publish = []
         lfn_to_publish = []
         for ready in lfn_ready:
-            self.logger.debug('Checking LFN %s' %ready)
             if toPublish:
                 for datasetPath, files in toPublish.iteritems():
                     new_temp_files = []
@@ -434,7 +439,7 @@ class PublisherWorker:
         """
         Create failed files list from dbsFiles.
         """
-        self.logger.debug("Formatting FILES...")
+        self.logger.info("Formatting FILES...")
         DBSFilesFormat = []
         for f in files:
             temp_dbs_file = {}
@@ -510,14 +515,14 @@ class PublisherWorker:
                 migrateAPI.migrateDataset(inputDataset)
             else:
                 inputDataset = None
-                self.logger.debug('Processing Monte Carlo production workflow! No input dataset')
+                self.logger.info('Processing Monte Carlo production workflow! No input dataset')
         except Exception, ex:
             msg =  "Error migrating dataset"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
             return failed, published, results
-        self.logger.debug("Data migrated...")
+        self.logger.info("Data migrated...")
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
             if not files:
@@ -562,6 +567,7 @@ class PublisherWorker:
             processed = createProcessedDataset(algorithm=algo, apiRef=destApi, primary=primary, processedName=procName,
                                                dataTier=tier, group='Analysis', parent=inputDataset)
             # Convert JSON Buffer-like files into DBSFiles
+            self.logger.info("The publication of %s is effectively starting here..." %len(files))
             self.logger.debug("The publication of %s is effectively starting here..." %files)
             # Format files accordingly before publishing
             files_to_publish = self.format_files(files)
@@ -577,7 +583,7 @@ class PublisherWorker:
             blockCount = 0
             self.logger.debug("Blocks creation of %s is effectively starting here..." %dbsFiles)
             if len(dbsFiles) < self.max_files_per_block:
-                self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                self.logger.info("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
                 if not self.not_expired_wf:
                     try:
                         block = createFileBlock(apiRef=destApi, datasetPath=processed, seName=seName)
@@ -594,7 +600,7 @@ class PublisherWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                 else:
-                    self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                    self.logger.debug("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
                     return [], [], []
             else:
                 while count < len(dbsFiles):
@@ -645,8 +651,16 @@ class PublisherWorker:
 
 
     def migrateDBS3(self, migrateApi, destReadApi, sourceURL, inputDataset):
-        # Submit migration
-        existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True)
+
+        # TODO: include support of private MC WF publication
+        try:
+            existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True)
+        except HTTPError, he:
+            msg = str(he)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            self.logger.error("Request to list invalid dataset %s failed." % inputDataset)
+            return []
         should_migrate = False
         if not existing_datasets or (existing_datasets[0]['dataset'] != inputDataset):
             should_migrate = True
@@ -756,15 +770,24 @@ class PublisherWorker:
         if not sourceURL.endswith(READ_PATH):
             sourceURL += READ_PATH
 
+        self.logger.debug("Migrate datasets")
         # TODO: Migration of datasets.
         proxy = os.environ.get("SOCKS5_PROXY")
         destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
         destReadApi = dbsClient.DbsApi(url=destReadURL, proxy=proxy)
         migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
 
+        self.logger.debug("Submit migration %s" %sourceURL)
         # Submit migration
         sourceApi = dbsClient.DbsApi(url=sourceURL)
-        existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
+        try:
+            existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
+        except Exception, ex:
+            msg = str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            # TODO: Include correctly the publication of private MC WF
+            existing_datasets = []
         if not existing_datasets:
             self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceURL, migrateURL))
             return [], [], []
@@ -775,7 +798,7 @@ class PublisherWorker:
             return [], [], []
         primary_ds_type = existing_datasets[0]['primary_ds_type']
         acquisition_era_name = existing_datasets[0]['acquisition_era_name']
-        acquisition_era_name = "CRAB3"
+        acquisition_era_name = "CRAB"
 
         # There's little chance this is correct, but it's our best guess for now.
         existing_output = destApi.listOutputConfigs(dataset=inputDataset)
@@ -786,6 +809,7 @@ class PublisherWorker:
 
         processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
+        self.logger.debug("iterate for publication")
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
             dbsDatasetPath = datasetPath
@@ -856,11 +880,11 @@ class PublisherWorker:
                               'processed_ds_name': procName,
                               'data_tier_name': tier,
                               'acquisition_era_name': acquisitionera,
-                              'dataset_access_type': 'PRODUCTION', # TODO
+                              'dataset_access_type': '*', # TODO
                               'physics_group_name': 'CRAB3',
                               'last_modification_date': int(time.time()),
                              }
-            self.logger.debug("About to insert dataset: %s" % str(dataset_config))
+            self.logger.info("About to insert dataset: %s" % str(dataset_config))
             #destApi.insertDataset(dataset_config)
             del dataset_config['acquisition_era_name']
             #dataset_config['acquisition_era'] = acquisition_era_config
@@ -873,7 +897,7 @@ class PublisherWorker:
             count = 0
             blockCount = 0
             if len(dbsFiles) < self.max_files_per_block:
-                self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                self.logger.info("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
                 if not self.not_expired_wf:
                     block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
                     files_to_publish = dbsFiles[count:count+blockSize]
@@ -891,7 +915,7 @@ class PublisherWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                 else:
-                    self.logger.debug("WF is not expired %s and the list is %s" %(workflow, self.not_expired_wf))
+                    self.logger.debug("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
                     return [], [], []
             else:
                 while count < len(dbsFiles):
@@ -924,4 +948,5 @@ class PublisherWorker:
         self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \
                          % (failed, published, publish_next_iteration, results))
         return failed, published, results
+
 
