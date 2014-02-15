@@ -150,10 +150,14 @@ class TransferWorker:
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript,
-                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False),
-                                  'myproxyAccount' : re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0],
+                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
                             }
-
+        if hasattr(self.config, "cache_area"):
+            try:
+                defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+            except IndexError:
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
+                pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
