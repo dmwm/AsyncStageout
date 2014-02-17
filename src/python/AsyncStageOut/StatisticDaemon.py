@@ -60,8 +60,11 @@ class StatisticDaemon(BaseWorkerThread):
             param = self.config_db.loadView('asynctransfer_config', 'GetStatConfig', query)
             self.config.expiration_days = param['rows'][0]['key']
             self.logger.debug('Got expiration_days %s from Couch' % self.config.expiration_days)
+        except IndexError:
+            self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
         except Exception, e:
-            self.logger.exception('A problem occured when contacting config DB in couch: %s' % e)
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+
         expdays = datetime.timedelta(days = self.config.expiration_days)
         self.exptime = datetime.datetime.now() - expdays
         self.logger.debug('Deleting Jobs ended before %s' %str(self.exptime) )
