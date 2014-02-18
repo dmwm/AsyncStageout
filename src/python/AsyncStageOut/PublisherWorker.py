@@ -703,13 +703,19 @@ class PublisherWorker:
             # 1=IN PROGRESS
             # 2=COMPLETED
             # 3=FAILED
+            #
+            # In the case of failure, we expect the publisher daemon to try again in
+            # the future.
+            #
+            wait_time = 1
             for i in range(60):
                 self.logger.debug("About to get migration request for %s." % id)
                 status = migrateApi.statusMigration(migration_rqst_id=id)
                 state = status.get("migration_status")
                 self.logger.debug("Migration status: %s" % state)
                 if state == 0 or state == 1:
-                    time.sleep(1)
+                    time.sleep(wait_time)
+                    wait_time = min(wait_time + 5, 120)
 
             if state == 0 or state == 1:
                 self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
@@ -718,7 +724,7 @@ class PublisherWorker:
                 self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status)))
                 return []
             self.logger.info("Migration of %s is complete." % inputDataset)
-            existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True)
+            existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
         return existing_datasets
 
     def createBulkBlock(self, output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files):
@@ -756,6 +762,10 @@ class PublisherWorker:
         results = {}
         blockSize = self.max_files_per_block
 
+        # In the case of MC input (or something else which has no 'real' input dataset),
+        # we simply call the input dataset by the primary DS name (/foo/).
+        noInput = len(inputDataset.split("/")) <= 3
+
         # Normalize URLs
         WRITE_PATH = "/DBSWriter"
         MIGRATE_PATH = "/DBSMigrate"
@@ -777,39 +787,43 @@ class PublisherWorker:
         destReadApi = dbsClient.DbsApi(url=destReadURL, proxy=proxy)
         migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
 
-        self.logger.debug("Submit migration %s" %sourceURL)
-        # Submit migration
-        sourceApi = dbsClient.DbsApi(url=sourceURL)
-        try:
-            existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
-        except Exception, ex:
-            msg = str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-            # TODO: Include correctly the publication of private MC WF
-            existing_datasets = []
-        if not existing_datasets:
-            self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceURL, migrateURL))
-            return [], [], []
+        if not noInput:
+            self.logger.debug("Submit migration %s" %sourceURL)
+            # Submit migration
+            sourceApi = dbsClient.DbsApi(url=sourceURL)
+            try:
+                existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
+            except Exception, ex:
+                msg = str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.error(msg)
+                # TODO: Include correctly the publication of private MC WF
+                existing_datasets = []
+            if not existing_datasets:
+                self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceURL, migrateURL))
+                return [], [], []
 
-        # Get basic data about the parent dataset
-        if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
-            self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
-            return [], [], []
-        primary_ds_type = existing_datasets[0]['primary_ds_type']
-        acquisition_era_name = existing_datasets[0]['acquisition_era_name']
+            # Get basic data about the parent dataset
+            if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
+                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
+                return [], [], []
+            primary_ds_type = existing_datasets[0]['primary_ds_type']
+
+            # There's little chance this is correct, but it's our best guess for now.
+            # CRAB2 uses 'crab2_tag' for all cases
+            existing_output = destApi.listOutputConfigs(dataset=inputDataset)
+            if not existing_output:
+                self.logger.error("Unable to list output config for input dataset %s." % inputDataset)
+            existing_output = existing_output[0]
+            global_tag = existing_output['global_tag']
+        else:
+            primary_ds_type = 'mc'
+            global_tag = 'crab3_tag'
+
         acquisition_era_name = "CRAB"
-
-        # There's little chance this is correct, but it's our best guess for now.
-        existing_output = destApi.listOutputConfigs(dataset=inputDataset)
-        if not existing_output:
-            self.logger.error("Unable to list output config for input dataset %s." % inputDataset)
-        existing_output = existing_output[0]
-        global_tag = existing_output['global_tag']
-
         processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
-        self.logger.debug("iterate for publication")
+        self.logger.debug("Starting iteratation through files for publication")
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
             dbsDatasetPath = datasetPath
@@ -830,11 +844,13 @@ class PublisherWorker:
             if acquisitionera == "null":
                 acquisitionera = acquisition_era_name
             empty, primName, procName, tier =  dbsDatasetPath.split('/')
+
+            # NOTE: Commenting this out to determine whether DBS3 has started to accept CRAB2-style dataset names
             # Change bbockelm-name-pset to bbockelm_name-pset
-            procName = "_".join(procName.split("-")[:2]) + "-" + "-".join(procName.split("-")[2:])
+            #procName = "_".join(procName.split("-")[:2]) + "-" + "-".join(procName.split("-")[2:])
             # NOTE: DBS3 currently chokes if we don't include a processing version / acquisition era
-            procName = "%s-%s-v%d" % (acquisition_era_name, procName, processing_era_config['processing_version'])
-            dbsDatasetPath = "/".join([empty, primName, procName, tier])
+            #procName = "%s-%s-v%d" % (acquisition_era_name, procName, processing_era_config['processing_version'])
+            #dbsDatasetPath = "/".join([empty, primName, procName, tier])
 
             primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
             self.logger.debug("About to insert primary dataset: %s" % str(primds_config))
@@ -880,7 +896,7 @@ class PublisherWorker:
                               'processed_ds_name': procName,
                               'data_tier_name': tier,
                               'acquisition_era_name': acquisitionera,
-                              'dataset_access_type': '*', # TODO
+                              'dataset_access_type': 'VALID',
                               'physics_group_name': 'CRAB3',
                               'last_modification_date': int(time.time()),
                              }
