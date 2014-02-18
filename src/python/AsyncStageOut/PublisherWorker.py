@@ -652,7 +652,6 @@ class PublisherWorker:
 
     def migrateDBS3(self, migrateApi, destReadApi, sourceURL, inputDataset):
 
-        # TODO: include support of private MC WF publication
         try:
             existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True)
         except HTTPError, he:
@@ -781,7 +780,6 @@ class PublisherWorker:
             sourceURL += READ_PATH
 
         self.logger.debug("Migrate datasets")
-        # TODO: Migration of datasets.
         proxy = os.environ.get("SOCKS5_PROXY")
         self.logger.debug("Destination API URL: %s" % destURL)
         destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
@@ -800,7 +798,6 @@ class PublisherWorker:
                 msg = str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-                # TODO: Include correctly the publication of private MC WF
                 existing_datasets = []
             if not existing_datasets:
                 self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceURL, migrateURL))
@@ -839,7 +836,6 @@ class PublisherWorker:
             appVer  = files[0]["swversion"]
             appFam  = 'output'
             seName  = targetSE
-            # TODO: this is invalid:
             pset_hash = files[0]['publishname'].split("-")[-1]
             gtag = str(files[0]['globaltag'])
             if gtag == "None":
@@ -848,13 +844,6 @@ class PublisherWorker:
             if acquisitionera == "null":
                 acquisitionera = acquisition_era_name
             empty, primName, procName, tier =  dbsDatasetPath.split('/')
-
-            # NOTE: Commenting this out to determine whether DBS3 has started to accept CRAB2-style dataset names
-            # Change bbockelm-name-pset to bbockelm_name-pset
-            #procName = "_".join(procName.split("-")[:2]) + "-" + "-".join(procName.split("-")[2:])
-            # NOTE: DBS3 currently chokes if we don't include a processing version / acquisition era
-            #procName = "%s-%s-v%d" % (acquisition_era_name, procName, processing_era_config['processing_version'])
-            #dbsDatasetPath = "/".join([empty, primName, procName, tier])
 
             primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
             self.logger.debug("About to insert primary dataset: %s" % str(primds_config))
