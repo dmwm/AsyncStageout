@@ -791,7 +791,7 @@ class PublisherWorker:
         migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
 
         if not noInput:
-            self.logger.debug("Submit migration %s" %sourceURL)
+            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, migrateURL))
             # Submit migration
             sourceApi = dbsClient.DbsApi(url=sourceURL)
             try:
@@ -820,6 +820,7 @@ class PublisherWorker:
             existing_output = existing_output[0]
             global_tag = existing_output['global_tag']
         else:
+            self.logger.info("This publication appears to be for private MC.")
             primary_ds_type = 'mc'
             global_tag = 'crab3_tag'
 
