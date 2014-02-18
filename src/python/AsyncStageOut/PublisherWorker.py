@@ -783,8 +783,11 @@ class PublisherWorker:
         self.logger.debug("Migrate datasets")
         # TODO: Migration of datasets.
         proxy = os.environ.get("SOCKS5_PROXY")
+        self.logger.debug("Destination API URL: %s" % destURL)
         destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
+        self.logger.debug("Destination read API URL: %s" % destReadURL)
         destReadApi = dbsClient.DbsApi(url=destReadURL, proxy=proxy)
+        self.logger.debug("Migration API URL: %s" % migrateURL)
         migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
 
         if not noInput:
@@ -811,7 +814,7 @@ class PublisherWorker:
 
             # There's little chance this is correct, but it's our best guess for now.
             # CRAB2 uses 'crab2_tag' for all cases
-            existing_output = destApi.listOutputConfigs(dataset=inputDataset)
+            existing_output = destReadApi.listOutputConfigs(dataset=inputDataset)
             if not existing_output:
                 self.logger.error("Unable to list output config for input dataset %s." % inputDataset)
             existing_output = existing_output[0]
