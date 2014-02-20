@@ -22,7 +22,7 @@ class CentralMonitoring(Source):
         Source.__init__(self, config, logger)
 
         # input db
-        self.sourceServer = CouchServer(self.config.data_source)
+        self.sourceServer = CouchServer(self.config.data_source, ckey = config.opsProxy, cert = config.opsProxy)
         self.dbSource = self.sourceServer.connectDatabase(self.config.db_source)
         self.viewSource = 'inputAsyncStageOut'
         self.designSource = 'WMStats'

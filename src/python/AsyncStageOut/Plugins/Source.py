@@ -17,7 +17,7 @@ class Source:
         """
         self.config = config
         self.logger = logger
-        self.asyncServer = CouchServer(self.config.couch_instance)
+        self.asyncServer = CouchServer(self.config.couch_instance, ckey = self.config.opsProxy, cert = self.config.opsProxy)
         self.db = self.asyncServer.connectDatabase(self.config.files_database)
         try:
             query = {'limit' : 1, 'descending': True}
@@ -26,7 +26,7 @@ class Source:
         except:
             self.since = 0
         try:
-            self.phedexApi = PhEDEx( secure = True, dict = {} )
+            self.phedexApi = PhEDEx( secure = True, dict = {'key': self.config.opsProxy, 'cert': self.config.opsProxy} )
         except Exception, e:
             self.logger.exception('PhEDEx object exception: %s' % e)
 
