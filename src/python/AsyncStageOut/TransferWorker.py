@@ -131,7 +131,7 @@ class TransferWorker:
         #         'stale': 'ok'}
         self.logger.debug("Trying to get DN")
         try:
-            self.userDN = getDNFromUserName(self.user, self.logger)
+            self.userDN = getDNFromUserName(self.user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
         except Exception, ex:
             msg =  "Error retrieving the user DN"
             msg += str(ex)
@@ -482,20 +482,22 @@ class TransferWorker:
             self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
             self.logger.debug("log file created: %s" % ftslog_file.name)
 
-            command = '%s -copyjobfile=%s -server=%s -mode=single' % (self.transfer_script,
-                                                                      tmp_copyjob_file.name,
-                                                                      fts_server_for_transfer)
+            command = 'source %s ; ' % self.uiSetupScript
+            command += '%s -copyjobfile=%s -server=%s -mode=single' % (self.transfer_script,
+                                                                       tmp_copyjob_file.name,
+                                                                       fts_server_for_transfer)
 
             init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             self.logger.debug("executing command: %s in log: %s at: %s for: %s" % (command,
                                                                                    ftslog_file.name,
                                                                                    init_time,
                                                                                    self.userDN))
-            self.logger.debug(command.split())
+            self.logger.debug(command)
             proc = subprocess.Popen(
-                            command.split(),
+                            command,
                             stdout=ftslog_file,
                             stderr=ftslog_file,
+                            shell=True
                         )
 
             processes.add(proc)
