@@ -30,19 +30,44 @@ def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
-    logging.debug("Trying to start the worker")
+    logging.debug("Start the user %s worker" % user)
+    list_process = []
+    link_process = {}
+    pfn_lfn_mapping = {}
     try:
-        worker = TransferWorker(user, tfc_map, config)
+        worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping)
     except Exception, e:
         logging.debug("Worker cannot be created!:" %e)
         return user
     if worker.init:
-       logging.debug("Starting %s" %worker)
+       logging.debug("Starting %s" % worker)
        try:
            worker ()
        except Exception, e:
            logging.debug("Worker cannot start!:" %e)
            return user
+    logging.debug("Returning results: process %s, links %s and map %s" % (worker.list_process, worker.link_process, worker.pfn_to_lfn_mapping))
+    list_process = worker.list_process
+    link_process = worker.link_process
+    pfn_lfn_mapping = worker.pfn_to_lfn_mapping
+    if list_process:
+        while list_process:
+            try:
+                worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping)
+            except Exception, e:
+                logging.debug("Worker cannot be created!:" %e)
+                return user
+            if worker.init:
+                logging.debug("Starting %s" % worker)
+                try:
+                    worker ()
+                except Exception, e:
+                    logging.debug("Worker cannot start!:" %e)
+                    return user
+            list_process = worker.list_process
+            link_process = worker.link_process
+            pfn_lfn_mapping = worker.pfn_to_lfn_mapping
+            logging.debug("Returning results: process %s and links %s and map %s" % (list_process, link_process, pfn_lfn_mapping))
     return user
 
 def log_result(result):

@@ -8,8 +8,6 @@ The TransferWorker does the following:
     c. delete successfully transferred files from the database
 
 There should be one worker per user transfer.
-
-
 '''
 from WMCore.Database.CMSCouch import CouchServer
 
@@ -86,10 +84,9 @@ def getProxy(userdn, group, role, defaultDelegation, logger):
         return (True, proxyPath)
     return (False, None)
 
-
 class TransferWorker:
 
-    def __init__(self, user, tfc_map, config):
+    def __init__(self, user, tfc_map, config, list_to_process, link_to_process, pfn_to_lfn_mapping):
         """
         store the user and tfc the worker
         """
@@ -102,7 +99,6 @@ class TransferWorker:
  str(datetime.datetime.now().month), str(datetime.datetime.now().year), self.user)
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
-        self.pfn_to_lfn_mapping = {}
         try:
             os.makedirs(self.log_dir)
         except OSError, e:
@@ -118,17 +114,12 @@ class TransferWorker:
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
-        self.tracking_timeout = getattr(self.config, 'tracking_timeout', 7200)
         self.cleanEnvironment = ''
         self.userDN = ''
         self.init = True
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         # TODO: improve how the worker gets a log
-
-        query = {'group': True,
-                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
-        #         'stale': 'ok'}
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
@@ -163,19 +154,14 @@ class TransferWorker:
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
             defaultDelegation['server_key'] = self.config.serviceKey
-
         self.valid = False
         try:
-
             self.valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
-
         except Exception, ex:
-
             msg =  "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-
         if self.valid:
             self.userProxy = proxy
         else:
@@ -183,11 +169,13 @@ class TransferWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
             self.userProxy = config.opsProxy
-
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.failures_reasons =  {}
         self.commandTimeout = 1200
+        self.list_process = list_to_process
+        self.link_process = link_to_process
+        self.pfn_to_lfn_mapping = pfn_to_lfn_mapping
 
     def __call__(self):
         """
@@ -195,15 +183,13 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
+        self.logger.debug("Starting retrieving jobs")
         jobs = self.files_for_transfer()
-        self.logger.debug("FIRST RETRY for %s " %self.userProxy )
-        if jobs:
-            self.command(jobs)
-        jobs_failed = self.files_for_transfer(True)
-        self.logger.debug("RETRY > 1 for %s " %self.userProxy )
-        if jobs_failed:
-            self.command(jobs_failed, True)
+
+        self.logger.debug("Starting submission")
+        self.command(jobs)
         self.logger.info('Transfers completed')
+
         return
 
     def cleanSpace(self, to_clean_dict, force_delete = False ):
@@ -346,16 +332,16 @@ class TransferWorker:
                      'key':[self.user, self.group, self.role, destination, source]}
                      #'stale': 'ok'}
                 try:
-                    if not retry:
-                        active_files = self.db.loadView('AsyncTransfer', 'ftscp', query)['rows']
-                    else:
-                        active_files = self.db.loadView('AsyncTransfer', 'ftscp_retry', query)['rows']
+                    active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
                 except:
                     return {}
+
                 # Prepare the list of active files updating the status to in transfer if the proxy is valid.
                 acquired_files = self.mark_acquired(active_files)
+
                 if not acquired_files:
                     continue
+
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
                                                                                  len(acquired_files),
                                                                                  source,
@@ -394,7 +380,7 @@ class TransferWorker:
             return None
         if self.tfc_map.has_key(site):
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
-            # TODO: improve fix for wrong tfc on sites
+            #TODO: improve fix for wrong tfc on sites
             try:
                 if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
                 if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
@@ -418,8 +404,10 @@ class TransferWorker:
         """
         Take a site and pfn and get the lfn from self.pfn_to_lfn_mapping
         """
-        lfn = self.pfn_to_lfn_mapping[pfn]
-
+        if self.pfn_to_lfn_mapping.has_key(pfn):
+            lfn = self.pfn_to_lfn_mapping[pfn]
+        else:
+            self.logger.debug("PFN is not in %s" % self.pfn_to_lfn_mapping)
         # Clean pfn-to-lfn map
         del self.pfn_to_lfn_mapping[pfn]
 
@@ -437,163 +425,134 @@ class TransferWorker:
         failed_files = []
         fts_logs = []
         r = []
-
         logs_pool = {}
         mapping_link_process = {}
         tmp_file_pool = []
-
         failed_to_clean = {}
         ftslog_file = None
 
-        processes = set()
-        #self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
+        processes = []
+        self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
 
         os.environ['X509_USER_PROXY'] = self.userProxy
         #Loop through all the jobs for the links we have
-        for link, copyjob in jobs.items():
+        if jobs:
+            for link, copyjob in jobs.items():
 
-            self.logger.debug("Valid %s" %self.validate_copyjob(copyjob) )
-            # Validate copyjob file before doing anything
-            if not self.validate_copyjob(copyjob): continue
+                self.logger.debug("Valid %s" %self.validate_copyjob(copyjob) )
+                # Validate copyjob file before doing anything
+                if not self.validate_copyjob(copyjob): continue
 
-            # Clean cruft files from previous transfer attempts
-            # TODO: check that the job has a retry count > 0 and only delete files if that is the case
-            to_clean = {}
-            to_clean[ tuple( copyjob ) ] = link[1]
+                # Clean cruft files from previous transfer attempts
+                # TODO: check that the job has a retry count > 0 and only delete files if that is the case
+                to_clean = {}
+                to_clean[ tuple( copyjob ) ] = link[1]
 
-            if retry:
-                self.cleanSpace( to_clean )
+                if retry:
+                    self.cleanSpace( to_clean )
 
-            tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
-            tmp_copyjob_file.write('\n'.join(copyjob))
-            tmp_copyjob_file.close()
+                tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
+                tmp_copyjob_file.write('\n'.join(copyjob))
+                tmp_copyjob_file.close()
+                tmp_file_pool.append(tmp_copyjob_file.name)
 
-            tmp_file_pool.append(tmp_copyjob_file.name)
+                fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
+                ftslog_file = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
 
-            fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
+                self.logger.debug("Running FTSCP command")
+                self.logger.debug("FTS server: %s" % fts_server_for_transfer)
+                self.logger.debug("link: %s -> %s" % link)
+                self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
+                self.logger.debug("log file created: %s" % ftslog_file.name)
 
-            ftslog_file = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
+                command = '%s -copyjobfile=%s -server=%s -mode=single' % (self.transfer_script,
+                                                                          tmp_copyjob_file.name,
+                                                                          fts_server_for_transfer)
 
-            logs_pool[link] = ftslog_file
+                init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+                self.logger.debug("executing command: %s in log: %s at: %s for: %s" % (command,
+                                                                                       ftslog_file.name,
+                                                                                       init_time,
+                                                                                       self.userDN))
+                self.logger.debug(command.split())
+                proc = subprocess.Popen(
+                                command.split(),
+                                stdout=ftslog_file,
+                                stderr=ftslog_file,
+                            )
 
-            self.logger.debug("Running FTSCP command")
-            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
-            self.logger.debug("link: %s -> %s" % link)
-            self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
-            self.logger.debug("log file created: %s" % ftslog_file.name)
+                self.logger.debug("Process started: %s" % proc)
+                processes.append(proc)
+                mapping_link_process[proc] = []
+                mapping_link_process[proc].append(ftslog_file)
+                mapping_link_process[proc].append(link)
+                self.logger.debug("Link added: %s --> %s" % link)
+                self.logger.debug("Mapping updated: %s" % mapping_link_process[proc])
 
-            command = '%s -copyjobfile=%s -server=%s -mode=single' % (self.transfer_script,
-                                                                      tmp_copyjob_file.name,
-                                                                      fts_server_for_transfer)
+            self.logger.debug("WORK DONE WAITING and CLEANING: mapping %s process %s" %( mapping_link_process, processes ))
 
-            init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-            self.logger.debug("executing command: %s in log: %s at: %s for: %s" % (command,
-                                                                                   ftslog_file.name,
-                                                                                   init_time,
-                                                                                   self.userDN))
-            self.logger.debug(command.split())
-            proc = subprocess.Popen(
-                            command.split(),
-                            stdout=ftslog_file,
-                            stderr=ftslog_file,
-                        )
+        # Update the list of process/links to track
+        processes.extend(self.list_process)
+        self.list_process = processes
+        self.link_process.update(mapping_link_process)
 
-            processes.add(proc)
-            mapping_link_process[proc] = link
-
-            # now populate results by parsing the copy job's log file.
+        self.logger.debug("list/link updated %s %s" % (self.list_process, self.link_process))
+        process_done = []
+        start_time = int(time.time())
+        for p in self.list_process:
+            self.logger.debug("Process list %s" % self.list_process)
+            self.logger.debug("Link to Process %s" % self.link_process)
+            self.logger.debug("Current process %s" % p)
             # results is a tuple of lists, 1st list is transferred files, second is failed
-
-            self.logger.debug("link %s" % link[0])
-
-            ###results = self.parse_ftscp_results(ftslog_file.name, link[0])
-            # Removing lfn from the source if the transfer succeeded else from the destination
-            ###transferred_files.extend( results[0] )
-            ###failed_files.extend( results[1] )
-            ###self.logger.debug("transferred : %s" % transferred_files)
-            ###self.logger.info("failed : %s" % failed_files)
-
-            # Clean up the temp copy job file
-            ###os.unlink( tmp_copyjob_file.name )
-
-            # The ftscp log file is left for operators to clean up, as per PhEDEx
-            # TODO: recover from restarts by examining the log files, this would mean moving
-            # the ftscp log files to a done folder once parsed, and parsing all files in some
-            # work directory.
-
-        self.logger.debug("WORK DONE WAITING and CLEANING")
-
-        for p in processes:
-            self.logger.debug("Process list %s" %processes)
-            self.logger.debug("Link to Process %s" %mapping_link_process)
-            self.logger.debug("Link to Log %s" %logs_pool)
-            self.logger.debug("Current process %s" %p)
             if p.poll() is None:
-                retry = True
-                while (p.poll() is None and retry):
-                    actual_time = int(time.time())
-                    elapsed_time = actual_time - start_time
-                    if elapsed_time < self.tracking_timeout:
-                        self.logger.debug("Waiting ...%s" % elapsed_time)
-                        time.sleep(300)
+                actual_time = int(time.time())
+                elapsed_time = actual_time - start_time
+                if elapsed_time < 300:
+                    self.logger.debug("Waiting %s..." % (300 - elapsed_time))
+                    time.sleep(300 - elapsed_time)
+                    self.logger.debug("Checking and updating after waiting")
+                    if p.poll() is None:
+                        pass
                     else:
-                        retry = False
-                if p.poll() is None:
-                     user_queue = False
-                     query = {'group': True,
-                              'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
-                     while not user_queue and p.poll() is None:
-                         try:
-                             active_files = self.db.loadView('AsyncTransfer', 'ftscp_new', query)['rows']
-                         except:
-                             active_files = []
-                         if active_files:
-                             self.logger.info("Queue for %s is not empty" % self.user)
-                             user_queue = True
-                         else:
-                             self.logger.info("Empty queue for %s. Waiting other 5 min" % self.user)
-                             time.sleep(300)
-                     if p.poll() is None:
-                         self.logger.info("Process timeout...killing %s" % p.pid)
-                         p.kill()
-            if p.poll() is not None:
-                self.logger.debug("Processing the process %s" %p)
-                link = mapping_link_process[p]
-                log_file = logs_pool[link]
+                        link = self.link_process[p][1]
+                        log_file = self.link_process[p][0]
+                        log_file.close()
+                        end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+                        self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
+                        results = self.parse_ftscp_results(log_file.name, link[0])
+                        self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
+                        self.mark_good( results[0], log_file.name)
+                        self.mark_failed( results[1], log_file.name)
+                        process_done.append(p)
+                else:
+                    pass
+            else:
+                link = self.link_process[p][1]
+                log_file = self.link_process[p][0]
                 log_file.close()
                 end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                self.logger.debug("UPDATING %s %s for %s at %s" %(link, log_file, self.userDN, end_time))
-                results = self.parse_ftscp_results(log_file.name, link)
+                self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
+                results = self.parse_ftscp_results(log_file.name, link[0])
                 self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
                 self.mark_good( results[0], log_file.name)
                 self.mark_failed( results[1], log_file.name)
+                process_done.append(p)
 
         self.logger.debug("PROCESS WORK DONE")
 
-#        for link, log_file in logs_pool.iteritems():
-
-#            log_file.close()
-#            end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-#            self.logger.debug("UPDATING %s %s for %s at %s" %(link, log_file, self.userDN, end_time))
-#            results = self.parse_ftscp_results(log_file.name, link)
-#            self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-#            self.mark_good( results[0], log_file.name)
-#            self.mark_failed( results[1], log_file.name)
-            ##transferred_files.extend( results[0] )
-            ##failed_files.extend( results[1] )
-            #transferred_files[log_file] = results[0]
-            #log_file.close()
-
-#        self.logger.debug("transferred : %s" % transferred_files)
-#        self.logger.info("failed : %s" % failed_files)
-
+        # Unlink copy job files
         for tmp in tmp_file_pool:
             os.unlink( tmp )
 
-        #if ftslog_file:
-        #    return transferred_files, failed_files, ftslog_file.name
-        #else:
-        #    return transferred_files, failed_files, ""
+        # Clean the list of process and links
+        for p_done in process_done:
+            self.list_process.remove(p_done)
+            del self.link_process[p_done]
+
+        self.logger.debug("Checking remaining work...")
+        self.logger.debug("Remaining process %s..." % self.list_process)
+        self.logger.debug("Remaining links %s..." % self.link_process)
+
         return
 
     def validate_copyjob(self, copyjob):
@@ -610,10 +569,10 @@ class TransferWorker:
         and adds the file to the appropriate list. This means that the lfn needs to be recreated from the __source__
         pfn.
         """
+        self.logger.debug("Parsing ftslog")
         transferred_files = []
         failed_files = []
         ftscp_file = open(ftscp_logfile)
-
         for line in ftscp_file.readlines():
             try:
                 if line.split(':')[0].strip() == 'Source':
@@ -629,9 +588,7 @@ class TransferWorker:
                     self.failures_reasons[lfn] = line.split('Reason:')[1:][0].strip()
             except IndexError, ex:
                 self.logger.debug("wrong log file! %s" %ex)
-
         ftscp_file.close()
-
         return (transferred_files, failed_files)
 
     def mark_acquired(self, files=[], good_logfile=None):
@@ -651,7 +608,7 @@ class TransferWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                if document['state'] == 'new':
+                if (document['state'] == 'new' or document['state'] == 'retry'):
                     document['state'] = 'acquired'
                     try:
                         self.db.queue( document )
@@ -661,7 +618,6 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-
                     try:
                         self.db.commit()
                     except Exception, ex:
@@ -670,11 +626,10 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-                if (document['state'] == 'new' or document['state'] == 'acquired'):
+                if document['state'] == 'acquired':
                     lfn_in_transfer.append(lfn)
                 else:
                     continue
-
             else:
                 good_lfn = lfn['value'].replace('store', 'store/temp', 1)
                 self.mark_good([good_lfn])
@@ -685,6 +640,7 @@ class TransferWorker:
         Mark the list of files as tranferred
         """
         for lfn in files:
+            self.logger.debug("Marking good %s" % lfn)
             try:
                 document = self.db.document( getHashLfn(lfn) )
             except Exception, ex:
@@ -799,7 +755,7 @@ class TransferWorker:
                         data['failure_reason'] = "User Proxy has expired."
                     data['end_time'] = now
                 else:
-                    data['state'] = 'acquired'
+		    data['state'] = 'retry'
                 data['last_update'] = last_update
                 data['retry'] = now
                 # Update the document in couch
