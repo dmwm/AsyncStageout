@@ -118,6 +118,7 @@ class TransferWorker:
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
+        self.tracking_timeout = getattr(self.config, 'tracking_timeout', 7200)
         self.cleanEnvironment = ''
         self.userDN = ''
         self.init = True
@@ -150,10 +151,14 @@ class TransferWorker:
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript,
-                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False),
-                                  'myproxyAccount' : re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0],
+                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
                             }
-
+        if hasattr(self.config, "cache_area"):
+            try:
+                defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+            except IndexError:
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
+                pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -524,7 +529,35 @@ class TransferWorker:
             self.logger.debug("Link to Log %s" %logs_pool)
             self.logger.debug("Current process %s" %p)
             if p.poll() is None:
-                p.wait();
+                retry = True
+                while (p.poll() is None and retry):
+                    actual_time = int(time.time())
+                    elapsed_time = actual_time - start_time
+                    if elapsed_time < self.tracking_timeout:
+                        self.logger.debug("Waiting ...%s" % elapsed_time)
+                        time.sleep(300)
+                    else:
+                        retry = False
+                if p.poll() is None:
+                     user_queue = False
+                     query = {'group': True,
+                              'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
+                     while not user_queue and p.poll() is None:
+                         try:
+                             active_files = self.db.loadView('AsyncTransfer', 'ftscp_new', query)['rows']
+                         except:
+                             active_files = []
+                         if active_files:
+                             self.logger.info("Queue for %s is not empty" % self.user)
+                             user_queue = True
+                         else:
+                             self.logger.info("Empty queue for %s. Waiting other 5 min" % self.user)
+                             time.sleep(300)
+                     if p.poll() is None:
+                         self.logger.info("Process timeout...killing %s" % p.pid)
+                         p.kill()
+            if p.poll() is not None:
+                self.logger.debug("Processing the process %s" %p)
                 link = mapping_link_process[p]
                 log_file = logs_pool[link]
                 log_file.close()
@@ -534,18 +567,6 @@ class TransferWorker:
                 self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
                 self.mark_good( results[0], log_file.name)
                 self.mark_failed( results[1], log_file.name)
-
-            else:
-                link = mapping_link_process[p]
-                log_file = logs_pool[link]
-                log_file.close()
-                end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                self.logger.debug("UPDATING %s %s for %s at %s" %(link, log_file, self.userDN, end_time))
-                results = self.parse_ftscp_results(log_file.name, link)
-                self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-                self.mark_good( results[0], log_file.name)
-                self.mark_failed( results[1], log_file.name)
-
 
         self.logger.debug("PROCESS WORK DONE")
 
