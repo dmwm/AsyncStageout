@@ -158,7 +158,7 @@ class PublisherWorker:
             if wf['key'][0] == self.user:
                 active_user_workflows.append(wf)
         self.logger.debug('actives user wfs %s' % active_user_workflows)
-        self.logger.info('actives files %s' %len(active_files))
+        self.logger.info('actives user wfs %s' %len(active_files))
         for user_wf in active_user_workflows:
             self.not_expired_wf = False
             self.forceFailure = False
@@ -757,11 +757,13 @@ class PublisherWorker:
         blockSize = self.max_files_per_block
 
         # Normalize URLs
-        WRITE_PATH = "/DBSWriter"
+        # TODO: set WRITE_PATH to "/DBSWriter" once fixed in CS.
+        WRITE_PATH = "/DBSWriter/"
         MIGRATE_PATH = "/DBSMigrate"
         READ_PATH = "/DBSReader"
+
         if destURL.endswith(WRITE_PATH):
-            destReadURL = destURL[:-len(WRITE_PATH)] + READ_PATh
+            destReadURL = destURL[:-len(WRITE_PATH)] + READ_PATH
             migrateURL = destURL[:-len(WRITE_PATH)] + MIGRATE_PATH
         else:
             migrateURL = destURL + MIGRATE_PATH
@@ -853,6 +855,13 @@ class PublisherWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+            except Exception, ex:
+                msg =  "Unexpected DBS problem"
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.exception(msg)
+                return [], [], []
+
             workToDo = False
 
             # Is there anything to do?
