@@ -1,5 +1,5 @@
 function(doc) {
-        if (doc.state != 'failed' && doc.state != 'done' && doc.state != 'killed' && doc.lfn) {
+        if ((doc.state == 'new' || doc.state == 'retry') && doc.lfn) {
 		emit([doc.user, doc.group, doc.role, doc.destination, doc.source], doc.lfn);
 	}
 }
