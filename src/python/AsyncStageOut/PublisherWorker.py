@@ -157,8 +157,8 @@ class PublisherWorker:
         for wf in active_workflows:
             if wf['key'][0] == self.user:
                 active_user_workflows.append(wf)
-        self.logger.debug('actives user wfs %s' % active_user_workflows)
-        self.logger.info('actives user wfs %s' %len(active_files))
+        self.logger.debug('active user wfs %s' % active_user_workflows)
+        self.logger.info('active user wfs %s' %len(active_user_workflows))
         for user_wf in active_user_workflows:
             self.not_expired_wf = False
             self.forceFailure = False
@@ -171,8 +171,8 @@ class PublisherWorker:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
                 self.logger.error('A problem occured when contacting couchDB to get the list of active files for %s: %s' %(self.user, e))
-            self.logger.info('actives files %s' %len(active_files))
-            self.logger.debug('actives files %s' %active_files)
+            self.logger.info('active files %s' %len(active_files))
+            self.logger.debug('active files %s' %active_files)
             for file in active_files:
                 wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                        str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
@@ -898,7 +898,7 @@ class PublisherWorker:
                               'processed_ds_name': procName,
                               'data_tier_name': tier,
                               'acquisition_era_name': acquisitionera,
-                              'dataset_access_type': 'VALID',
+                              'dataset_access_type': 'VALID', # TODO
                               'physics_group_name': 'CRAB3',
                               'last_modification_date': int(time.time()),
                              }
