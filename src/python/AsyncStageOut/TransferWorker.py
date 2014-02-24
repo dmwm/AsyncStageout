@@ -219,79 +219,80 @@ class TransferWorker:
                     else:
                         destination_pfn = destination_path
 
-                    lcgdel_file = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
+                    if destination_pfn:
+                        lcgdel_file = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
 
-                    command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv --connect-timeout 20 --sendreceive-timeout 240 %s'  % \
-                              (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                    self.logger.debug("Running remove command %s" % command)
-                    self.logger.debug("log file: %s" % lcgdel_file.name)
+                        command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv --connect-timeout 20 --sendreceive-timeout 240 %s'  % \
+                                  (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
+                        self.logger.debug("Running remove command %s" % command)
+                        self.logger.debug("log file: %s" % lcgdel_file.name)
 
-                    proc = subprocess.Popen(
-                            ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                            stdout=lcgdel_file,
-                            stderr=lcgdel_file,
-                            stdin=subprocess.PIPE,
-                    )
-                    proc.stdin.write(command)
-                    stdout, stderr = proc.communicate()
-
-                    rc = proc.returncode
-                    lcgdel_file.close()
-
-
-                    if force_delete:
-
-                        ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
-
-                        # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
-                        # the srmrm log and parse it
-                        commandLs = '%s export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % \
-                                    (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                        self.logger.debug("Running list command %s" % commandLs)
-                        self.logger.debug("log file: %s" % ls_logfile.name)
-
-                        procLs = subprocess.Popen(
+                        proc = subprocess.Popen(
                                 ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                stdout=ls_logfile,
-                                stderr=ls_logfile,
+                                stdout=lcgdel_file,
+                                stderr=lcgdel_file,
                                 stdin=subprocess.PIPE,
                         )
-                        procLs.stdin.write(commandLs)
-                        stdout, stderr = procLs.communicate()
-                        rcLs = procLs.returncode
-                        ls_logfile.close()
+                        proc.stdin.write(command)
+                        stdout, stderr = proc.communicate()
 
-                        # rcLs = 0 file exists while rcLs = 1 it doesn't
-                        # Fallback to srmrm if the file still exists
-                        if not rcLs:
+                        rc = proc.returncode
+                        lcgdel_file.close()
 
-                            rm_logfile = open('%s/%s_%s.srmrm.log' % (self.log_dir,
-                                                                      to_clean_dict[ task ],
-                                                                      str(time.time())),
-                                                                      'w')
-                            commandRm = '%s export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % \
+
+                        if force_delete:
+
+                            ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
+
+                            # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
+                            # the srmrm log and parse it
+                            commandLs = '%s export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % \
                                         (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                            self.logger.debug("Running rm command %s" % commandRm)
-                            self.logger.debug("log file: %s" % rm_logfile.name)
+                            self.logger.debug("Running list command %s" % commandLs)
+                            self.logger.debug("log file: %s" % ls_logfile.name)
 
-
-                            procRm = subprocess.Popen(
+                            procLs = subprocess.Popen(
                                     ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                    stdout=rm_logfile,
-                                    stderr=rm_logfile,
+                                    stdout=ls_logfile,
+                                    stderr=ls_logfile,
                                     stdin=subprocess.PIPE,
                             )
-                            procRm.stdin.write(commandRm)
-                            stdout, stderr = procRm.communicate()
-                            rcRm = procRm.returncode
-                            rm_logfile.close()
+                            procLs.stdin.write(commandLs)
+                            stdout, stderr = procLs.communicate()
+                            rcLs = procLs.returncode
+                            ls_logfile.close()
 
-                            # rcRm = 0 the remove was succeeding.
-                            #if rcRm:
+                            # rcLs = 0 file exists while rcLs = 1 it doesn't
+                            # Fallback to srmrm if the file still exists
+                            if not rcLs:
 
-                            #    del to_clean_dict[task]
-                            #    # Force file failure
-                            #    self.mark_failed( [task], True )
+                                rm_logfile = open('%s/%s_%s.srmrm.log' % (self.log_dir,
+                                                                          to_clean_dict[ task ],
+                                                                          str(time.time())),
+                                                                          'w')
+                                commandRm = '%s export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % \
+                                            (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
+                                self.logger.debug("Running rm command %s" % commandRm)
+                                self.logger.debug("log file: %s" % rm_logfile.name)
+
+
+                                procRm = subprocess.Popen(
+                                        ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
+                                        stdout=rm_logfile,
+                                        stderr=rm_logfile,
+                                        stdin=subprocess.PIPE,
+                                )
+                                procRm.stdin.write(commandRm)
+                                stdout, stderr = procRm.communicate()
+                                rcRm = procRm.returncode
+                                rm_logfile.close()
+
+                                # rcRm = 0 the remove was succeeding.
+                                #if rcRm:
+
+                                #    del to_clean_dict[task]
+                                #    # Force file failure
+                                #    self.mark_failed( [task], True )
 
         return
 
@@ -336,14 +337,9 @@ class TransferWorker:
                 except:
                     return {}
 
-                # Prepare the list of active files updating the status to in transfer if the proxy is valid.
-                acquired_files = self.mark_acquired(active_files)
-
-                if not acquired_files:
-                    continue
-
+                # Prepare the list of active files updating the status to in transfer.
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
-                                                                                 len(acquired_files),
+                                                                                 len(active_files),
                                                                                  source,
                                                                                  destination))
                 new_job = []
@@ -353,11 +349,13 @@ class TransferWorker:
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                        item['value'].replace('store/temp', 'store', 1).replace(\
                                                                        '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
-                    new_job.append('%s %s' % (source_pfn, destination_pfn))
-
-                map(tfc_map, acquired_files)
-
-                jobs[(source, destination)] = new_job
+                    if source_pfn and destination_pfn:
+                        new_job.append('%s %s' % (source_pfn, destination_pfn))
+                map(tfc_map, active_files)
+                if new_job:
+                    acquired_files = self.mark_acquired(active_files)
+                    if acquired_files:
+                        jobs[(source, destination)] = new_job
             self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
 
             if failed_files:
