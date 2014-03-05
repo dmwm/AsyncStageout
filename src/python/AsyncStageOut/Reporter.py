@@ -3,15 +3,14 @@
 Checks for files to transfer
 """
 from WMCore.Agent.Harness import Harness
-from AsyncStageOut.TransferDaemon import TransferDaemon
-#from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
+from AsyncStageOut.ReporterDaemon import ReporterDaemon
 from AsyncStageOut import execute_command
 import os, errno
 import time, datetime
 import logging
 import threading
 
-class AsyncTransfer(Harness):
+class Reporter(Harness):
     """
     _AsyncTransfer_
     AsyncTransfer main class. Call workers to do following work:
@@ -22,7 +21,7 @@ class AsyncTransfer(Harness):
     def __init__(self, config):
         # call the base class
         Harness.__init__(self, config)
-        logging.info("AsyncTransfer.__init__")
+        logging.info("Reporter.__init__")
 
     def preInitialization(self):
         """
@@ -33,20 +32,8 @@ class AsyncTransfer(Harness):
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
 
-#        logging.debug("Setting DB source poll interval to %s seconds" \
-#                      %str(self.config.AsyncTransfer.pollViewsInterval) )
-
-#        myThread.workerThreadManager.addWorker( \
-#                              LFNSourceDuplicator(self.config), \
-#                              self.config.AsyncTransfer.pollViewsInterval \
-#                            )
-
-        logging.debug("Setting poll interval to %s seconds" \
-                      %str(self.config.AsyncTransfer.pollInterval) )
-
-
         myThread.workerThreadManager.addWorker( \
-                              TransferDaemon(self.config), \
+                              ReporterDaemon(self.config), \
                               self.config.AsyncTransfer.pollInterval \
                             )
 
