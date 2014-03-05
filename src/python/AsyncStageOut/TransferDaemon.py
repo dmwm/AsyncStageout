@@ -30,44 +30,19 @@ def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
-    logging.debug("Start the user %s worker" % user)
-    list_process = []
-    link_process = {}
-    pfn_lfn_mapping = {}
+    logging.debug("Trying to start the worker")
     try:
-        worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping)
+        worker = TransferWorker(user, tfc_map, config)
     except Exception, e:
         logging.debug("Worker cannot be created!:" %e)
         return user
     if worker.init:
-       logging.debug("Starting %s" % worker)
+       logging.debug("Starting %s" %worker)
        try:
            worker ()
        except Exception, e:
            logging.debug("Worker cannot start!:" %e)
            return user
-    logging.debug("Returning results: process %s, links %s and map %s" % (worker.list_process, worker.link_process, worker.pfn_to_lfn_mapping))
-    list_process = worker.list_process
-    link_process = worker.link_process
-    pfn_lfn_mapping = worker.pfn_to_lfn_mapping
-    if list_process:
-        while list_process:
-            try:
-                worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping)
-            except Exception, e:
-                logging.debug("Worker cannot be created!:" %e)
-                return user
-            if worker.init:
-                logging.debug("Starting %s" % worker)
-                try:
-                    worker ()
-                except Exception, e:
-                    logging.debug("Worker cannot start!:" %e)
-                    return user
-            list_process = worker.list_process
-            link_process = worker.link_process
-            pfn_lfn_mapping = worker.pfn_to_lfn_mapping
-            logging.debug("Returning results: process %s and links %s and map %s" % (list_process, link_process, pfn_lfn_mapping))
     return user
 
 def log_result(result):
@@ -127,10 +102,9 @@ class TransferDaemon(BaseWorkerThread):
         query = {'stale':'ok'}
         try:
             params = self.config_db.loadView('asynctransfer_config', 'GetTransferConfig', query)
+            #self.pool = Pool(processes=params['rows'][0]['key'][0])
             self.config.max_files_per_transfer = params['rows'][0]['key'][1]
             self.config.algoName = params['rows'][0]['key'][2]
-        except IndexError:
-            self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
 
@@ -142,34 +116,17 @@ class TransferDaemon(BaseWorkerThread):
 
         site_tfc_map = {}
         for site in sites:
-            # TODO: Remove the Workaround for FNAL
-            if site == 'T1_US_FNAL':
-                site = 'T1_US_FNAL_Buffer'
-            if site == 'T1_ES_PIC':
-                site = 'T1_ES_PIC_Buffer'
-            if site == 'T1_DE_KIT':
-                site = 'T1_DE_KIT_Buffer'
-            if site == 'T1_FR_CCIN2P3':
-                site = 'T1_FR_CCIN2P3_Buffer'
-            if site == 'T1_IT_CNAF':
-                site = 'T1_IT_CNAF_Buffer'
-            if site == 'T1_RU_JINR':
-                site = 'T1_RU_JINR_Buffer'
-            if site == 'T1_TW_ASGC':
-                site = 'T1_TW_ASGC_Buffer'
-            if site == 'T1_UK_RAL':
-                site = 'T1_UK_RAL_Buffer'
-            if site == 'T1_CH_CERN':
-                site = 'T1_CH_CERN_Buffer'
             if site and str(site) != 'None':
                 site_tfc_map[site] = self.get_tfc_rules(site)
-        self.logger.debug('kicking off pool')
+
+        self.logger.info('Current Submitter running %s' % len(current_running))
+        self.logger.debug('Current Submitter running %s' % current_running)
+
         for u in users:
-            self.logger.debug('current_running %s' %current_running)
+            self.logger.debug('kicking off pool')
             if u not in current_running:
-                self.logger.debug('processing %s' %u)
+                self.logger.debug('New submitter for %s' %u)
                 current_running.append(u)
-                self.logger.debug('processing %s' %current_running)
                 self.pool.apply_async(ftscp,(u, site_tfc_map, self.config), callback = log_result)
 
     def active_users(self, db):

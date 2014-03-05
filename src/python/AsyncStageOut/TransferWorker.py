@@ -8,6 +8,8 @@ The TransferWorker does the following:
     c. delete successfully transferred files from the database
 
 There should be one worker per user transfer.
+
+
 '''
 from WMCore.Database.CMSCouch import CouchServer
 
@@ -24,6 +26,7 @@ from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
+import json
 #import json
 #import socket
 #import stomp
@@ -84,9 +87,10 @@ def getProxy(userdn, group, role, defaultDelegation, logger):
         return (True, proxyPath)
     return (False, None)
 
+
 class TransferWorker:
 
-    def __init__(self, user, tfc_map, config, list_to_process, link_to_process, pfn_to_lfn_mapping):
+    def __init__(self, user, tfc_map, config):
         """
         store the user and tfc the worker
         """
@@ -95,41 +99,47 @@ class TransferWorker:
         self.role = user[2]
         self.tfc_map = tfc_map
         self.config = config
-        self.log_dir = '%s/logs/%s/%s/%s' % ( self.config.componentDir, \
- str(datetime.datetime.now().month), str(datetime.datetime.now().year), self.user)
+        self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
+        if not os.path.isdir(self.dropbox_dir):
+            try:
+                os.makedirs(self.dropbox_dir)
+            except OSError, e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else:
+                    self.logger.error('Unknown error in mkdir' % e.errno)
+                    raise
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
-        try:
-            os.makedirs(self.log_dir)
-        except OSError, e:
-            if e.errno == errno.EEXIST:
-                pass
-            else:
-                self.logger.error('Unknown error in mkdir' % e.errno)
-                raise
+        self.pfn_to_lfn_mapping = {}
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.config_db = config_server.connectDatabase(self.config.config_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
-        self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
+        self.submission_command = getattr(self.config, 'submission_command', 'glite-transfer-submit')
         self.cleanEnvironment = ''
         self.userDN = ''
         self.init = True
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         # TODO: improve how the worker gets a log
+
+        query = {'group': True,
+                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
+        #         'stale': 'ok'}
         self.logger.debug("Trying to get DN")
-        try:
-            self.userDN = getDNFromUserName(self.user, self.logger)
-        except Exception, ex:
-            msg =  "Error retrieving the user DN"
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-            self.init = False
-            return
+        #try:
+        #    self.userDN = getDNFromUserName(self.user, self.logger)
+        #except Exception, ex:
+        #    msg =  "Error retrieving the user DN"
+        #    msg += str(ex)
+        #    msg += str(traceback.format_exc())
+        #    self.logger.error(msg)
+        #    self.init = False
+        #    return
+        self.userDN = '/C=IT/O=INFN/OU=Personal Certificate/L=Perugia/CN=Hassen Riahi'
         if not self.userDN:
             self.init = False
             return
@@ -154,14 +164,19 @@ class TransferWorker:
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
             defaultDelegation['server_key'] = self.config.serviceKey
+
         self.valid = False
         try:
+
             self.valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+
         except Exception, ex:
+
             msg =  "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+
         if self.valid:
             self.userProxy = proxy
         else:
@@ -169,13 +184,11 @@ class TransferWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
             self.userProxy = config.opsProxy
+
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.failures_reasons =  {}
         self.commandTimeout = 1200
-        self.list_process = list_to_process
-        self.link_process = link_to_process
-        self.pfn_to_lfn_mapping = pfn_to_lfn_mapping
 
     def __call__(self):
         """
@@ -183,117 +196,11 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
-        self.logger.debug("Starting retrieving jobs")
-        jobs = self.files_for_transfer()
-
-        self.logger.debug("Starting submission")
-        self.command(jobs)
+        jobs, jobs_lfn, jobs_pfn = self.files_for_transfer()
+        self.logger.debug("Processing files for %s " %self.userProxy )
+        if jobs:
+            self.command(jobs, jobs_lfn, jobs_pfn)
         self.logger.info('Transfers completed')
-
-        return
-
-    def cleanSpace(self, to_clean_dict, force_delete = False ):
-        """
-        Remove all __destination__ PFNs got in input. The delete can fail because of a file not found
-        so issue the command and hope for the best.
-
-        TODO: better parsing of output
-        """
-        if to_clean_dict:
-
-            for task in to_clean_dict:
-
-                for destination_paths in task:
-                    # Decomment this if we want to clean before
-                    # the beginning of the transfer in the future
-                    #    destination_path = task.split()[1]
-
-                    try:
-                        destination_path = destination_paths.split()[1]
-                    except:
-                        destination_path = destination_paths
-
-                    # Test if it is an lfn
-                    if destination_path.find(":") < 0:
-                        destination_pfn = self.apply_tfc_to_lfn( '%s:%s' %( to_clean_dict[ task ], destination_path ) )
-                    else:
-                        destination_pfn = destination_path
-
-                    if destination_pfn:
-                        lcgdel_file = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
-
-                        command = '%s export X509_USER_PROXY=%s ; source %s ; lcg-del -lv --connect-timeout 20 --sendreceive-timeout 240 %s'  % \
-                                  (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                        self.logger.debug("Running remove command %s" % command)
-                        self.logger.debug("log file: %s" % lcgdel_file.name)
-
-                        proc = subprocess.Popen(
-                                ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                stdout=lcgdel_file,
-                                stderr=lcgdel_file,
-                                stdin=subprocess.PIPE,
-                        )
-                        proc.stdin.write(command)
-                        stdout, stderr = proc.communicate()
-
-                        rc = proc.returncode
-                        lcgdel_file.close()
-
-
-                        if force_delete:
-
-                            ls_logfile = open('%s/%s_%s.lcg-ls.log' % ( self.log_dir, to_clean_dict[ task ], str(time.time()) ), 'w')
-
-                            # Running Ls command to be sure that the file is not there anymore. It is better to do so rather opening
-                            # the srmrm log and parse it
-                            commandLs = '%s export X509_USER_PROXY=%s ; source %s ; lcg-ls %s'  % \
-                                        (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                            self.logger.debug("Running list command %s" % commandLs)
-                            self.logger.debug("log file: %s" % ls_logfile.name)
-
-                            procLs = subprocess.Popen(
-                                    ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                    stdout=ls_logfile,
-                                    stderr=ls_logfile,
-                                    stdin=subprocess.PIPE,
-                            )
-                            procLs.stdin.write(commandLs)
-                            stdout, stderr = procLs.communicate()
-                            rcLs = procLs.returncode
-                            ls_logfile.close()
-
-                            # rcLs = 0 file exists while rcLs = 1 it doesn't
-                            # Fallback to srmrm if the file still exists
-                            if not rcLs:
-
-                                rm_logfile = open('%s/%s_%s.srmrm.log' % (self.log_dir,
-                                                                          to_clean_dict[ task ],
-                                                                          str(time.time())),
-                                                                          'w')
-                                commandRm = '%s export X509_USER_PROXY=%s ; source %s ; srmrm %s'  % \
-                                            (self.cleanEnvironment, self.userProxy, self.uiSetupScript, destination_pfn)
-                                self.logger.debug("Running rm command %s" % commandRm)
-                                self.logger.debug("log file: %s" % rm_logfile.name)
-
-
-                                procRm = subprocess.Popen(
-                                        ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                                        stdout=rm_logfile,
-                                        stderr=rm_logfile,
-                                        stdin=subprocess.PIPE,
-                                )
-                                procRm.stdin.write(commandRm)
-                                stdout, stderr = procRm.communicate()
-                                rcRm = procRm.returncode
-                                rm_logfile.close()
-
-                                # rcRm = 0 the remove was succeeding.
-                                #if rcRm:
-
-                                #    del to_clean_dict[task]
-                                #    # Force file failure
-                                #    self.mark_failed( [task], True )
-
         return
 
     def source_destinations_by_user(self):
@@ -321,6 +228,8 @@ class TransferWorker:
         """
         source_dests = self.source_destinations_by_user()
         jobs = {}
+        jobs_lfn = {}
+        jobs_pfn = {}
         failed_files = []
         self.logger.info('%s has %s links to transfer on: %s' % (self.user, len(source_dests), str(source_dests)))
         try:
@@ -336,31 +245,36 @@ class TransferWorker:
                     active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
                 except:
                     return {}
-
-                # Prepare the list of active files updating the status to in transfer.
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
                                                                                  len(active_files),
                                                                                  source,
-                                                                                 destination))
+                                                                                  destination))
                 new_job = []
+                lfn_list = []
+                pfn_list = []
+
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
                     source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
+                    if source_pfn:
+                        lfn_list.append(item['value'])
+                        pfn_list.append(source_pfn)      
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                        item['value'].replace('store/temp', 'store', 1).replace(\
                                                                        '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
-                    if source_pfn and destination_pfn:
-                        new_job.append('%s %s' % (source_pfn, destination_pfn))
+                    new_job.append('%s %s' % (source_pfn, destination_pfn))
+
                 map(tfc_map, active_files)
-                if new_job:
-                    acquired_files = self.mark_acquired(active_files)
-                    if acquired_files:
-                        jobs[(source, destination)] = new_job
+
+                jobs[(source, destination)] = new_job
+                jobs_lfn[(source, destination)] = lfn_list
+                jobs_pfn[(source, destination)] = pfn_list
+            
             self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
 
             if failed_files:
                 failed_files = jobs
-            return jobs
+            return jobs, jobs_lfn, jobs_pfn 
         except:
             self.logger.exception("fail")
             return {}
@@ -378,7 +292,7 @@ class TransferWorker:
             return None
         if self.tfc_map.has_key(site):
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
-            #TODO: improve fix for wrong tfc on sites
+            # TODO: improve fix for wrong tfc on sites
             try:
                 if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
                 if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
@@ -398,20 +312,7 @@ class TransferWorker:
             self.logger.error('Wrong site %s!' % site)
             return None
 
-    def get_lfn_from_pfn(self, site, pfn):
-        """
-        Take a site and pfn and get the lfn from self.pfn_to_lfn_mapping
-        """
-        if self.pfn_to_lfn_mapping.has_key(pfn):
-            lfn = self.pfn_to_lfn_mapping[pfn]
-        else:
-            self.logger.debug("PFN is not in %s" % self.pfn_to_lfn_mapping)
-        # Clean pfn-to-lfn map
-        del self.pfn_to_lfn_mapping[pfn]
-
-        return lfn
-
-    def command(self, jobs, retry = False):
+    def command(self, jobs, jobs_lfn, jobs_pfn, retry = False):
         """
         For each job the worker has to complete:
            Delete files that have failed previously
@@ -419,138 +320,73 @@ class TransferWorker:
            Submit the copyjob to the appropriate FTS server
            Parse the output of the FTS transfer and return complete and failed files for recording
         """
-        transferred_files = []
-        failed_files = []
-        fts_logs = []
-        r = []
-        logs_pool = {}
-        mapping_link_process = {}
+        # Output: {"userProxyPath":"/path/to/proxy","LFNs":["lfn1","lfn2","lfn3"],"PFNs":["pfn1","pfn2","pfn3"],"FTSJobid":'id-of-fts-job', "username": 'username'}
         tmp_file_pool = []
-        failed_to_clean = {}
-        ftslog_file = None
 
-        processes = []
-        self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
-
-        os.environ['X509_USER_PROXY'] = self.userProxy
         #Loop through all the jobs for the links we have
-        if jobs:
-            for link, copyjob in jobs.items():
+        for link, copyjob in jobs.items():
 
-                self.logger.debug("Valid %s" %self.validate_copyjob(copyjob) )
-                # Validate copyjob file before doing anything
-                if not self.validate_copyjob(copyjob): continue
+            fts_job = {}
 
-                # Clean cruft files from previous transfer attempts
-                # TODO: check that the job has a retry count > 0 and only delete files if that is the case
-                to_clean = {}
-                to_clean[ tuple( copyjob ) ] = link[1]
+            # Validate copyjob file before doing anything
+            self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
+            if not self.validate_copyjob(copyjob): continue
 
-                if retry:
-                    self.cleanSpace( to_clean )
+            tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
+            tmp_copyjob_file.write('\n'.join(copyjob))
+            tmp_copyjob_file.close()
 
-                tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
-                tmp_copyjob_file.write('\n'.join(copyjob))
-                tmp_copyjob_file.close()
-                tmp_file_pool.append(tmp_copyjob_file.name)
+            tmp_file_pool.append(tmp_copyjob_file.name)
 
-                fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
-                ftslog_file = open('%s/%s-%s_%s.ftslog' % ( self.log_dir, link[0], link[1], str(time.time()) ), 'w')
+            fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
 
-                self.logger.debug("Running FTSCP command")
-                self.logger.debug("FTS server: %s" % fts_server_for_transfer)
-                self.logger.debug("link: %s -> %s" % link)
-                self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
-                self.logger.debug("log file created: %s" % ftslog_file.name)
+            self.logger.debug("Running FTS submission command")
+            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
+            self.logger.debug("link: %s -> %s" % link)
+            self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
 
-                command = '%s -copyjobfile=%s -server=%s -mode=single' % (self.transfer_script,
-                                                                          tmp_copyjob_file.name,
-                                                                          fts_server_for_transfer)
-
-                init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                self.logger.debug("executing command: %s in log: %s at: %s for: %s" % (command,
-                                                                                       ftslog_file.name,
-                                                                                       init_time,
-                                                                                       self.userDN))
-                self.logger.debug(command.split())
-                proc = subprocess.Popen(
-                                command.split(),
-                                stdout=ftslog_file,
-                                stderr=ftslog_file,
-                            )
-
-                self.logger.debug("Process started: %s" % proc)
-                processes.append(proc)
-                mapping_link_process[proc] = []
-                mapping_link_process[proc].append(ftslog_file)
-                mapping_link_process[proc].append(link)
-                self.logger.debug("Link added: %s --> %s" % link)
-                self.logger.debug("Mapping updated: %s" % mapping_link_process[proc])
-
-            self.logger.debug("WORK DONE WAITING and CLEANING: mapping %s process %s" %( mapping_link_process, processes ))
-
-        # Update the list of process/links to track
-        processes.extend(self.list_process)
-        self.list_process = processes
-        self.link_process.update(mapping_link_process)
-
-        self.logger.debug("list/link updated %s %s" % (self.list_process, self.link_process))
-        process_done = []
-        start_time = int(time.time())
-        for p in self.list_process:
-            self.logger.debug("Process list %s" % self.list_process)
-            self.logger.debug("Link to Process %s" % self.link_process)
-            self.logger.debug("Current process %s" % p)
-            # results is a tuple of lists, 1st list is transferred files, second is failed
-            if p.poll() is None:
-                actual_time = int(time.time())
-                elapsed_time = actual_time - start_time
-                if elapsed_time < 300:
-                    self.logger.debug("Waiting %s..." % (300 - elapsed_time))
-                    time.sleep(300 - elapsed_time)
-                    self.logger.debug("Checking and updating after waiting")
-                    if p.poll() is None:
-                        pass
-                    else:
-                        link = self.link_process[p][1]
-                        log_file = self.link_process[p][0]
-                        log_file.close()
-                        end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                        self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
-                        results = self.parse_ftscp_results(log_file.name, link[0])
-                        self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-                        self.mark_good( results[0], log_file.name)
-                        self.mark_failed( results[1], log_file.name)
-                        process_done.append(p)
-                else:
-                    pass
+            command = 'export X509_USER_PROXY=%s ;  source %s ; %s -o -s %s -f %s' % (self.userProxy, self.uiSetupScript, 
+                                                                                    self.submission_command, fts_server_for_transfer, 
+                                                                                    tmp_copyjob_file.name)
+                                                                                    
+                                                                                 
+            init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+            self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
+            proc = subprocess.Popen(command, shell=True, cwd=os.environ['PWD'],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    stdin=subprocess.PIPE,
+                                   )
+            stdout, stderr = proc.communicate()
+            rc = proc.returncode 
+            self.logger.debug("Submission result %s"  % rc)
+            self.logger.debug("Sending %s %s %s" % ( jobs_lfn[link], jobs_pfn[link], stdout.strip() ))
+            if not rc:
+                # Updating files to acquired in the database
+                self.logger.info("Mark acquired %s files" % len(jobs_lfn[link]))
+                self.logger.debug("Mark acquired %s files" % jobs_lfn[link])
+                acquired_files = self.mark_acquired(jobs_lfn[link]) 
+                self.logger.info("Marked acquired %s" % len(acquired_files))
+                if not acquired_files:
+                    continue 
+                fts_job['userProxyPath'] = self.userProxy
+                fts_job['LFNs'] = jobs_lfn[link] 
+                fts_job['PFNs'] = jobs_pfn[link] 
+                fts_job['FTSJobid'] = stdout.strip() 
+                fts_job['username'] = self.user 
+                self.logger.debug("Creating json file %s in %s" % (fts_job, self.dropbox_dir))                
+                ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid'] ), 'w')
+	        jsondata = json.dumps(fts_job)
+                ftsjob_file.write(jsondata)
+                ftsjob_file.close()
+                self.logger.debug("%s ready." % fts_job)
             else:
-                link = self.link_process[p][1]
-                log_file = self.link_process[p][0]
-                log_file.close()
-                end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
-                results = self.parse_ftscp_results(log_file.name, link[0])
-                self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-                self.mark_good( results[0], log_file.name)
-                self.mark_failed( results[1], log_file.name)
-                process_done.append(p)
-
-        self.logger.debug("PROCESS WORK DONE")
-
-        # Unlink copy job files
+                self.logger.debug("Submission failed %s" % stderr) 
+                continue
+            # Generate the json output
+        self.logger.debug("Jobs submission Done. Removing copy_job files")
         for tmp in tmp_file_pool:
             os.unlink( tmp )
-
-        # Clean the list of process and links
-        for p_done in process_done:
-            self.list_process.remove(p_done)
-            del self.link_process[p_done]
-
-        self.logger.debug("Checking remaining work...")
-        self.logger.debug("Remaining process %s..." % self.list_process)
-        self.logger.debug("Remaining links %s..." % self.link_process)
-
         return
 
     def validate_copyjob(self, copyjob):
@@ -561,42 +397,15 @@ class TransferWorker:
             if task.split()[0] == 'None' or task.split()[1] == 'None': return False
         return True
 
-    def parse_ftscp_results(self, ftscp_logfile, siteSource):
-        """
-        parse_ftscp_results parses the output of ftscp to get a list of all files that the job tried to transfer
-        and adds the file to the appropriate list. This means that the lfn needs to be recreated from the __source__
-        pfn.
-        """
-        self.logger.debug("Parsing ftslog")
-        transferred_files = []
-        failed_files = []
-        ftscp_file = open(ftscp_logfile)
-        for line in ftscp_file.readlines():
-            try:
-                if line.split(':')[0].strip() == 'Source':
-                    lfn = self.get_lfn_from_pfn( siteSource, line.split('Source:')[1:][0].strip() )
-                    # Now we have the lfn, skip to the next line
-                    continue
-                if line.split(':')[0].strip() == 'State' and lfn:
-                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done' or line.split(':')[1].strip() == 'Finishing':
-                        transferred_files.append(lfn)
-                    else:
-                        failed_files.append(lfn)
-                if line.split(':')[0].strip() == 'Reason':
-                    self.failures_reasons[lfn] = line.split('Reason:')[1:][0].strip()
-            except IndexError, ex:
-                self.logger.debug("wrong log file! %s" %ex)
-        ftscp_file.close()
-        return (transferred_files, failed_files)
-
     def mark_acquired(self, files=[], good_logfile=None):
         """
         Mark the list of files as tranferred
         """
         lfn_in_transfer = []
         for lfn in files:
-            if lfn['value'].find('temp') > 1:
-                docId = getHashLfn(lfn['value'])
+            if lfn.find('temp') > 1:
+                docId = getHashLfn(lfn)
+                self.logger.debug("Marking acquired %s" % docId)
                 # Load document to get the retry_count
                 try:
                     document = self.db.document( docId )
@@ -607,29 +416,26 @@ class TransferWorker:
                     self.logger.error(msg)
                     continue
                 if (document['state'] == 'new' or document['state'] == 'retry'):
-                    document['state'] = 'acquired'
+                    data = {}
+                    data['state'] = 'acquired'
+                    data['last_update'] = time.time()
+                    updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
+                    updateUri += "?" + urllib.urlencode(data)
                     try:
-                        self.db.queue( document )
+                        self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
                     except Exception, ex:
-                        msg =  "Error updating document in couch"
+                        msg = "Error updating document in couch"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-                    try:
-                        self.db.commit()
-                    except Exception, ex:
-                        msg =  "Error commiting documents in couch"
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        continue
-                if document['state'] == 'acquired':
+                    self.logger.debug("Marked acquired %s of %s" % (docId,lfn))
                     lfn_in_transfer.append(lfn)
+
                 else:
                     continue
             else:
-                good_lfn = lfn['value'].replace('store', 'store/temp', 1)
+                good_lfn = lfn.replace('store', 'store/temp', 1)
                 self.mark_good([good_lfn])
         return lfn_in_transfer
 
@@ -638,7 +444,6 @@ class TransferWorker:
         Mark the list of files as tranferred
         """
         for lfn in files:
-            self.logger.debug("Marking good %s" % lfn)
             try:
                 document = self.db.document( getHashLfn(lfn) )
             except Exception, ex:
@@ -685,42 +490,28 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-#            outputPfn = self.apply_tfc_to_lfn( '%s:%s' % ( document['destination'], outputLfn ) )
-#            pluginSource = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], listFlag = True)
-#            pluginSource.updateSource({ 'jobid':document['jobid'], 'timestamp':document['job_end_time'], \
-#                                        'lfn': outputLfn, 'location': document['destination'], 'pfn': outputPfn, 'checksums': document['checksums'] })
-#            if document["type"] == "output":
-#                try:
-#                    self.logger.debug("Worker producing %s" %(str(document["jobid"]) + ":" + "done"))
-#                    message = { 'PandaID':document["jobid"], 'transferStatus': { document["lfn"] : "done" } }
-#                    self.produce(message)
-#                except Exception, ex:
-#                    msg =  "Error producing message"
-#                    msg += str(ex)
-#                    msg += str(traceback.format_exc())
-#                    self.logger.error(msg)
-
         self.logger.debug("transferred file updated")
-#        try:
-#            self.db.commit()
-#        except Exception, ex:
-#            msg =  "Error commiting documents in couch"
-#            msg += str(ex)
-#            msg += str(traceback.format_exc())
-#            self.logger.error(msg)
 
     def mark_failed(self, files=[], bad_logfile=None, force_fail = False ):
         """
         Something failed for these files so increment the retry count
         """
         for lfn in files:
-
+   
             data = {}
-            if 'temp' not in lfn:
-                temp_lfn = lfn.replace('store', 'store/temp', 1)
+            if not isinstance(lfn, dict):
+                if 'temp' not in lfn:
+                    temp_lfn = lfn.replace('store', 'store/temp', 1)
+                else:
+                    temp_lfn = lfn
+                perm_lfn = lfn
             else:
-                temp_lfn = lfn
-
+                if 'temp' not in lfn['value']:
+                    temp_lfn = lfn['value'].replace('store', 'store/temp', 1)
+                else:
+                    temp_lfn = lfn['value']
+                perm_lfn = lfn['value']
+ 
             docId = getHashLfn(temp_lfn)
 
             # Load document to get the retry_count
@@ -747,16 +538,20 @@ class TransferWorker:
                 # Prepare data to update the document in couch
                 if force_fail or len(document['retry_count']) + 1 > self.max_retry:
                     data['state'] = 'failed'
-                    if self.failures_reasons[lfn]:
-                        data['failure_reason'] = self.failures_reasons[lfn]
+                    if self.failures_reasons.has_key(perm_lfn):
+                        if self.failures_reasons[perm_lfn]:
+                            data['failure_reason'] = self.failures_reasons[perm_lfn]
+                        else:
+                            data['failure_reason'] = "User Proxy has expired."
                     else:
-                        data['failure_reason'] = "User Proxy has expired."
+                        data['failure_reason'] = "Site config problem."
                     data['end_time'] = now
                 else:
 		    data['state'] = 'retry'
                 data['last_update'] = last_update
                 data['retry'] = now
                 # Update the document in couch
+                self.logger.debug("Marking failed %s" % docId)
                 try:
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
                     updateUri += "?" + urllib.urlencode(data)
@@ -773,53 +568,7 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-             # TODO: Evaluate message per file
-#            try:
-#                self.logger.debug("Worker producing %s" %(str(document["jobid"]) + ":" + document["state"]))
-#                message = { 'PandaID':document["jobid"], 'transferStatus': { document["lfn"] : document["state"] } }
-#                self.produce(str(message))
-#            except Exception, ex:
-#                msg =  "Error producing message"
-#                msg += str(ex)
-#                msg += str(traceback.format_exc())
-#                self.logger.error(msg)
-
         self.logger.debug("failed file updated")
-         # TODO: check if the bulk commit works
-#        try:
-#            self.db.commit()
-#        except Exception, ex:
-#            msg =  "Error commiting documents in couch"
-#            msg += str(ex)
-#            msg += str(traceback.format_exc())
-#            self.logger.error(msg)
-
-#    def produce(self, message ):
-#        """
-#        Produce state messages: jobid:state
-#        """
-#        f = open('/home/vosusr01/example_AMQ_dash/auth_xrootd_producer.txt')
-#        authParams = json.loads(f.read())
-
-#        connected = False
-#        while not connected:
-#            try:
-                # connect to the stompserver
-                #host=[(self.config.msg_host, self.config.msg_port)]
-                #conn = stomp.Connection(host, self.config.msg_user, self.config.msg_pwd)
-#                host=[(authParams['MSG_HOST'], authParams['MSG_PORT'])]
-#                conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
-#                conn.start()
-#                conn.connect()
-#                messageDict = json.dumps(message)
-                # send the message
-#                conn.send( messageDict, destination=authParams['MSG_QUEUE'] )
-                #conn.send(message,destination=self.config.msg_queue)
-                # disconnect from the stomp server
-#                conn.disconnect()
-#                connected = True
-#            except socket.error:
-#                pass
 
     def mark_incomplete(self, files=[]):
         """
