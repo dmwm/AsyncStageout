@@ -1,5 +1,5 @@
 function(doc) {
-	if(doc.publication_state && doc.publication_state != 'not_published'){
+	if(doc.publish == 1 && doc.type == 'output'){
 		emit(doc.workflow, doc.publication_state);
 	}
 }
