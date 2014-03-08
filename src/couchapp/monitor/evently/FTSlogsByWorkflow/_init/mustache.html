@@ -21,7 +21,7 @@ function calculate_failed() {
             var value = response[i].value.docid;
             var attach = response[i].value.attachments;
             var host = window.location.hostname
-            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach;
+            var url_link = "http://"+host+":5984/asynctransfer/"+value+"/"+attach;
             url.push(url_link);
             }
             }
@@ -42,7 +42,7 @@ function calculate_done() {
             var value = response[i].value.docid;
             var attach = response[i].value.attachments;
             var host = window.location.hostname
-            var url_link = "http://"+host+":5184/asynctransfer/"+value+"/"+attach;
+            var url_link = "http://"+host+":5984/asynctransfer/"+value+"/"+attach;
             url.push(url_link);
             }
             }
