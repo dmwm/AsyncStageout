@@ -174,38 +174,54 @@ class PublisherWorker:
             self.logger.info('active files %s' %len(active_files))
             self.logger.debug('active files %s' %active_files)
             for file in active_files:
-                wf_jobs_endtime.append(int(time.mktime(time.strptime(\
-                                       str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
-                                       - time.timezone)
+                if file['value'][5]:
+                    wf_jobs_endtime.append(int(time.mktime(time.strptime(\
+                                           str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
+                                           - time.timezone)
                 # To move once the view is fixed
-                lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
+                if "/temp/temp" in file['value'][1]:
+                    lfn_hash = file['value'][1].replace('store/temp/temp', 'store', 1)
+                else:
+                    lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
                 lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
-                self.lfn_map[lfn_orig] = file['value'][1]
+                if "/temp/temp" in file['value'][1]:
+                    self.lfn_map[lfn_orig] = file['value'][1].replace('temp/temp', 'temp', 1)
+                else:
+                    self.lfn_map[lfn_orig] = file['value'][1]
                 lfn_ready.append(lfn_orig)
             self.logger.debug('LFNs %s ready %s %s' %(len(lfn_ready), lfn_ready, user_wf['value']))
             # If the number of files < max_files_per_block then check the oldness of the workflow
             if user_wf['value'] <= self.max_files_per_block:
-                wf_jobs_endtime.sort()
-                if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
-                    continue
-                else:#check the ASO queue
-                    if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
-                        workflow_expired = user_wf['key'][3]
-                        query = {'reduce':True, 'group': True, 'key':workflow_expired}
-                        try:
-                            active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
-                            if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
-                                self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
+                if wf_jobs_endtime:
+                    self.logger.info(' wf_jobs_endtime is True %s' % wf_jobs_endtime)
+                    wf_jobs_endtime.sort()
+                    if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
+                        continue
+                    else:#check the ASO queue
+                        if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
+                            workflow_expired = user_wf['key'][3]
+                            query = {'reduce':True, 'group': True, 'key':workflow_expired}
+                            try:
+                                active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
+                                if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
+                                    self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
+                                    continue
+                            except Exception, e:
+                                self.logger.error('A problem occured when contacting couchDB for the workflow status: %s' % e)
                                 continue
-                        except Exception, e:
-                            self.logger.error('A problem occured when contacting couchDB for the workflow status: %s' % e)
-                            continue
-                    else:
-                        self.logger.info('Publish number of files minor of max_files_per_block.')
-                        self.forceFailure = True
+                        else:
+                            self.logger.info('Publish number of files minor of max_files_per_block.')
+                            self.forceFailure = True
+                else:
+                    self.logger.info('Publish number of files minor of max_files_per_block.')
+                    self.forceFailure = True
             else:
-                if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
-                    self.not_expired_wf = True
+                if wf_jobs_endtime:
+                    if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
+                        self.not_expired_wf = True
+                    else:
+                        self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
+                        self.forceFailure = True
                 else:
                     self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
                     self.forceFailure = True
@@ -265,9 +281,11 @@ class PublisherWorker:
         now = str(datetime.datetime.now())
         last_update = int(time.time())
         for lfn in files:
+            self.logger.info("Marking failed %s" % lfn)
             data = {}
             lfn_db = self.lfn_map[lfn]
             docId = getHashLfn(lfn_db)
+            self.logger.info("Marking failed %s of %s" % (docId, lfn_db))
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
@@ -276,6 +294,7 @@ class PublisherWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+                continue
             # Prepare data to update the document in couch
             if len(document['publication_retry_count']) + 1 > self.max_retry or forceFailure:
                 data['publication_state'] = 'publication_failed'
@@ -351,7 +370,7 @@ class PublisherWorker:
                     value = str(value)
                 newDict.update({key : value})
             return newDict
-        self.logger.info("Starting Read cache...")
+        self.logger.info("Starting Read cache for %s..." % workflow)
         buf = cStringIO.StringIO()
         res = []
         # TODO: input sanitization
@@ -391,9 +410,11 @@ class PublisherWorker:
             else:
                 toPublish[outdataset] = []
                 toPublish[outdataset].append(files)
-        fail_files, toPublish = self.clean(lfn_ready, toPublish)
-        self.logger.info('to_publish %s files' %len(toPublish))
-        self.logger.debug('to_publish %s' %toPublish)
+        if toPublish:
+            self.logger.info("cleaning...%s LFN ready from %s" %(len(lfn_ready), len(toPublish[outdataset])))
+            fail_files, toPublish = self.clean(lfn_ready, toPublish)
+            self.logger.info('to_publish %s files' % len(toPublish))
+            self.logger.debug('to_publish %s' % toPublish)
         return toPublish
 
     def clean(self, lfn_ready, toPublish):
@@ -421,9 +442,7 @@ class PublisherWorker:
                         new_toPublish[datasetPath].extend(new_temp_files)
                     else:
                         new_toPublish[datasetPath] = new_temp_files
-                files_to_publish.extend(lfn_to_publish)
-        # Fail files that user does not ask to publish
-        fail_files = filter(lambda x: x not in files_to_publish, lfn_ready)
+        self.logger.info('Cleaning ends')
         return fail_files, new_toPublish
 
     def dbsFiles_to_failed(self, dbsFiles):
