@@ -4,6 +4,7 @@ function (doc,req) {
                 doc.lfn = req.query.lfn;
         }
         if (req.query.state == 'retry'){
+                doc.failure_reason = req.query.failure_reason;
                 doc.retry_count.push(req.query.retry);
         }
         if (req.query.state == 'failed'){

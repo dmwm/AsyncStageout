@@ -624,18 +624,20 @@ class TransferWorker:
                 # Prepare data to update the document in couch
                 if force_fail or len(document['retry_count']) + 1 > self.max_retry:
                     data['state'] = 'failed'
-                    if self.failures_reasons.has_key(perm_lfn):
-                        if self.failures_reasons[perm_lfn]:
-                            data['failure_reason'] = self.failures_reasons[perm_lfn]
-                        else:
-                            data['failure_reason'] = "User Proxy has expired."
-                    else:
-                        data['failure_reason'] = "Site config problem."
                     data['end_time'] = now
                 else:
 		    data['state'] = 'retry'
+                if self.failures_reasons.has_key(perm_lfn):
+                    if self.failures_reasons[perm_lfn]:
+                        data['failure_reason'] = self.failures_reasons[perm_lfn]
+                    else:
+                        data['failure_reason'] = "User Proxy has expired."
+                else:
+                    data['failure_reason'] = "Site config problem."
+
                 data['last_update'] = last_update
                 data['retry'] = now
+
                 # Update the document in couch
                 self.logger.debug("Marking failed %s" % docId)
                 try:
