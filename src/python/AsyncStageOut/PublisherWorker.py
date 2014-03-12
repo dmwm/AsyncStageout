@@ -202,7 +202,7 @@ class PublisherWorker:
                             workflow_expired = user_wf['key'][3]
                             query = {'reduce':True, 'group': True, 'key':workflow_expired}
                             try:
-                                active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
+                                active_jobs = self.db.loadView('AsyncTransfer', 'JobsStatesByWorkflow', query)['rows']
                                 if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
                                     self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
                                     continue
