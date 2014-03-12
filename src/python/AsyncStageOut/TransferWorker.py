@@ -250,6 +250,8 @@ class TransferWorker:
                         acquired_file = self.mark_acquired([item])
                         if acquired_file:
                             new_job.append('%s %s' % (source_pfn, destination_pfn))
+                    else:
+                        self.mark_failed([item])
                 map(tfc_map, active_files)
                 if new_job:
                     jobs[(source, destination)] = new_job
