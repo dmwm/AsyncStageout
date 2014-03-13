@@ -107,10 +107,6 @@ class TransferWorker:
             else:
                 self.logger.error('Unknown error in mkdir' % e.errno)
                 raise
-        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.db = server.connectDatabase(self.config.files_database)
-        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.transfer_script = getattr(self.config, 'transfer_script', 'ftscp')
@@ -174,6 +170,12 @@ class TransferWorker:
         self.failures_reasons =  {}
         self.commandTimeout = 1200
         self.polling_cycle = 600
+        # Proxy management in Couch
+        os.environ['X509_USER_PROXY'] = self.userProxy
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.db = server.connectDatabase(self.config.files_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.list_process = list_to_process
         self.link_process = link_to_process
         self.pfn_to_lfn_mapping = pfn_to_lfn_mapping
