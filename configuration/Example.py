@@ -140,3 +140,4 @@ config.Statistics.couch_statinstance = statCouchUrl
 config.Statistics.expiration_days = 3
 config.Statistics.statitics_database = statitics_database
 config.Statistics.opsProxy = opsProxy
+config.Statistics.mon_database = files_database

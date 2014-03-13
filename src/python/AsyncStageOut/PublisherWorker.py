@@ -71,12 +71,6 @@ class PublisherWorker:
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('DBSPublisher-Worker-%s' % self.user)
         self.pfn_to_lfn_mapping = {}
-        # If we're just testing publication, we skip the DB connection.
-        if os.getenv("TEST_ASO"):
-            self.db = None
-        else:
-            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
         self.max_retry = config.publication_max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.file_catalog = getattr(self.config, 'file_catalog', 'DBS3')
@@ -138,6 +132,12 @@ class PublisherWorker:
             self.userProxy = self.config.opsProxy
         self.cache_area = self.config.cache_area
         os.environ['X509_USER_PROXY'] = self.userProxy
+        # If we're just testing publication, we skip the DB connection.
+        if os.getenv("TEST_ASO"):
+            self.db = None
+        else:
+            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.db = server.connectDatabase(self.config.files_database)
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
 
