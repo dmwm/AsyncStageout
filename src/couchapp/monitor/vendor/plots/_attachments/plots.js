@@ -552,7 +552,7 @@ function update(i) {
 
 }
 
-function stackedArea(canvas, input) {
+function stackedArea(canvas, input, yaxislabel) {
 
 
 var tr = clone(input.stacked);
@@ -621,18 +621,16 @@ var area = vis.add(pv.Layout.Stack)
     .lineWidth(1)
     .bottom(0);
 
-
-
 root.add(pv.Label)
   .font("bold 13px sans-serif")
   .bottom(h/3)
-  .left(20)
+  .left(15)
   .textAngle(1.5 * Math.PI)
-  .text("Number of Files")
+  .text(yaxislabel)
 
 root.add(pv.Label)
   .font("bold 13px sans-serif")
-  .bottom(5)
+  .bottom(0)
   .left(w/2)
   .text("UTC Time")
 
