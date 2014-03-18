@@ -330,7 +330,6 @@ class TransferWorker:
         processes = []
         self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
 
-        os.environ['X509_USER_PROXY'] = self.userProxy
         #Loop through all the jobs for the links we have
         if jobs:
             for link, copyjob in jobs.items():
