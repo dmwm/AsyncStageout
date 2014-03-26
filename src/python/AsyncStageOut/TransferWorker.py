@@ -228,13 +228,11 @@ class TransferWorker:
                 # complicated, though.
                 query = {'reduce':False,
                      'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, self.group, self.role, destination, source]}
-                     #'stale': 'ok'}
-                     # TODO: Set stale to ok since the results has been got in the last call.
+                     'key':[self.user, self.group, self.role, destination, source], 'stale': 'ok'}
                 try:
                     active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
                 except:
-                    return {}
+                    continue
 
                 # Prepare the list of active files updating the status to in transfer.
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,

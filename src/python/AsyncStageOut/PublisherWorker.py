@@ -166,7 +166,7 @@ class PublisherWorker:
             active_files = []
             wf_jobs_endtime = []
             workToDo = False
-            query = {'reduce':False, 'key': user_wf['key']}
+            query = {'reduce':False, 'key': user_wf['key'], 'stale': 'ok'}
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
@@ -200,7 +200,7 @@ class PublisherWorker:
                     else:#check the ASO queue
                         if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
                             workflow_expired = user_wf['key'][3]
-                            query = {'reduce':True, 'group': True, 'key':workflow_expired}
+                            query = {'reduce':True, 'group': True, 'key':workflow_expired, 'stale': 'ok'}
                             try:
                                 active_jobs = self.db.loadView('AsyncTransfer', 'JobsStatesByWorkflow', query)['rows']
                                 if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
