@@ -2,23 +2,23 @@
 <div id="bar"></div>
 
 <script type="text/javascript">
-function showBar() {
-     var dbname = document.location.href.split('/')[3];
-      var DB = $.couch.db(dbname);
-      DB.view('monitor/filesCount', {
-	      group_level: 1,
-	      success: function(data) {
-	      		var labels = [];
-	      		var values = [];
-	      		for (i in data.rows) {
-                		values.push(data.rows[i].value);
-				labels.push(data.rows[i].key);
 
-	        		}
-	      		barmio(values, "bar", labels);
-              		}
-      });
+function showBar() {
+    var DB = $.couch.db(dbname);
+    DB.view('monitor/filesCount', {
+        group_level: 1,
+	success: function(data) {
+            var labels = [];
+            var values = [];
+            for (i in data.rows) {
+                values.push(data.rows[i].value);
+                labels.push(data.rows[i].key);
+            }
+            barmio(values, "bar", labels);
+        }
+    });
 }
 
 showBar();
+
 </script>
