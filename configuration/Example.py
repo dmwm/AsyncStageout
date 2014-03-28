@@ -114,19 +114,17 @@ config.DBSPublisher.algoName = 'FIFOPriority'
 #config.Analytics.config_couch_instance = couchUrl
 #config.Analytics.summaries_expiration_days = 6
 #config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
-#config.component_('FilesCleaner')
-#config.FilesCleaner.log_level = logging.INFO
-#config.FilesCleaner.componentDir = config.General.workDir
-#config.FilesCleaner.namespace = 'AsyncStageOut.FilesCleaner'
-#config.FilesCleaner.credentialDir = credentialDir
-#config.FilesCleaner.files_database = files_database
-#config.FilesCleaner.UISetupScript = ui_script
-#config.FilesCleaner.files_database = files_database
-#config.FilesCleaner.couch_instance = couchUrl
-#config.FilesCleaner.filesCleaningPollingInterval = 14400
-#config.FilesCleaner.user_monitoring_db = user_monitoring_db
-#config.FilesCleaner.couch_user_monitoring_instance = userMonitoringCouchUrl
-#config.FilesCleaner.opsProxy = opsProxy
+config.component_('FilesCleaner')
+config.FilesCleaner.log_level = logging.INFO
+config.FilesCleaner.componentDir = config.General.workDir
+config.FilesCleaner.namespace = 'AsyncStageOut.FilesCleaner'
+config.FilesCleaner.files_database = files_database
+config.FilesCleaner.UISetupScript = ui_script
+config.FilesCleaner.couch_instance = couchUrl
+config.FilesCleaner.filesCleaningPollingInterval = 14400
+config.FilesCleaner.opsProxy = opsProxy
+config.FilesCleaner.config_database = config_database
+config.FilesCleaner.config_couch_instance = couchUrl
 config.component_('Statistics')
 config.Statistics.log_level = logging.INFO
 config.Statistics.componentDir = config.General.workDir
