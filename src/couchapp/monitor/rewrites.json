@@ -1,0 +1,133 @@
+[
+
+  {
+    "from": ":db/_design/:dname",
+    "to": ""
+  },
+
+  {
+    "from": ":db/_design/:dname/*",
+    "to": "*"
+  },
+
+  {
+    "from": "",
+    "to": "_show/redirect"
+  },
+
+  {
+    "from": "dest-source-stat.html",
+    "to": "dest-source-stat.html"
+  },
+
+  {
+    "from": "ftsLogs.html",
+    "to": "ftsLogs.html"
+  },
+
+  {
+    "from": "index.html",
+    "to": "index.html"
+  },
+
+  {
+    "from": "njobDS.html",
+    "to": "njobDS.html"
+  },
+
+  {
+    "from": "publish.html",
+    "to": "publish.html"
+  },
+
+  {
+    "from": "status_overview.html",
+    "to": "status_overview.html"
+  },
+
+  {
+    "from": "taskstat.html",
+    "to": "taskstat.html"
+  },
+
+  {
+    "from": "totbyUser.html",
+    "to": "totbyUser.html"
+  },
+
+  {
+    "from": "totbyWorkflow.html",
+    "to": "totbyWorkflow.html"
+  },
+
+  {
+    "from": "userstat.html",
+    "to": "userstat.html"
+  },
+
+  {
+    "from": "workflowStat.html",
+    "to": "workflowStat.html"
+  },
+
+  {
+    "from": "_all_docs",
+    "to": "../../_all_docs"
+  },
+
+  {
+    "from": "img/*",
+    "to": "img/*"
+  },
+
+  {
+    "from": "js/*",
+    "to": "js/*"
+  },
+
+  {
+    "from": "style/*",
+    "to": "style/*"
+  },
+
+  {
+    "from": "vendor/*",
+    "to": "vendor/*"
+  },
+
+  {
+    "from": "evently/*",
+    "to": "evently/*"
+  },
+
+  {
+    "from": "lib/*",
+    "to": "lib/*"
+  },
+
+  {
+    "from": "_view/*",
+    "to": "_view/*"
+  },
+
+  {
+    "from": "_list/*",
+    "to": "_list/*"
+  },
+
+  {
+    "from": "_show/*",
+    "to": "_show/*"
+  },
+
+  {
+    "from": "_update/*",
+    "to": "_update/*"
+  },
+
+  {
+    "from": ":id",
+    "to": "../../:id"
+  }
+
+]

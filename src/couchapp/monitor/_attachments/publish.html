@@ -3,24 +3,30 @@
     <head>
         <title>AsyncTransfer Monitor System</title>
         <link rel="stylesheet" href="style/main.css" type="text/css">
-        <script language="JavaScript" src="calendar_db.js"></script>
-        <link rel="stylesheet" href="calendar.css">
+        <script language="JavaScript" src="js/calendar_db.js"></script>
+        <link rel="stylesheet" href="style/calendar.css">
     </head>
     <body>
     <div id="main">
         <div id="head"><h2>AsyncTransfer Monitor System</h2></div>
         <div id="sidebar"><p></p></div>
         <div id="items">
+            <div style="text-align: center">
+                <p align="left">
+                &nbsp;&nbsp;- Set the start and end date/time. If at least one field is left blank, a default time slice of 24 hours (back from now) will be used.<br>
+                &nbsp;&nbsp;- Use the "Reload Plots" button to update the graphs with the chosen options.
+                </p>
+            </div>
         <form name="datetimeform" id="datetimeform">
         <!-- calendar attaches to existing form element -->
         <a>&nbsp;&nbsp;Start Date&nbsp;</a>
         <input type="text" id="start" value="" />
         <script language="JavaScript">
         var o_cal = new tcal ({
-                // form name
-                //'formname': 'testform',
-                // input name
-                'controlname': 'start'
+            // form name
+            //'formname': 'testform',
+            // input name
+            'controlname': 'start'
         });
         // individual template parameters can be modified via the calendar variable
         o_cal.a_tpl.yearscroll = true;
@@ -66,8 +72,8 @@
         //      'imgpath' : 'img/'
         //}
         var e_cal = new tcal ({
-                // if referenced by ID then form name is not required
-                'controlname': 'end'
+            // if referenced by ID then form name is not required
+            'controlname': 'end'
         }); //, A_CALTPL);
         e_cal.a_tpl.yearscroll = true;
         e_cal.a_tpl.weekstart = 1;
@@ -100,7 +106,7 @@
                 <option value="22">22:00</option>
                 <option value="23">23:00</option>
         </select>
-        &nbsp;&nbsp;&nbsp;&nbsp;<INPUT TYPE="button" NAME="buttonreset" Value="Default" onClick='resetDateTime();setOptions();drawchart()'>
+        &nbsp;&nbsp;&nbsp;&nbsp;<INPUT TYPE="button" NAME="buttonreset" Value="Clear" onClick='resetDateTimeForm()'>
         </form>
         <form name="yaxisform" id="yaxisform">
         <a>&nbsp;&nbsp;Y-Axis Unit&nbsp;</a>
@@ -109,7 +115,7 @@
                 <option value="size" text="Files Size (MB)">Files Size (MB)</option>
         </select>
         </form>
-        <center><INPUT TYPE="button" NAME="button" Value="Reload Plots" onClick='setOptions();drawchart()'></center>
+        <center><INPUT TYPE="button" NAME="button" Value="Reload Plots" onClick='drawchart(true)'></center>
         <h3>Status of Publication</h3>
         <div id="started"> Retriving Data... </div>
         <br>
@@ -117,18 +123,18 @@
     </div>
     </body>
 
-<script src="vendor/couchapp/loader.js"></script>
+<script src="js/loader.js"></script>
 <script type="text/javascript" charset="utf-8">
 
 $.couch.app(function(app) {
-    $("#sidebar").evently("menu", app);
     $("#head").evently("head", app);
+    $("#sidebar").evently("menu", app);
     //$("#items").evently("main", app);
 });
 
 $(document).ready(function() {
-    drawchart();
-    setInterval(function() drawchart(), 60000);
+    drawchart(false);
+    setInterval(function() drawchart(false),60000);
 });
 
 var timeSlice = 3600000;
@@ -143,6 +149,7 @@ var endd = new Date();
 var defaultDateTime = true;
 
 var yaxis = ("njobs").toString();
+var yaxisLabel = "Number of Files";
 var MB = 1048576;
 
 function isStartDateDefined() {
@@ -212,15 +219,18 @@ function setDateTime() {
             startd = startdate;
             endd = enddate;
         }
-        defaultDateTime = false;
+        setDefaultDateTime(false);
     }
     else {
-        resetDateTime();
+        setDefaultDateTime(true);
     }
 }
 
-function resetDateTime() {
-    defaultDateTime = true;
+function setDefaultDateTime(state) {
+    defaultDateTime = state;
+}
+
+function resetDateTimeForm() {
     document.getElementById('datetimeform').reset();
 }
 
@@ -228,18 +238,19 @@ function getYAxis() {
     return ($("#yaxis").val()).toString();
 }
 
-function getYAxisLabel() {
-    if (getYAxis() == "njobs") {
-        return "Number of Files";
+function setYAxisLabel() {
+    if (yaxis == ("njobs").toString()) {
+        yaxisLabel = "Number of Files";
     }
-    else if (getYAxis() == "size") {
-        return "Files Size (MB)";
+    else if (yaxis == ("size").toString()) {
+        yaxisLabel = "Files Size (MB)";
     }
     return "";
 }
 
 function setYAxis() {
     yaxis = getYAxis();
+    setYAxisLabel();
 }
 
 function setOptions() {
@@ -303,12 +314,15 @@ inpute.popolate = function() {
     inpute.stacked.push(failfile);
 }
 
-function drawchart() {
+function drawchart(setoptions) {
+    if (setoptions) {
+        setOptions();
+    }
     if (defaultDateTime) {
         calcInterval();
     }
     inpute.popolate();
-    setTimeout(function() stackedArea("started",inpute,getYAxisLabel()),1000);
+    setTimeout(function() stackedArea("started",inpute,yaxisLabel),1000);
 }
 
 </script>
