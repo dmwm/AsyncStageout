@@ -5,7 +5,7 @@ function(doc) {
 		var time = start.split(' ')[1];
 
 		var yy = day.split('-')[0];
-		var mm = day.split('-')[1];
+		var mm = parseInt(day.split('-')[1]) - 1;
 		var dd = day.split('-')[2];
 
 		var h = time.split(':')[0];
@@ -21,8 +21,8 @@ function(doc) {
 		m = startDate.getUTCMinutes();
 		s = startDate.getUTCSeconds();
 
-		if (doc.state=='new') emit([yy, mm, dd, h, m, s], {"state": 'resubmitted'});
-		else emit([yy, mm, dd, h, m, s], {"state": doc.state});
-		
+		if (doc.state=='new') emit([yy, mm + 1, dd, h, m, s], {"state": 'resubmitted'});
+		else emit([yy, mm + 1, dd, h, m, s], {"state": doc.state});
+
 	}
 }

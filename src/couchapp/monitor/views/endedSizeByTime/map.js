@@ -4,7 +4,7 @@ function(doc) {
         var day  = start.split(' ')[0];
         var time = start.split(' ')[1];
         var yy = day.split('-')[0];
-        var mm = day.split('-')[1];
+        var mm = parseInt(day.split('-')[1]) - 1;
         var dd = day.split('-')[2];
         var h = time.split(':')[0];
         var m = time.split(':')[1];
@@ -17,10 +17,10 @@ function(doc) {
         m_utc  = startDate.getUTCMinutes();
         s_utc  = startDate.getUTCSeconds();
         if (doc.state=='new') {
-            emit([yy_utc, mm_utc, dd_utc, h_utc, m_utc, s_utc], {"state": 'resubmitted', "size": doc.size});
+            emit([yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc], {"state": 'resubmitted', "size": doc.size});
         }
         else {
-            emit([yy_utc, mm_utc, dd_utc, h_utc, m_utc, s_utc], {"state": doc.state, "size": doc.size});
+            emit([yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc], {"state": doc.state, "size": doc.size});
         }
     }
 }
