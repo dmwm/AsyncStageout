@@ -1,1 +1,1 @@
-{"url": "https://fts-t2-service.cern.ch:8443/glite-data-transfer-fts/services/FileTransfer", "countries": ["RU", "UA"], "state": "running", "_id": "T1_CH_CERN"}
+{"url": "https://lcgfts3.gridpp.rl.ac.uk:8443", "countries": ["RU", "UA"], "state": "running", "_id": "T1_CH_CERN"}
