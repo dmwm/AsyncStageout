@@ -149,11 +149,13 @@ class PublisherWorker:
         """
         active_user_workflows = []
         self.lfn_map = {}
-        query = {'group':True}
+        query = {'group':True, 'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}]}
         try:
             active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
         except Exception, e:
             self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' %e)
+            self.logger.info('Publications for %s will be retried next time' % self.user)
+            return
         for wf in active_workflows:
             if wf['key'][0] == self.user:
                 active_user_workflows.append(wf)
@@ -170,7 +172,9 @@ class PublisherWorker:
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
-                self.logger.error('A problem occured when contacting couchDB to get the list of active files for %s: %s' %(self.user, e))
+                self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
+                self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
+                continue
             self.logger.info('active files of %s: %s' %(user_wf, len(active_files)))
             for file in active_files:
                 if file['value'][5]:
@@ -207,7 +211,8 @@ class PublisherWorker:
                                     self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
                                     continue
                             except Exception, e:
-                                self.logger.error('A problem occured when contacting couchDB for the workflow status: %s' % e)
+                                self.logger.error('A problem occured when retrieving the queue of %s: %s' % (workflow_expired, e))
+                                self.logger.info('Publications of %s will be retried next time' % workflow_expired)
                                 continue
                         else:
                             self.logger.info('Publish number of files minor of max_files_per_block.')
@@ -217,8 +222,8 @@ class PublisherWorker:
                     self.logger.info('Publish number of files minor of max_files_per_block.')
                     self.forceFailure = True
             else:
-                # files > self.max_files_per_block but files are not published yet: wait until self.config.workflow_expiration_time * 10
-                # and then fail
+                # files > self.max_files_per_block but files are not published yet:
+                # wait until self.config.workflow_expiration_time * 10 and then fail
                 if wf_jobs_endtime:
                     if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
                         self.not_expired_wf = True
@@ -694,9 +699,13 @@ class PublisherWorker:
             sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
             source_blocks = set([i['block_name'] for i in sourceApi.listBlocks(dataset=inputDataset)])
             blocks_to_migrate = source_blocks - existing_blocks
-            self.logger.debug("Dataset %s in destination DBS with %d blocks; %d blocks in source." % (inputDataset, len(existing_blocks), len(source_blocks)))
+            self.logger.debug("Dataset %s in destination DBS with %d blocks; %d blocks in source." % (inputDataset, \
+                                                                                                      len(existing_blocks), \
+                                                                                                      len(source_blocks)))
             if blocks_to_migrate:
-                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(existing_blocks), ", ".join(existing_blocks), inputDataset) )
+                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(existing_blocks), \
+                                                                                                  ", ".join(existing_blocks), \
+                                                                                                  inputDataset) )
                 should_migrate = True
         if should_migrate:
             data = {'migration_url': sourceURL, 'migration_input': inputDataset}
@@ -748,7 +757,8 @@ class PublisherWorker:
             existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
         return existing_datasets
 
-    def createBulkBlock(self, output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files):
+    def createBulkBlock(self, output_config, processing_era_config, primds_config, \
+                        dataset_config, acquisition_era_config, block_config, files):
         file_conf_list = []
         file_parent_list = []
         for file in files:
@@ -756,7 +766,8 @@ class PublisherWorker:
             file_conf_list.append(file_conf)
             file_conf['lfn'] = file['logical_file_name']
             for parent_lfn in file.get('file_parent_list', []):
-                file_parent_list.append({'logical_file_name': file['logical_file_name'], 'parent_logical_file_name': parent_lfn['file_parent_lfn']})
+                file_parent_list.append({'logical_file_name': file['logical_file_name'], \
+                                         'parent_logical_file_name': parent_lfn['file_parent_lfn']})
             del file['file_parent_list']
         blockDump = { \
             'dataset_conf_list': [output_config],
@@ -824,7 +835,8 @@ class PublisherWorker:
                 self.logger.error(msg)
                 existing_datasets = []
             if not existing_datasets:
-                self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceURL, migrateURL))
+                self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
+                                 (inputDataset, sourceURL, migrateURL))
                 return [], [], []
 
             # Get basic data about the parent dataset
@@ -944,7 +956,8 @@ class PublisherWorker:
                     try:
                         block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
                         self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
-                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files_to_publish)
+                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
+                                                         acquisition_era_config, block_config, files_to_publish)
                         destApi.insertBulkBlock(blockDump)
                         count += blockSize
                         blockCount += 1
@@ -969,7 +982,8 @@ class PublisherWorker:
                             continue
                         block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
                         #self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
-                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, acquisition_era_config, block_config, files_to_publish)
+                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
+                                                         acquisition_era_config, block_config, files_to_publish)
                         self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
                         destApi.insertBulkBlock(blockDump)
 
