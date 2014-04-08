@@ -680,7 +680,7 @@ class PublisherWorker:
             msg = str(he)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-            self.logger.error("Request to list invalid dataset %s failed." % inputDataset)
+            self.logger.error("Request to list input dataset %s failed." % inputDataset)
             return []
         should_migrate = False
         if not existing_datasets or (existing_datasets[0]['dataset'] != inputDataset):
