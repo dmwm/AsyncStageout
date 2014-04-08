@@ -326,9 +326,9 @@ class TransferWorker:
         ftslog_file = None
 
         processes = []
-        self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
+        self.logger.debug("Submit using this proxy %s of %s those jobs: %s" %(self.userProxy, self.userDN, jobs) )
 
-        #Loop through all the jobs for the links we have
+        # Loop through all the jobs for the links we have
         if jobs:
             for link, copyjob in jobs.items():
 
