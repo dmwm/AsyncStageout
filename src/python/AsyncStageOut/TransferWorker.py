@@ -245,7 +245,8 @@ class TransferWorker:
                     source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                        item['value'].replace('store/temp', 'store', 1).replace(\
-                                                                       '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
+                                                                       '.' + item['value'].split('.', 1)[1].split(\
+                                                                       '/', 1)[0], '', 1)))
                     if source_pfn and destination_pfn:
                         acquired_file = self.mark_acquired([item])
                         if acquired_file:
@@ -326,9 +327,9 @@ class TransferWorker:
         ftslog_file = None
 
         processes = []
-        self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
+        self.logger.debug("Submit using this proxy %s of %s those jobs: %s" %(self.userProxy, self.userDN, jobs) )
 
-        #Loop through all the jobs for the links we have
+        # Loop through all the jobs for the links we have
         if jobs:
             for link, copyjob in jobs.items():
 
@@ -471,7 +472,9 @@ class TransferWorker:
                     # Now we have the lfn, skip to the next line
                     continue
                 if line.split(':')[0].strip() == 'State' and lfn:
-                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done' or line.split(':')[1].strip() == 'Finishing':
+                    if line.split(':')[1].strip() == 'Finished' or \
+                       line.split(':')[1].strip() == 'Done' or \
+                       line.split(':')[1].strip() == 'Finishing':
                         transferred_files.append(lfn)
                     else:
                         failed_files.append(lfn)
@@ -514,7 +517,7 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-                    self.logger.debug("Marked acquired %s of %s" % (docId,lfn))
+                    self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
                     lfn_in_transfer.append(lfn)
                 else:
                     continue
@@ -613,7 +616,9 @@ class TransferWorker:
                 if bad_logfile:
                     to_attach = file(bad_logfile)
                     content = to_attach.read(-1)
-                    retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
+                    retval = self.db.addAttachment( document["_id"], document["_rev"], \
+                                                    content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], \
+                                                    "text/plain" )
                     if retval.get('ok', False) != True:
                         # Then we have a problem
                         msg = "Adding an attachment to document failed\n"
@@ -627,7 +632,7 @@ class TransferWorker:
                     data['state'] = 'failed'
                     data['end_time'] = now
                 else:
-		    data['state'] = 'retry'
+                    data['state'] = 'retry'
                 if self.failures_reasons.has_key(perm_lfn):
                     if self.failures_reasons[perm_lfn]:
                         data['failure_reason'] = self.failures_reasons[perm_lfn]

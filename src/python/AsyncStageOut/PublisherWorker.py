@@ -171,10 +171,10 @@ class PublisherWorker:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
                 self.logger.error('A problem occured when contacting couchDB to get the list of active files for %s: %s' %(self.user, e))
-            self.logger.info('active files %s' %len(active_files))
-            self.logger.debug('active files %s' %active_files)
+            self.logger.info('active files of %s: %s' %(user_wf, len(active_files)))
             for file in active_files:
                 if file['value'][5]:
+                    # Get the list of jobs end_time for each WF.
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                            str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
                                            - time.timezone)
@@ -189,15 +189,15 @@ class PublisherWorker:
                 else:
                     self.lfn_map[lfn_orig] = file['value'][1]
                 lfn_ready.append(lfn_orig)
-            self.logger.debug('LFNs %s ready %s %s' %(len(lfn_ready), lfn_ready, user_wf['value']))
+            self.logger.info('LFNs %s ready in %s' %(len(lfn_ready), user_wf['value']))
             # If the number of files < max_files_per_block then check the oldness of the workflow
             if user_wf['value'] <= self.max_files_per_block:
                 if wf_jobs_endtime:
-                    self.logger.info(' wf_jobs_endtime is True %s' % wf_jobs_endtime)
+                    self.logger.debug('jobs_endtime of %s: %s' % (user_wf, wf_jobs_endtime))
                     wf_jobs_endtime.sort()
                     if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
                         continue
-                    else:#check the ASO queue
+                    else:#check the ASO queue until self.config.workflow_expiration_time * 5
                         if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
                             workflow_expired = user_wf['key'][3]
                             query = {'reduce':True, 'group': True, 'key':workflow_expired, 'stale': 'ok'}
@@ -213,9 +213,12 @@ class PublisherWorker:
                             self.logger.info('Publish number of files minor of max_files_per_block.')
                             self.forceFailure = True
                 else:
+                    # Jobs end_time info. is not available. Publish number of files minor of max_files_per_block or fail.
                     self.logger.info('Publish number of files minor of max_files_per_block.')
                     self.forceFailure = True
             else:
+                # files > self.max_files_per_block but files are not published yet: wait until self.config.workflow_expiration_time * 10
+                # and then fail
                 if wf_jobs_endtime:
                     if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
                         self.not_expired_wf = True
