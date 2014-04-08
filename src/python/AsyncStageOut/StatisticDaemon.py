@@ -74,7 +74,7 @@ class StatisticDaemon(BaseWorkerThread):
         oldJobs = self.getOldJobs()
         self.logger.debug('%d jobs to delete' % len(oldJobs) )
 
-        jobDoc = {} 
+        jobDoc = {}
         for doc in oldJobs:
 
             try:
@@ -86,12 +86,12 @@ class StatisticDaemon(BaseWorkerThread):
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
-            if jobDoc: 
+            if jobDoc:
                 try:
                     self.db.queueDelete(jobDoc)
-  
+
                 except Exception, ex:
-   
+
                     msg =  "Error queuing document for delete in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -132,7 +132,7 @@ class StatisticDaemon(BaseWorkerThread):
                  'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}#,
                  #'stale': 'ok'}
         try:
-            oldJobs = self.mon_db.loadView('monitor', 'endedByTime', query)['rows']
+            oldJobs = self.mon_db.loadView('monitor', 'endedSizeByTime', query)['rows']
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
@@ -232,7 +232,7 @@ class StatisticDaemon(BaseWorkerThread):
                     oldDoc['sites_served'][document['destination']] = {'done': 1,
                                                                        'failed': 0,
                                                                        'killed': 0}
-                if(document['state'] == 'failed'): 
+                if(document['state'] == 'failed'):
                     oldDoc['sites_served'][document['destination']] = {'done': 0,
                                                                        'failed': 1,
 								       'killed': 0}
