@@ -142,25 +142,7 @@ class TransferDaemon(BaseWorkerThread):
 
         site_tfc_map = {}
         for site in sites:
-            # TODO: Remove the Workaround for FNAL
-            if site == 'T1_US_FNAL':
-                site = 'T1_US_FNAL_Buffer'
-            if site == 'T1_ES_PIC':
-                site = 'T1_ES_PIC_Buffer'
-            if site == 'T1_DE_KIT':
-                site = 'T1_DE_KIT_Buffer'
-            if site == 'T1_FR_CCIN2P3':
-                site = 'T1_FR_CCIN2P3_Buffer'
-            if site == 'T1_IT_CNAF':
-                site = 'T1_IT_CNAF_Buffer'
-            if site == 'T1_RU_JINR':
-                site = 'T1_RU_JINR_Buffer'
-            if site == 'T1_TW_ASGC':
-                site = 'T1_TW_ASGC_Buffer'
-            if site == 'T1_UK_RAL':
-                site = 'T1_UK_RAL_Buffer'
-            if site == 'T1_CH_CERN':
-                site = 'T1_CH_CERN_Buffer'
+            # TODO: Remove this check once the ASO request will be validated before the upload.
             if site and str(site) != 'None':
                 site_tfc_map[site] = self.get_tfc_rules(site)
         self.logger.debug('kicking off pool')
