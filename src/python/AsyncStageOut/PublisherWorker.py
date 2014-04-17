@@ -726,35 +726,36 @@ class PublisherWorker:
                 return []
             self.logger.debug("Migration ID: %s" % id)
             time.sleep(1)
-            # Wait for up to 60 seconds, then return to the main loop.  Note we don't
+            # Wait for up to 300 seconds, then return to the main loop.  Note we don't
             # fail or cancel anything.  Just retry later.
             # States:
             # 0=PENDING
             # 1=IN PROGRESS
             # 2=COMPLETED
-            # 3=FAILED
+            # *=FAILED
+            # 9=Terminally FAILED
             #
             # In the case of failure, we expect the publisher daemon to try again in
             # the future.
             #
-            wait_time = 1
-            for i in range(60):
+            wait_time = 30
+            for i in range(10):
                 self.logger.debug("About to get migration request for %s." % id)
                 status = migrateApi.statusMigration(migration_rqst_id=id)
                 state = status.get("migration_status")
                 self.logger.debug("Migration status: %s" % state)
-                if state == 0 or state == 1:
+                if state != 9 or state != 2:
                     time.sleep(wait_time)
-                    wait_time = min(wait_time + 5, 120)
 
-            if state == 0 or state == 1:
-                self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
-                return []
-            if state == 3:
+            if state == 9:
                 self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status)))
                 return []
-            self.logger.info("Migration of %s is complete." % inputDataset)
-            existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
+            elif state == 2:
+                self.logger.info("Migration of %s is complete." % inputDataset)
+                existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
+            else:
+                self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
+                return []
         return existing_datasets
 
     def createBulkBlock(self, output_config, processing_era_config, primds_config, \
