@@ -221,7 +221,7 @@ do
     fi
 done
 
-if ! $submission
+if ! $submission || [ -z $ftsjob ]
 then
     # Fail in ASO files for submission timeout.
     count=true
