@@ -24,6 +24,7 @@ from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
+from AsyncStageOut import getSiteNamesFromSENames
 #import json
 #import socket
 #import stomp
@@ -273,6 +274,7 @@ class TransferWorker:
         except Exception, e:
             self.logger.error('it does not seem to be an lfn %s' %file.split(':'))
             return None
+        site = getSiteNamesFromSENames([site],self.logger)[0]
         if self.tfc_map.has_key(site):
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
             #TODO: improve fix for wrong tfc on sites

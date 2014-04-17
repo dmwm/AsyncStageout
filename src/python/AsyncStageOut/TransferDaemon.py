@@ -19,6 +19,7 @@ from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 from AsyncStageOut.TransferWorker import TransferWorker
 from multiprocessing import Pool
 from WMCore.WMFactory import WMFactory
+from AsyncStageOut import getSiteNamesFromSENames
 #import random
 import logging
 #import time
@@ -138,13 +139,15 @@ class TransferDaemon(BaseWorkerThread):
 
         sites = self.active_sites()
         self.logger.info('%s active sites' % len(sites))
+        if len(sites):
+            sites = getSiteNamesFromSENames(sites, logging)
         self.logger.debug('Active sites are: %s' % sites)
-
         site_tfc_map = {}
         for site in sites:
             # TODO: Remove this check once the ASO request will be validated before the upload.
             if site and str(site) != 'None':
                 site_tfc_map[site] = self.get_tfc_rules(site)
+
         self.logger.debug('kicking off pool')
         for u in users:
             self.logger.debug('current_running %s' %current_running)
