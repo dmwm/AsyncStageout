@@ -86,7 +86,7 @@ def getProxy(userdn, group, role, defaultDelegation, logger):
 
 class TransferWorker:
 
-    def __init__(self, user, tfc_map, config, list_to_process, link_to_process, pfn_to_lfn_mapping):
+    def __init__(self, user, tfc_map, config, list_to_process, link_to_process, pfn_to_lfn_mapping, lfn_to_pfn_mapping):
         """
         store the user and tfc the worker
         """
@@ -169,6 +169,7 @@ class TransferWorker:
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.failures_reasons =  {}
         self.commandTimeout = 1200
+        # Make the polling cycle configurable
         self.polling_cycle = 600
         # Proxy management in Couch
         os.environ['X509_USER_PROXY'] = self.userProxy
@@ -179,6 +180,8 @@ class TransferWorker:
         self.list_process = list_to_process
         self.link_process = link_to_process
         self.pfn_to_lfn_mapping = pfn_to_lfn_mapping
+        self.lfn_to_pfn_mapping = lfn_to_pfn_mapping
+
 
     def __call__(self):
         """
@@ -242,11 +245,10 @@ class TransferWorker:
                 new_job = []
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
-                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
+                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']), True)
                     destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                        item['value'].replace('store/temp', 'store', 1).replace(\
-                                                                       '.' + item['value'].split('.', 1)[1].split(\
-                                                                       '/', 1)[0], '', 1)))
+                                                                       '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)), False)
                     if source_pfn and destination_pfn:
                         acquired_file = self.mark_acquired([item])
                         if acquired_file:
@@ -263,7 +265,7 @@ class TransferWorker:
             return {}
 
 
-    def apply_tfc_to_lfn(self, file):
+    def apply_tfc_to_lfn(self, file, storePFN):
         """
         Take a CMS_NAME:lfn string and make a pfn.
         Update pfn_to_lfn_mapping dictionary.
@@ -288,8 +290,12 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
             # Add the pfn key into pfn-to-lfn mapping
-            if not self.pfn_to_lfn_mapping.has_key(pfn):
-                self.pfn_to_lfn_mapping[pfn] = lfn
+            # Add the lfn key into lfn-to-pfn mapping
+            if storePFN:
+                if not self.pfn_to_lfn_mapping.has_key(pfn):
+                    self.pfn_to_lfn_mapping[pfn] = lfn
+                if not self.lfn_to_pfn_mapping.has_key(lfn):
+                    self.lfn_to_pfn_mapping[lfn] = pfn
             return pfn
         else:
             self.logger.error('Wrong site %s!' % site)
@@ -302,9 +308,8 @@ class TransferWorker:
         if self.pfn_to_lfn_mapping.has_key(pfn):
             lfn = self.pfn_to_lfn_mapping[pfn]
             # Clean pfn-to-lfn map
-            del self.pfn_to_lfn_mapping[pfn]
+            #del self.pfn_to_lfn_mapping[pfn]
         else:
-            self.logger.debug("PFN %s is not in %s" % (pfn, self.pfn_to_lfn_mapping))
             lfn = None
         return lfn
 
@@ -327,9 +332,10 @@ class TransferWorker:
         ftslog_file = None
 
         processes = []
-        self.logger.debug("Submit using this proxy %s of %s those jobs: %s" %(self.userProxy, self.userDN, jobs) )
+        self.logger.debug( "COMMAND FOR %s with jobs %s" %(self.userProxy, jobs) )
+        os.environ['X509_USER_PROXY'] = self.userProxy
 
-        # Loop through all the jobs for the links we have
+        #Loop through all the jobs for the links we have
         if jobs:
             for link, copyjob in jobs.items():
 
@@ -403,21 +409,20 @@ class TransferWorker:
                     self.logger.debug("Waiting %s..." % (self.polling_cycle - elapsed_time))
                     time.sleep(self.polling_cycle - elapsed_time)
                     self.logger.debug("Checking and updating after waiting")
-                    if p.poll() is None:
-                        pass
-                    else:
-                        link = self.link_process[p][1]
-                        log_file = self.link_process[p][0]
-                        log_file.close()
-                        end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                        self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
-                        results = self.parse_ftscp_results(log_file.name, link[0])
-                        self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-                        self.mark_good( results[0], log_file.name)
-                        self.mark_failed( results[1], log_file.name)
-                        process_done.append(p)
-                else:
+                if p.poll() is None:
                     pass
+                else:
+                    link = self.link_process[p][1]
+                    log_file = self.link_process[p][0]
+                    log_file.close()
+                    end_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+                    self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
+                    results = self.parse_ftscp_results(log_file.name, link[0])
+                    self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
+                    goodlfn_to_update = self.mark_good( results[0], log_file.name)
+                    failedlfn_to_update = self.mark_failed( results[1], log_file.name)
+                    if not goodlfn_to_update and not failedlfn_to_update:
+                        process_done.append(p)
             else:
                 link = self.link_process[p][1]
                 log_file = self.link_process[p][0]
@@ -426,15 +431,15 @@ class TransferWorker:
                 self.logger.debug("UPDATING %s %s for %s at %s" %(link[0], log_file, self.userDN, end_time))
                 results = self.parse_ftscp_results(log_file.name, link[0])
                 self.logger.debug("RESULTS %s %s" %( str(results[0]), str(results[1]) ))
-                self.mark_good( results[0], log_file.name)
-                self.mark_failed( results[1], log_file.name)
-                process_done.append(p)
-
+                goodlfn_to_update = self.mark_good( results[0], log_file.name)
+                failedlfn_to_update = self.mark_failed( results[1], log_file.name)
+                if not goodlfn_to_update and not failedlfn_to_update:
+                    process_done.append(p)
         self.logger.debug("PROCESS WORK DONE")
 
         # Unlink copy job files
-        for tmp in tmp_file_pool:
-            os.unlink( tmp )
+        #for tmp in tmp_file_pool:
+        #    os.unlink( tmp )
 
         # Clean the list of process and links
         for p_done in process_done:
@@ -472,9 +477,7 @@ class TransferWorker:
                     # Now we have the lfn, skip to the next line
                     continue
                 if line.split(':')[0].strip() == 'State' and lfn:
-                    if line.split(':')[1].strip() == 'Finished' or \
-                       line.split(':')[1].strip() == 'Done' or \
-                       line.split(':')[1].strip() == 'Finishing':
+                    if line.split(':')[1].strip() == 'Finished' or line.split(':')[1].strip() == 'Done' or line.split(':')[1].strip() == 'Finishing':
                         transferred_files.append(lfn)
                     else:
                         failed_files.append(lfn)
@@ -517,7 +520,7 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-                    self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
+                    self.logger.debug("Marked acquired %s of %s" % (docId,lfn))
                     lfn_in_transfer.append(lfn)
                 else:
                     continue
@@ -530,6 +533,7 @@ class TransferWorker:
         """
         Mark the list of files as tranferred
         """
+        lfn_to_update = []
         for lfn in files:
             self.logger.info("Marking good %s" % getHashLfn(lfn))
             self.logger.debug("Marking good %s" % lfn)
@@ -540,22 +544,33 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+                lfn_to_update.append(lfn)
                 continue
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'done':
                 if good_logfile:
                     to_attach = file(good_logfile)
                     content = to_attach.read(-1)
-                    retval = self.db.addAttachment(document["_id"],
-                                                   document["_rev"],
-                                                   content,
-                                                   to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
-                                                   "text/plain")
-                    if retval.get('ok', False) != True:
-                        # Then we have a problem
-                        msg = "Adding an attachment to document failed\n"
-                        msg += str(retval)
-                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                    try:
+                        retval = self.db.addAttachment(document["_id"],
+                                                       document["_rev"],
+                                                       content,
+                                                       to_attach.name.split('/')[len(to_attach.name.split('/')) - 1],
+                                                       "text/plain")
+                        if retval.get('ok', False) != True:
+                            # Then we have a problem
+                            msg = "Adding an attachment to document failed\n"
+                            msg += str(retval)
+                            msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                            self.logger.error(msg)
+                            lfn_to_update.append(lfn)
+                            continue
+                    except Exception, ex:
+                        msg =  "Error updating document in couch"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
                         self.logger.error(msg)
+                        lfn_to_update.append(lfn)
+                        continue
                 outputLfn = document['lfn'].replace('store/temp', 'store', 1)
                 try:
                     now = str(datetime.datetime.now())
@@ -573,6 +588,8 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
+                    lfn_to_update.append(lfn)
+                    continue
                 try:
                     self.db.commit()
                 except Exception, ex:
@@ -580,13 +597,21 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-
+                    lfn_to_update.append(lfn)
+                    continue
+            if self.lfn_to_pfn_mapping.has_key(lfn):
+                pfn = self.lfn_to_pfn_mapping[lfn]
+                del self.lfn_to_pfn_mapping[lfn]
+                if self.pfn_to_lfn_mapping.has_key(pfn):
+                    del self.pfn_to_lfn_mapping[pfn]
         self.logger.debug("transferred file updated")
+        return lfn_to_update
 
     def mark_failed(self, files=[], bad_logfile=None, force_fail = False ):
         """
         Something failed for these files so increment the retry count
         """
+        lfn_to_update = []
         for lfn in files:
             data = {}
             if not isinstance(lfn, dict):
@@ -602,7 +627,6 @@ class TransferWorker:
                     temp_lfn = lfn['value']
                 perm_lfn = lfn['value']
             docId = getHashLfn(temp_lfn)
-
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
@@ -611,20 +635,29 @@ class TransferWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+                lfn_to_update.append(temp_lfn)
                 continue
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'failed':
                 if bad_logfile:
                     to_attach = file(bad_logfile)
                     content = to_attach.read(-1)
-                    retval = self.db.addAttachment( document["_id"], document["_rev"], \
-                                                    content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], \
-                                                    "text/plain" )
-                    if retval.get('ok', False) != True:
-                        # Then we have a problem
-                        msg = "Adding an attachment to document failed\n"
-                        msg += str(retval)
-                        msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                    try:
+                        retval = self.db.addAttachment( document["_id"], document["_rev"], content, to_attach.name.split('/')[ len(to_attach.name.split('/')) - 1 ], "text/plain" )
+                        if retval.get('ok', False) != True:
+                            # Then we have a problem
+                            msg = "Adding an attachment to document failed\n"
+                            msg += str(retval)
+                            msg += "ID: %s, Rev: %s" % (document["_id"], document["_rev"])
+                            self.logger.error(msg)
+                            lfn_to_update.append(temp_lfn)
+                            continue
+                    except Exception, ex:
+                        msg =  "Error updating document in couch"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
                         self.logger.error(msg)
+                        lfn_to_update.append(temp_lfn)
+                        continue
                 now = str(datetime.datetime.now())
                 last_update = time.time()
                 # Prepare data to update the document in couch
@@ -632,7 +665,7 @@ class TransferWorker:
                     data['state'] = 'failed'
                     data['end_time'] = now
                 else:
-                    data['state'] = 'retry'
+		    data['state'] = 'retry'
                 if self.failures_reasons.has_key(perm_lfn):
                     if self.failures_reasons[perm_lfn]:
                         data['failure_reason'] = self.failures_reasons[perm_lfn]
@@ -643,7 +676,6 @@ class TransferWorker:
 
                 data['last_update'] = last_update
                 data['retry'] = now
-
                 # Update the document in couch
                 self.logger.debug("Marking failed %s" % docId)
                 try:
@@ -655,6 +687,8 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
+                    lfn_to_update.append(temp_lfn)
+                    continue
                 try:
                     self.db.commit()
                 except Exception, ex:
@@ -662,8 +696,15 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-
+                    lfn_to_update.append(temp_lfn)
+                    continue
+            if self.lfn_to_pfn_mapping.has_key(temp_lfn):
+                pfn = self.lfn_to_pfn_mapping[temp_lfn]
+                del self.lfn_to_pfn_mapping[temp_lfn]
+                if self.pfn_to_lfn_mapping.has_key(pfn):
+                    del self.pfn_to_lfn_mapping[pfn]
         self.logger.debug("failed file updated")
+        return lfn_to_update
 
     def mark_incomplete(self, files=[]):
         """
