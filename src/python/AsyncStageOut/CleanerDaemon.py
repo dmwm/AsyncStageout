@@ -48,7 +48,10 @@ class CleanerDaemon(BaseWorkerThread):
         self.site_tfc_map = {}
         os.environ['X509_USER_PROXY'] = self.opsProxy
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.db = server.connectDatabase(self.config.files_database)
+        try:
+            self.db = server.connectDatabase(self.config.files_database)
+        except Exception, e:
+            self.logger.exception('A problem occured when connecting to couchDB: %s' % e)
 
     def algorithm(self, parameters = None):
         """
@@ -62,9 +65,8 @@ class CleanerDaemon(BaseWorkerThread):
         self.logger.debug('Active sites are: %s' % sites)
         for site in sites:
             self.site_tfc_map[site] = self.get_tfc_rules(site)
-
+        query = {}
         try:
-            query = {}
             since = self.config_db.loadView('asynctransfer_config', 'lastFilesCleaningTime', query)['rows'][0]['key']
         except IndexError:
             self.logger.debug('No records to determine last cleanning time, waiting for next iteration')
@@ -158,8 +160,13 @@ class CleanerDaemon(BaseWorkerThread):
         """
         Get a list of all sites involved in transfers.
         """
-        query = {'group': True}
-        sites = self.db.loadView('AsyncTransfer', 'sites', query)
+        query = {'group': True, 'stale': 'ok'}
+        try:
+            sites = self.db.loadView('AsyncTransfer', 'sites', query)
+        except Exception, e:
+            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+            return []
+
         def keys_map(inputDict):
             """
             Map function.
