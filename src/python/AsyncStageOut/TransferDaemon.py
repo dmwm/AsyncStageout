@@ -41,12 +41,15 @@ def ftscp(user, tfc_map, config):
         logging.debug("Worker cannot be created!:" %e)
         return user
     if worker.init:
-       logging.debug("Starting %s" % worker)
-       try:
-           worker ()
-       except Exception, e:
-           logging.debug("Worker cannot start!:" %e)
-           return user
+        logging.debug("Starting %s" % worker)
+        try:
+            worker ()
+        except Exception, e:
+            logging.debug("Worker cannot start!:" %e)
+            return user
+    else:
+        logging.debug("Worker cannot be initialized!")
+        return user
     logging.debug("Returning results: process %s, links %s, map PFN %s, and map LFN %s" % (worker.list_process, worker.link_process, worker.pfn_to_lfn_mapping, worker.lfn_to_pfn_mapping))
     list_process = worker.list_process
     link_process = worker.link_process
@@ -66,6 +69,9 @@ def ftscp(user, tfc_map, config):
                 except Exception, e:
                     logging.debug("Worker cannot start!:" %e)
                     continue
+            else:
+                logging.debug("Worker cannot be initialized!")
+                continue
             list_process = worker.list_process
             link_process = worker.link_process
             pfn_lfn_mapping = worker.pfn_to_lfn_mapping
