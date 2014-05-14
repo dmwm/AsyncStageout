@@ -742,7 +742,7 @@ class PublisherWorker:
             for i in range(10):
                 self.logger.debug("About to get migration request for %s." % id)
                 status = migrateApi.statusMigration(migration_rqst_id=id)
-                state = status.get("migration_status")
+                state = status[0].get("migration_status")
                 self.logger.debug("Migration status: %s" % state)
                 if state != 9 or state != 2:
                     time.sleep(wait_time)
