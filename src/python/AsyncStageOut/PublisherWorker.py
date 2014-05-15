@@ -133,6 +133,7 @@ class PublisherWorker:
             self.db = server.connectDatabase(self.config.files_database)
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
+        self.block_publication_timeout = self.config.block_closure_timeout
 
     def __call__(self):
         """
@@ -144,19 +145,18 @@ class PublisherWorker:
         self.lfn_map = {}
         query = {'group':True, 'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}]}
         try:
-            active_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
+            active_user_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
         except Exception, e:
             self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' %e)
             self.logger.info('Publications for %s will be retried next time' % self.user)
             return
-        for wf in active_workflows:
-            if wf['key'][0] == self.user:
-                active_user_workflows.append(wf)
         self.logger.debug('active user wfs %s' % active_user_workflows)
         self.logger.info('active user wfs %s' %len(active_user_workflows))
+        now = time.time()
+        last_publication_time = 0
         for user_wf in active_user_workflows:
-            self.not_expired_wf = False
             self.forceFailure = False
+            self.forcePublication = False
             lfn_ready = []
             active_files = []
             wf_jobs_endtime = []
@@ -168,14 +168,15 @@ class PublisherWorker:
                 self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
                 self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
                 continue
-            self.logger.info('active files of %s: %s' %(user_wf, len(active_files)))
+            self.logger.info('active files of %s: %s' %(user_wf['key'], len(active_files)))
             for file in active_files:
+                self.logger.debug(file)
                 if file['value'][5]:
                     # Get the list of jobs end_time for each WF.
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                            str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
                                            - time.timezone)
-                # To move once the view is fixed
+                # To move once the remote stageout from WN is fixed.
                 if "/temp/temp" in file['value'][1]:
                     lfn_hash = file['value'][1].replace('store/temp/temp', 'store', 1)
                 else:
@@ -187,45 +188,38 @@ class PublisherWorker:
                     self.lfn_map[lfn_orig] = file['value'][1]
                 lfn_ready.append(lfn_orig)
             self.logger.info('LFNs %s ready in %s' %(len(lfn_ready), user_wf['value']))
-            # If the number of files < max_files_per_block then check the oldness of the workflow
+
+            # Check if the workflow is still valid
+            if wf_jobs_endtime:
+                self.logger.debug('jobs_endtime of %s: %s' % (user_wf, wf_jobs_endtime))
+                wf_jobs_endtime.sort()
+                workflow_duration = (now - wf_jobs_endtime[0]) / 86400
+                if workflow_duration > self.config.workflow_expiration_time:
+                    self.logger.info('Workflow %s expired since %s days! Force the publication failure.' % (\
+                                      user_wf['key'], (workflow_duration - self.config.workflow_expiration_time)))
+                    self.forceFailure = True
+
+            # If the number of files < max_files_per_block then check the last publication time
             if user_wf['value'] <= self.max_files_per_block:
-                if wf_jobs_endtime:
-                    self.logger.debug('jobs_endtime of %s: %s' % (user_wf, wf_jobs_endtime))
-                    wf_jobs_endtime.sort()
-                    if (( time.time() - wf_jobs_endtime[0] )/3600) < self.config.workflow_expiration_time:
+                query = {'reduce':True, 'key': user_wf['key']}
+                try:
+                    last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
+                except Exception, e:
+                    self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
+                    continue
+                self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
+                if last_publication_time:
+                    self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
+                    wait_files = now - last_publication_time[0]['value']['max']
+                    if wait_files > self.block_publication_timeout:
+                        self.logger.info('Forse the publication since the publication %s ago' % wait_files)
+                        self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
+                        self.forcePublication = True
+                    elif not self.forceFailure:
                         continue
-                    else:#check the ASO queue until self.config.workflow_expiration_time * 5
-                        if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 5):
-                            workflow_expired = user_wf['key'][3]
-                            query = {'reduce':True, 'group': True, 'key':workflow_expired, 'stale': 'ok'}
-                            try:
-                                active_jobs = self.db.loadView('AsyncTransfer', 'JobsStatesByWorkflow', query)['rows']
-                                if active_jobs[0]['value']['new'] != 0 or active_jobs[0]['value']['acquired'] != 0:
-                                    self.logger.info('Queue is not empty for workflow %s. Waiting next cycle' % workflow_expired)
-                                    continue
-                            except Exception, e:
-                                self.logger.error('A problem occured when retrieving the queue of %s: %s' % (workflow_expired, e))
-                                self.logger.info('Publications of %s will be retried next time' % workflow_expired)
-                                continue
-                        else:
-                            self.logger.info('Publish number of files minor of max_files_per_block.')
-                            self.forceFailure = True
-                else:
-                    # Jobs end_time info. is not available. Publish number of files minor of max_files_per_block or fail.
-                    self.logger.info('Publish number of files minor of max_files_per_block.')
-                    self.forceFailure = True
-            else:
-                # files > self.max_files_per_block but files are not published yet:
-                # wait until self.config.workflow_expiration_time * 10 and then fail
-                if wf_jobs_endtime:
-                    if (( time.time() - wf_jobs_endtime[0] )/3600) < (self.config.workflow_expiration_time * 10):
-                        self.not_expired_wf = True
                     else:
-                        self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
-                        self.forceFailure = True
-                else:
-                    self.logger.debug('Unexpected problem! Force the publication failure if it still cannot publish.')
-                    self.forceFailure = True
+                        pass
+
             if lfn_ready:
                 self.logger.debug("Retrieving SE Name from Phedex %s" %str(file['value'][0]))
                 try:
@@ -244,6 +238,7 @@ class PublisherWorker:
                                                          str(seName), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
+
         self.logger.info('Publications completed')
 
     def mark_good(self, files=[]):
@@ -726,27 +721,22 @@ class PublisherWorker:
             count = 0
             blockCount = 0
             if len(dbsFiles) < self.max_files_per_block:
-                self.logger.info("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
-                if not self.not_expired_wf:
-                    block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
-                    files_to_publish = dbsFiles[count:count+blockSize]
-                    try:
-                        block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
-                        self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
-                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
-                                                         acquisition_era_config, block_config, files_to_publish)
-                        destApi.insertBulkBlock(blockDump)
-                        count += blockSize
-                        blockCount += 1
-                    except Exception, ex:
-                        failed += [i['logical_file_name'] for i in files_to_publish]
-                        msg =  "Error when publishing"
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                else:
-                    self.logger.debug("WF %s is not expired: %s" %(workflow, self.not_expired_wf))
-                    return [], [], []
+                block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
+                files_to_publish = dbsFiles[count:count+blockSize]
+                try:
+                    block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
+                    self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                    blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
+                                                     acquisition_era_config, block_config, files_to_publish)
+                    destApi.insertBulkBlock(blockDump)
+                    count += blockSize
+                    blockCount += 1
+                except Exception, ex:
+                    failed += [i['logical_file_name'] for i in files_to_publish]
+                    msg =  "Error when publishing"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
             else:
                 while count < len(dbsFiles):
                     block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))

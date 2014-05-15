@@ -97,9 +97,10 @@ config.DBSPublisher.serviceCert = serviceCert
 config.DBSPublisher.serviceKey = serviceKey
 config.DBSPublisher.opsProxy = opsProxy
 config.DBSPublisher.max_files_per_block = 100
-config.DBSPublisher.workflow_expiration_time = 1
+config.DBSPublisher.workflow_expiration_time = 3
 config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
+config.DBSPublisher.block_closure_timeout = 18800
 #config.component_('Analytics')
 #config.Analytics.user_monitoring_db = user_monitoring_db
 #config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
