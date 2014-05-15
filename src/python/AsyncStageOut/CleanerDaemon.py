@@ -12,6 +12,37 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 import subprocess, os, errno
 import time
+
+def execute_command( command, logger, timeout ):
+    """
+    _execute_command_
+    Funtion to manage commands.
+    """
+
+    stdout, stderr, rc = None, None, 99999
+    proc = subprocess.Popen(
+            command, shell=True, cwd=os.environ['PWD'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+    )
+    t_beginning = time.time()
+    seconds_passed = 0
+    while True:
+        if proc.poll() is not None:
+            break
+        seconds_passed = time.time() - t_beginning
+        if timeout and seconds_passed > timeout:
+            proc.terminate()
+            logger.error('Timeout in %s execution.' % command )
+            return stdout, rc
+
+        time.sleep(0.1)
+    stdout, stderr = proc.communicate()
+    rc = proc.returncode
+    logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
+    return rc, stdout, stderr
+
 class CleanerDaemon(BaseWorkerThread):
     """
     _FilesCleaner_
@@ -104,25 +135,14 @@ class CleanerDaemon(BaseWorkerThread):
                 self.logger.info("Removing %s from %s" %(lfn, location))
                 pfn = self.apply_tfc_to_lfn( '%s:%s' %(location, lfn))
                 if pfn:
-                    logfile = open('%s/%s_%s.lcg-del.log' % ( self.log_dir, location, str(time.time()) ), 'w')
                     command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
                               (self.opsProxy, self.uiSetupScript, pfn)
                     self.logger.debug("Running remove command %s" % command)
-                    self.logger.info("log file: %s" % logfile.name)
-                    proc = subprocess.Popen(
-                            ["/bin/bash"], shell=True, cwd=os.environ['PWD'],
-                            stdout=logfile,
-                            stderr=logfile,
-                            stdin=subprocess.PIPE,
-                            )
-                    proc.stdin.write(command)
-                    stdout, stderr = proc.communicate()
-                    rc = proc.returncode
+                    rc, stdout, stderr = execute_command(command, self.logger, 3600)
                     if rc:
                         self.logger.info("Deletion command failed with output %s and error %s" %(stdout, stderr))
                     else:
                         self.logger.info("File Deleted.")
-                    logfile.close()
                 else:
                     self.logger.info("Removing %s from %s failed when retrieving the PFN" %(lfn, location))
         return
