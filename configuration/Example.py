@@ -140,3 +140,14 @@ config.Statistics.expiration_days = 7
 config.Statistics.statitics_database = statitics_database
 config.Statistics.opsProxy = opsProxy
 config.Statistics.mon_database = files_database
+config.component_("RetryManager")
+config.RetryManager.namespace = "AsyncStageOut.RetryManager"
+config.RetryManager.componentDir = config.General.workDir
+config.RetryManager.log_level = 10
+config.RetryManager.pollInterval = 300
+config.RetryManager.files_database = files_database
+config.RetryManager.couch_instance = couchUrl
+config.RetryManager.opsProxy = opsProxy
+config.RetryManager.retryAlgoDir = 'AsyncStageOut.RetryPlugins'
+config.RetryManager.algoName = 'DefaultRetryAlgo'
+config.RetryManager.cooloffTime = 7200
