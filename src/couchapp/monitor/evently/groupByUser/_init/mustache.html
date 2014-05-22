@@ -1,130 +1,119 @@
 <div style="text-align: center">
-<h3>File transfer by User</h3>
-<br />
-<INPUT TYPE="button" NAME="buttonb" Value="View bar" onClick='setChart(1)'>
-<INPUT TYPE="button" NAME="buttonp" Value="View pie" onClick='setChart(2)'>
-<p align="left">- Move the mouse over a section of the chart to get more information.<br>
-- The click on a section of the chart will link to the statistics page of the selected user.</p>
-
-<div id="pie"></div>
-<div id="bar"></div>
-
+    <h3>File transfer by User</h3>
+    <br />
+    <INPUT TYPE="button" NAME="buttonb" Value="View bar" onClick='setChart(1)'>
+    <INPUT TYPE="button" NAME="buttonp" Value="View pie" onClick='setChart(2)'>
+    <p align="left">
+        - Move the mouse over a section of the chart to get more information.<br>
+        - The click on a section of the chart will link to the statistics page of the selected user.
+    </p>
+    <div id="pie"></div>
+    <div id="bar"></div>
 </div>
 
 <script type="text/javascript">
 
-var dbname = document.location.href.split('/')[3];
-var app = document.location.href.split('/')[5];
 var charttype = 1;
+
 var input = [];
-input.url = document.location.href.split(app)[0]+app+"/userstat.html";
+input.url = "userstat.html";
 input.data = [];
 input.labels = [];
 input.info = [];
 input.stacked = [];
-input.status = ["done","failed","killed","new", "acquired", "resubmitted"];
+input.status = ["done", "failed", "killed", "new", "acquired", "resubmitted"];
 
-
-input.popolate = function(){
-		input.stacked = [];
-		input.data = [];
-		input.labels = [];
-		input.info = [];
-                var donefile = [];
-		var failfile = [];
-		var otherfile = [];
-		var killfile = [];
-		var newfile=[];
-		var resubfile=[];
-		var acqfile=[];
-
-
-		xmlhttp = new XMLHttpRequest();
-  		xmlhttp.open("GET", "_view/filesCountByUser?stale=ok&group_level=1", false);
-  		xmlhttp.send();
-                var response = eval("(" + xmlhttp.responseText + ")")["rows"];
-		for (i in response) {
-		var value = response[i].value.total;
-		var rowinfo = "Done: "+response[i].value.done+" Failed: "+response[i].value.failed+" New: "+response[i].value.new+" Killed: "+response[i].value.killed+" Acquired: "+response[i].value.acquired+" Resubmitted: "+response[i].value.resubmitted ;
-
-		donefile.push(response[i].value.done);
-		failfile.push(response[i].value.failed);
-		newfile.push(response[i].value.new);
-		killfile.push(response[i].value.killed);
-	        acqfile.push(response[i].value.acquired);
-		resubfile.push(response[i].value.resubmitted);
-		input.labels.push(response[i].key);
-		input.data.push(value);
-		input.info.push(rowinfo);
-			}
-
-		input.stacked.push(donefile);
-		input.stacked.push(failfile);
-		input.stacked.push(killfile);
-		input.stacked.push(newfile);
-		input.stacked.push(acqfile);
-		input.stacked.push(resubfile);
+input.popolate = function() {
+    input.data = [];
+    input.labels = [];
+    input.info = [];
+    input.stacked = [];
+    var donefile = [];
+    var failfile = [];
+    var killfile = [];
+    var newfile = [];
+    var acqfile = [];
+    var resubfile = [];
+    xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("GET", "_view/filesCountByUser?stale=ok&group_level=1", false);
+    xmlhttp.send();
+    var response = eval("(" + xmlhttp.responseText + ")")["rows"];
+    for (i in response) {
+        var value = response[i].value.total;
+        var rowinfo = "Done: "+response[i].value.done+" Failed: "+response[i].value.failed+" New: "+response[i].value.new+" Killed: "+response[i].value.killed+" Acquired: "+response[i].value.acquired+" Resubmitted: "+response[i].value.resubmitted;
+        donefile.push(response[i].value.done);
+        failfile.push(response[i].value.failed);
+        killfile.push(response[i].value.killed);
+        newfile.push(response[i].value.new);
+        acqfile.push(response[i].value.acquired);
+        resubfile.push(response[i].value.resubmitted);
+        input.data.push(value);
+        input.labels.push(response[i].key);
+        input.info.push(rowinfo);
+    }
+    input.stacked.push(donefile);
+    input.stacked.push(failfile);
+    input.stacked.push(killfile);
+    input.stacked.push(newfile);
+    input.stacked.push(acqfile);
+    input.stacked.push(resubfile);
 }
 
-
-input.update = function(){
-		var DB = $.couch.db(dbname);
-		DB.view('monitor/filesCountByUser', {
-		      group_level: 1,
-		      success: function(data) {
-				var labels = [];
-				var dati = [];
-				var info = [];
-                                var stacked = [];
-
-		      		for (i in data.rows) {
-
-					var value = data.rows[i].value.total;
-		                        var rowinfo = "Done: "+data.rows[i].value.done+" Failed: "+data.rows[i].value.failed+" Other: "+data.rows[i].value.other;
-					var stackedrow = { "key": data.rows[i].key,
-							   "done": data.rows[i].value.done,
-							   "failed": data.rows[i].value.failed,
-                                                           "other": data.rows[i].value.other
-								};
-					stacked.push(stackedrow);
-					labels.push(data.rows[i].key);
-					dati.push(value);
-		                        info.push(rowinfo);
-					}
-				setDataArray(dati, labels, info, stacked);
-		      		}
-	      });
+input.update = function() {
+    var DB = $.couch.db(dbname);
+    DB.view('monitor/filesCountByUser', {
+        group_level: 1,
+        success: function(data) {
+            var labels = [];
+            var dati = [];
+            var info = [];
+            var stacked = [];
+            for (i in data.rows) {
+                var value = data.rows[i].value.total;
+                var rowinfo = "Done: "+data.rows[i].value.done+" Failed: "+data.rows[i].value.failed+" Other: "+data.rows[i].value.other;
+                var stackedrow = { "key": data.rows[i].key,
+                                   "done": data.rows[i].value.done,
+                                   "failed": data.rows[i].value.failed,
+                                   "other": data.rows[i].value.other
+                                 };
+                stacked.push(stackedrow);
+                labels.push(data.rows[i].key);
+                dati.push(value);
+                info.push(rowinfo);
+            }
+            setDataArray(dati, labels, info, stacked);
+        }
+    });
 }
 
-function setChart(chart){
-	charttype = chart;
-	drawchart();
-	}
+function setChart(chart) {
+    charttype = chart;
+    drawchart();
+}
 
-function drawchart(){
-	input.popolate();
-	switch (charttype)
-	{
-	case 1:
-		setTimeout(function() stackedBarH("pie", input) , 500 );
-	break;
-	case 2:
-		setTimeout(function() fullpieActiveTest("pie", input) , 500 );
-	break;
-	default:
-		setTimeout(function() stackedBarH("pie", input) , 500 );
-	}
-	/*
-	if(charttype == "pie"){
-		setTimeout(function() fullpieActiveTest("pie", input) , 500 );
-		}else{
-			setTimeout(function() stackedBarH("pie", input) , 500 );
-			}
-        */
-
+function drawchart() {
+    input.popolate();
+    switch (charttype) {
+        case 1:
+            setTimeout(function() stackedBarH("pie",input),500);
+            break;
+        case 2:
+            setTimeout(function() fullpieActiveTest("pie",input),500);
+            break;
+        default:
+            setTimeout(function() stackedBarH("pie",input),500);
+    }
+    /*
+    if (charttype == "pie") {
+        setTimeout(function() fullpieActiveTest("pie",input),500);
+    }
+    else {
+        setTimeout(function() stackedBarH("pie",input),500);
+    }
+    */
 }
 
 drawchart();
-setInterval(function() drawchart() , 60000 );
+setInterval(function() drawchart(),60000);
 
 </script>

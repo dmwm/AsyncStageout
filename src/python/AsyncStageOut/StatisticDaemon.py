@@ -35,8 +35,10 @@ class StatisticDaemon(BaseWorkerThread):
 
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
+
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.config_db = config_server.connectDatabase(self.config.config_database)
+        self.mon_db = server.connectDatabase(self.config.mon_database)
         self.logger.debug('Connected to CouchDB')
 
         statserver = CouchServer(self.config.couch_statinstance)
@@ -72,6 +74,7 @@ class StatisticDaemon(BaseWorkerThread):
         oldJobs = self.getOldJobs()
         self.logger.debug('%d jobs to delete' % len(oldJobs) )
 
+        jobDoc = {}
         for doc in oldJobs:
 
             try:
@@ -83,16 +86,16 @@ class StatisticDaemon(BaseWorkerThread):
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
+            if jobDoc:
+                try:
+                    self.db.queueDelete(jobDoc)
 
-            try:
-                self.db.queueDelete(jobDoc)
+                except Exception, ex:
 
-            except Exception, ex:
-
-                msg =  "Error queuing document for delete in couch"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
+                    msg =  "Error queuing document for delete in couch"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
 
         for newDoc in self.iteration_docs:
             try:
@@ -126,10 +129,10 @@ class StatisticDaemon(BaseWorkerThread):
         Get the list of finished jobs older than the exptime.
         """
         query = {'reduce': False,
-                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute],
-                 'stale': 'ok'}
+                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute]}#,
+                 #'stale': 'ok'}
         try:
-            oldJobs = self.db.loadView('monitor', 'endedByTime', query)['rows']
+            oldJobs = self.mon_db.loadView('monitor', 'endedSizeByTime', query)['rows']
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
@@ -172,7 +175,8 @@ class StatisticDaemon(BaseWorkerThread):
         serverDocument = {'fts': fts,
                           'day': startTime.date().isoformat(),
                           'sites_served': {document['destination']: {'done': 0,
-                                                                     'failed': 0}
+                                                                     'failed': 0,
+                                                                     'killed': 0}
                                             },
                           'users': { document['user']: [document['workflow']]},
                           'timing': {'min_transfer_duration': jobDuration,
@@ -180,6 +184,7 @@ class StatisticDaemon(BaseWorkerThread):
                                      'avg_transfer_duration': jobDuration},
                           'done': {},
                           'failed' : {},
+                          'killed': {},
                           'avg_size' : document['size']
                            }
 
@@ -218,18 +223,24 @@ class StatisticDaemon(BaseWorkerThread):
             if document['destination'] in oldDoc['sites_served']:
                 if (document['state'] == 'done'):
                     oldDoc['sites_served'][document['destination']]['done'] += 1
-                else:
+                if (document['state'] == 'killed'):
+                    oldDoc['sites_served'][document['destination']]['killed'] += 1
+                if (document['state'] == 'failed'):
                     oldDoc['sites_served'][document['destination']]['failed'] += 1
             else:
                 if(document['state'] == 'done'):
                     oldDoc['sites_served'][document['destination']] = {'done': 1,
-                                                                          'failed': 0}
-                else:
+                                                                       'failed': 0,
+                                                                       'killed': 0}
+                if(document['state'] == 'failed'):
                     oldDoc['sites_served'][document['destination']] = {'done': 0,
-                                                                          'failed': 1}
-
-
-            ntransfer = sum(oldDoc['done'].values()) + sum(oldDoc['failed'].values())
+                                                                       'failed': 1,
+								       'killed': 0}
+                if(document['state'] == 'killed'):
+                    oldDoc['sites_served'][document['destination']] = {'done': 0,
+                                                                       'failed': 0,
+                                                                       'killed': 1}
+            ntransfer = sum(oldDoc['done'].values()) + sum(oldDoc['failed'].values()) + sum(oldDoc['killed'].values())
 
             #update max, min duration time
             if(jobDuration > int(oldDoc['timing']['max_transfer_duration']) ):

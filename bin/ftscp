@@ -194,13 +194,57 @@ fi
 
 if [ "$token" != "" ] ; then
     echo "+ glite-transfer-submit -o -t $token $passoptshow $myproxy_server $server -f $copyjobfile"
-    ftsjob=$(glite-transfer-submit -o -t $token $passopt $myproxy_server $server -f $copyjobfile | grep -v Enter)
+    ftsjob=$(glite-transfer-submit -o -t $token $passopt $myproxy_server $server -f $copyjobfile)
 else
     echo "+ glite-transfer-submit -o $passoptshow $myproxy_server $server -f $copyjobfile"
-    ftsjob=$(glite-transfer-submit -o $passopt $myproxy_server $server -f $copyjobfile | grep -v Enter)
+    ftsjob=$(glite-transfer-submit -o $passopt $myproxy_server $server -f $copyjobfile)
 fi
 
-echo "ftsjob=$ftsjob"
+# Retry the submission on Server hangs
+submission=false
+i=0
+while ((i<5))
+do
+    i=$(expr $i + 1)
+    ( echo "ftsjob=$ftsjob" ) & pid=$!
+    #echo $pid
+    ( sleep 300 && kill -HUP $pid ) 2>/dev/null & watcher=$!
+    if wait $pid 2>/dev/null; then
+        #echo "Submission finished"
+        pkill -HUP -P $watcher
+        wait $watcher
+        submission=true
+        break
+    else
+        echo "+ Submission interrupted"
+        submission=false
+    fi
+done
+
+if ! $submission || [ -z $ftsjob ]
+then
+    # Fail in ASO files for submission timeout.
+    count=true
+    server_endpoint=`echo $server|cut -d" " -f2`
+    for transfer in `cat $copyjobfile`
+    do
+      if $count
+      then
+        echo "Source:      $transfer"
+        count=false
+      else
+        echo "Destination: $transfer"
+        echo "State:       Failed"
+        echo "Retries:     0"
+        echo "Reason:      FTS server $server_endpoint is unreachable for submission."
+        echo "Duration:    0"
+        echo ""
+        count=true
+      fi
+    done
+exit 301
+fi
+
 
 # Poll transfer status, record output into the report
 while true; do
@@ -212,7 +256,53 @@ while true; do
   # Get the status of the entire job
   echo "+ glite-transfer-status $server $ftsjob"
   ftsstatus=$(glite-transfer-status $server $ftsjob)
-  echo "$ftsjob status is $ftsstatus"
+  #echo "$ftsjob status is $ftsstatus"
+
+  status=false
+  i=0
+  while ((i<5))
+  do
+    i=$(expr $i + 1)
+    ( echo "$ftsjob status is $ftsstatus" ) & pid=$!
+    #( sleep 5 ) & pid=$!
+    #echo $pid
+    ( sleep 300 && kill -HUP $pid ) 2>/dev/null & watcher=$!
+    if wait $pid 2>/dev/null; then
+        #echo "Status got"
+        pkill -HUP -P $watcher
+        wait $watcher
+        status=true
+        break
+    else
+        echo "+ Status interrupted"
+        status=false
+    fi
+  done
+
+  if ! $status
+  then
+    # Fail in the ASO files for tracking timeout.
+    count=true
+    server_endpoint=`echo $server|cut -d" " -f2`
+    for transfer in `cat $copyjobfile`
+    do
+      if $count
+      then
+        echo "Source:      $transfer"
+        count=false
+      else
+        echo "Destination: $transfer"
+        echo "State:       Failed"
+        echo "Retries:     0"
+        echo "Reason:      FTS server $server_endpoint is unreachable for tracking."
+        echo "Duration:    0"
+        echo ""
+        count=true
+      fi
+    done
+  exit 301
+  fi
+
   case $ftsstatus in
     Submitted )
       # [FIXME] need to just ignore this transient state
@@ -303,3 +393,4 @@ while true; do
       ;;
   esac
 done
+

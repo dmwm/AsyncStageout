@@ -1,42 +1,36 @@
 <div style="text-align: center">
-<h3 id="title"></h3>
-<table>
-	<tr>
-		<td><h4>FILES STATUS BY WORKFLOW</h4></td>
-			</tr>
-		<tr>
-		<td><div id="pie"></div> </td>
-			</tr>
-</table>
+    <h3 id="title"></h3>
+    <table>
+        <tr>
+            <td><h4>FILES STATUS BY WORKFLOW</h4></td>
+        </tr>
+        <tr>
+            <td><div id="pie"></div> </td>
+        </tr>
+    </table>
 </div>
 
 <script type="text/javascript">
 
-function parseGetVars()
-{
-  var args = new Array();
-  var query = window.location.search.substring(1);
-  if (query)
-  {
-    var strList = query.split('&');
-    for(str in strList)
-    {
-      var parts = strList[str].split('=');
-      args[unescape(parts[0])] = unescape(parts[1]);
+function parseGetVars() {
+    var args = new Array();
+    var query = window.location.search.substring(1);
+    if (query) {
+        var strList = query.split('&');
+        for (str in strList) {
+            var parts = strList[str].split('=');
+            args[unescape(parts[0])] = unescape(parts[1]);
+        }
     }
-  }
-  return args;
+    return args;
 }
 
-var dbname = document.location.href.split('/')[3];
-var url = document.location.href.split('monitor/')[0]+"monitor/";
 var get = parseGetVars();
 var user = get['index'];
 
-
 $(document).ready(function() {
-          // put all your jQuery goodness in here.
-	$("#title").html("User "+user+" information page");
+    // put all your jQuery goodness in here.
+    $("#title").html("User "+user+" information page");
 });
 
 var input = [];
@@ -45,110 +39,102 @@ input.data = [];
 input.totdata = [];
 input.dataop = [];
 input.dataip = [];
-input.status = ["done","failed","other"];
+input.status = ["done", "failed", "other"];
 
 var inputs = [];
-inputs.url = url+"/workflowStat.html";
+inputs.url = "workflowStat.html";
 inputs.data = [];
 inputs.labels = [];
 inputs.info = [];
 inputs.stacked = [];
-inputs.layers = ["done","failed","killed","new", "acquired", "resubmitted"];inputs.status = ["done","failed","killed", "new", "acquired", "resubmitted"];
+inputs.layers = ["done", "failed", "killed", "new", "acquired", "resubmitted"];
+inputs.status = ["done", "failed", "killed", "new", "acquired", "resubmitted"];
 
-
-function settotdata(intotdata, inouterpie, ininnerpies, inkeys){
-        input.totdata = intotdata;
-	input.dataop = inouterpie;
-	input.dataip = ininnerpies;
-	input.keys = inkeys;
+function settotdata(intotdata, inouterpie, ininnerpies, inkeys) {
+    input.totdata = intotdata;
+    input.dataop = inouterpie;
+    input.dataip = ininnerpies;
+    input.keys = inkeys;
 }
 
-input.updateTot = function(){
-		var DB = $.couch.db(dbname);
-		DB.view('monitor/filesCountByUser', {
-		      group_level: 2,
-		      startkey: [user, null],
-                      endkey: [user, "\ufff0"],
-		      success: function(data) {
-				//var labels = [];
-				//var dati = [];
-				//var info = [];
-                                var totdata = [0,0,0];
-				var outerpie = [];
-				var innerpies = [];
-				var keys = [];
-
-		      		for (i in data.rows) {
-
-					var value = data.rows[i].value.total;
-		                        //var outerpieinfo = {"key" : data.rows[i].key[1],
-  					//		     "value": data.rows[i].value.total}
-					//var innerpieinfo = { "key": data.rows[i].key[1],
-                                        //                   "value": [data.rows[i].value.done, data.rows[i].value.done, data.rows[i].value.other]};
-					//dati.push(rowinfo);
-					totdata[0] += data.rows[i].value.done;
-					totdata[1] += data.rows[i].value.failed;
-					totdata[2] += data.rows[i].value.other;
-					keys.push(data.rows[i].key[1]);
-					outerpie.push(value);
-					innerpies.push([data.rows[i].value.done, data.rows[i].value.failed, data.rows[i].value.other]);
-
-					}
-				//setDataArray(dati, totdata);
-				settotdata(totdata, outerpie, innerpies, keys);
-		      		}
-	      });
+input.updateTot = function() {
+    var DB = $.couch.db(dbname);
+    DB.view('monitor/filesCountByUser', {
+        group_level: 2,
+        startkey: [user, null],
+        endkey: [user, "\ufff0"],
+        success: function(data) {
+	    //var labels = [];
+            //var dati = [];
+            //var info = [];
+            var totdata = [0,0,0];
+            var outerpie = [];
+            var innerpies = [];
+            var keys = [];
+            for (i in data.rows) {
+                var value = data.rows[i].value.total;
+		//var outerpieinfo = {"key" : data.rows[i].key[1],
+  		//		     "value": data.rows[i].value.total}
+		//var innerpieinfo = { "key": data.rows[i].key[1],
+                //                   "value": [data.rows[i].value.done, data.rows[i].value.done, data.rows[i].value.other]};
+		//dati.push(rowinfo);
+                totdata[0] += data.rows[i].value.done;
+                totdata[1] += data.rows[i].value.failed;
+                totdata[2] += data.rows[i].value.other;
+                keys.push(data.rows[i].key[1]);
+		outerpie.push(value);
+		innerpies.push([data.rows[i].value.done, data.rows[i].value.failed, data.rows[i].value.other]);
+            }
+            //setDataArray(dati, totdata);
+            settotdata(totdata, outerpie, innerpies, keys);
+        }
+    });
 }
 
-inputs.popolate = function(){
-                inputs.stacked = [];
-                inputs.data = [];
-                inputs.labels = [];
-                inputs.info = [];
-                var donefile = [];
-                var failfile = [];
-                var killfile=[];
-                var newfile = [];
-                var acqfile = [];
-                var resubfile=[];
-
-                xmlhttp = new XMLHttpRequest();
-                xmlhttp.open("GET", "_view/filesCountByTask?stale=ok&group_level=2", false);
-                xmlhttp.send();
-                var response = eval("(" + xmlhttp.responseText + ")")["rows"];
-                for (i in response) {
-                var value = response[i].value.total;
-                var rowinfo = "WorkFlow: "+response[i].key+" Jobs: "+response[i].value.total;
-
-
-//                if (response[i].value.user==user){
-
-                if (response[i].key[1]==user){
-                donefile.push(response[i].value.done);
-                failfile.push(response[i].value.failed);
-                newfile.push(response[i].value.new);
-                killfile.push(response[i].value.killed);
-                resubfile.push(response[i].value.resubmitted);
-                acqfile.push(response[i].value.acquired);
-
-                inputs.labels.push(response[i].key[0]);
-                inputs.data.push(value);
-                inputs.info.push(rowinfo);
-                }        }
-                inputs.stacked.push(donefile);
-                inputs.stacked.push(failfile);
-                inputs.stacked.push(killfile);
-                inputs.stacked.push(newfile);
-                inputs.stacked.push(acqfile);
-                inputs.stacked.push(resubfile);
-
+inputs.popolate = function() {
+    inputs.stacked = [];
+    inputs.data = [];
+    inputs.labels = [];
+    inputs.info = [];
+    var donefile = [];
+    var failfile = [];
+    var killfile = [];
+    var newfile = [];
+    var acqfile = [];
+    var resubfile = [];
+    xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("GET", "_view/filesCountByTask?stale=ok&group_level=2", false);
+    xmlhttp.send();
+    var response = eval("(" + xmlhttp.responseText + ")")["rows"];
+    for (i in response) {
+        var value = response[i].value.total;
+        var rowinfo = "WorkFlow: "+response[i].key+" Jobs: "+response[i].value.total;
+        //if (response[i].value.user==user) {
+        if (response[i].key[1]==user) {
+            donefile.push(response[i].value.done);
+            failfile.push(response[i].value.failed);
+            newfile.push(response[i].value.new);
+            killfile.push(response[i].value.killed);
+            resubfile.push(response[i].value.resubmitted);
+            acqfile.push(response[i].value.acquired);
+            inputs.labels.push(response[i].key[0]);
+            inputs.data.push(value);
+            inputs.info.push(rowinfo);
+        }        
+    }
+    inputs.stacked.push(donefile);
+    inputs.stacked.push(failfile);
+    inputs.stacked.push(killfile);
+    inputs.stacked.push(newfile);
+    inputs.stacked.push(acqfile);
+    inputs.stacked.push(resubfile);
 }
 
-function drawchart(){
-	input.updateTot();
-        inputs.popolate();
-        setTimeout(function() stackedBarH("pie", inputs) , 500 );
-        /*setTimeout(function() doublepie("pie2", input) , 500 );*/
+function drawchart() {
+    input.updateTot();
+    inputs.popolate();
+    setTimeout(function() stackedBarH("pie",inputs),500);
+    /*setTimeout(function() doublepie("pie2",input),500);*/
 }
 
 drawchart();
