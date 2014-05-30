@@ -21,13 +21,11 @@ function(keys, values, rereduce) {
         for (var v in values) {
             var value = values[v];
             var state = value['state'];
-            if (_keys.indexOf(state) > -1) {
-                output[state]['njobs'] += 1;
-                for (var _v in _values) {
-                    var _value = _values[_v];
-                    if (_value == 'njobs') continue;
-                    output[state][_value] += value[_value];
-                }
+            output[state]['njobs'] += 1;
+            for (var _v in _values) {
+                var _value = _values[_v];
+                if (_value == 'njobs') continue;
+                output[state][_value] += value[_value];
             }
         }
     }
