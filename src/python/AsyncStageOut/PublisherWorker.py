@@ -404,7 +404,10 @@ class PublisherWorker:
         if toPublish:
             self.logger.info("cleaning...%s LFN ready from %s" %(len(lfn_ready), len(toPublish[outdataset])))
             fail_files, toPublish = self.clean(lfn_ready, toPublish)
-            self.logger.info('to_publish %s files' % len(toPublish))
+            if toPublish.has_key(outdataset):
+                self.logger.info('to_publish %s files in %s' % (len(toPublish[outdataset]), outdataset))
+            else:
+                self.logger.info('No files to publish in %s' % outdataset)
             self.logger.debug('to_publish %s' % toPublish)
         return toPublish
 
@@ -582,6 +585,7 @@ class PublisherWorker:
         WRITE_PATH = "/DBSWriter/"
         MIGRATE_PATH = "/DBSMigrate"
         READ_PATH = "/DBSReader"
+        READ_PATH_1 = "/DBSReader/"
 
         if destURL.endswith(WRITE_PATH):
             destReadURL = destURL[:-len(WRITE_PATH)] + READ_PATH
@@ -590,7 +594,7 @@ class PublisherWorker:
             migrateURL = destURL + MIGRATE_PATH
             destReadURL = destURL + READ_PATH
             destURL += WRITE_PATH
-        if not sourceURL.endswith(READ_PATH):
+        if not sourceURL.endswith(READ_PATH) and not sourceURL.endswith(READ_PATH_1):
             sourceURL += READ_PATH
 
         self.logger.debug("Migrate datasets")
