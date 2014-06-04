@@ -298,11 +298,11 @@ inpute.popolate = function() {
         if ((rs<response.length)&&(key.toString() == response[rs].key.toString())) {
             if (yaxis == ("njobs").toString()) {
                 doneF.value = response[rs].value.published.njobs;
-                failF.value = response[rs].value.not_published.njobs;
+                failF.value = response[rs].value.publication_failed.njobs;
             }
             if (yaxis == ("size").toString()) {
                 doneF.value = response[rs].value.published.size/MB;
-                failF.value = response[rs].value.not_published.size/MB;
+                failF.value = response[rs].value.publication_failed.size/MB;
             }
             rs = rs+1;
         }
