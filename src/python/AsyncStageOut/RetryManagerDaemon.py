@@ -8,9 +8,6 @@ different algorithms.
 """
 __all__ = []
 
-
-
-import threading
 import logging
 import datetime
 import time
@@ -106,20 +103,17 @@ class RetryManagerDaemon(BaseWorkerThread):
 
         Actually does the dirty work of figuring out what to do with jobs
         """
-
         if len(files) < 1:
             # We got no files?
             return
 
         propList = []
-
         fileList = self.loadFilesFromList(recList = files)
-
         logging.debug("Files in cooloff %s" % fileList)
         # Now we should have the files
         propList = self.selectFilesToRetry(fileList)
-
         logging.debug("Files to retry %s" % propList)
+        now = str(datetime.datetime.now())
         for file in propList:
             # update couch
             self.logger.debug("Trying to resubmit %s" % file['id'])
@@ -135,6 +129,7 @@ class RetryManagerDaemon(BaseWorkerThread):
                 data = {}
                 data['state'] = 'new'
                 data['last_update'] = time.time()
+                data['retry'] = now
                 updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + file['id']
                 updateUri += "?" + urllib.urlencode(data)
                 try:
