@@ -245,7 +245,7 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][3]) \
+                failed_files, good_files = self.publish( str(file['key'][3]), \
                                                          self.userDN, str(file['key'][0]), \
                                                          str(file['value'][2]), str(file['value'][3]), \
                                                          str(seName), lfn_ready )
@@ -604,7 +604,7 @@ class PublisherWorker:
         self.logger.debug("Destination API URL: %s" % self.publish_dbs_url)
         destApi = dbsClient.DbsApi(url=self.publish_dbs_url, proxy=proxy)
         self.logger.debug("Destination read API URL: %s" % self.publish_read_url)
-        destReadApi = dbsClient.DbsApi(url=publish_read_url, proxy=proxy)
+        destReadApi = dbsClient.DbsApi(url=self.publish_read_url, proxy=proxy)
         self.logger.debug("Migration API URL: %s" % self.publish_migrate_url)
         migrateApi = dbsClient.DbsApi(url=self.publish_migrate_url, proxy=proxy)
 
