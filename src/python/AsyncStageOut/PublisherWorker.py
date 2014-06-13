@@ -134,6 +134,19 @@ class PublisherWorker:
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
         self.block_publication_timeout = self.config.block_closure_timeout
+        self.publish_dbs_url = self.config.publish_dbs_url
+
+        WRITE_PATH = "/DBSWriter"
+        MIGRATE_PATH = "/DBSMigrate"
+        READ_PATH = "/DBSReader"
+
+        if self.publish_dbs_url.endswith(WRITE_PATH):
+            self.publish_read_url = self.publish_dbs_url[:-len(WRITE_PATH)] + READ_PATH
+            self.publish_migrate_url = self.publish_dbs_url[:-len(WRITE_PATH)] + MIGRATE_PATH
+        else:
+            self.publish_migrate_url = self.publish_dbs_url + MIGRATE_PATH
+            self.publish_read_url = self.publish_dbs_url + READ_PATH
+            self.publish_dbs_url += WRITE_PATH
 
     def __call__(self):
         """
@@ -232,9 +245,9 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][3]), str(file['value'][2]), \
+                failed_files, good_files = self.publish( str(file['key'][3]), \
                                                          self.userDN, str(file['key'][0]), \
-                                                         str(file['value'][3]), str(file['value'][4]), \
+                                                         str(file['value'][2]), str(file['value'][3]), \
                                                          str(seName), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
@@ -317,7 +330,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def publish(self, workflow, dbsurl, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
+    def publish(self, workflow, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
         """Perform the data publication of the workflow result.
           :arg str workflow: a workflow name
           :arg str dbsurl: the DBS URL endpoint where to publish
@@ -338,7 +351,7 @@ class PublisherWorker:
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
         failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                  inputDataset=inputDataset, toPublish=toPublish,
-                                                 destURL=dbsurl, targetSE=targetSE, workflow=workflow)
+                                                 targetSE=targetSE, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
         return failed, done
 
@@ -566,7 +579,7 @@ class PublisherWorker:
         blockDump['block']['block_size'] = sum([int(file[u'file_size']) for file in files])
         return blockDump
 
-    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
+    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, targetSE, workflow):
         """
         Publish files into DBS3
         """
@@ -580,34 +593,23 @@ class PublisherWorker:
         # we simply call the input dataset by the primary DS name (/foo/).
         noInput = len(inputDataset.split("/")) <= 3
 
-        # Normalize URLs
-        # TODO: set WRITE_PATH to "/DBSWriter" once fixed in CS.
-        WRITE_PATH = "/DBSWriter/"
-        MIGRATE_PATH = "/DBSMigrate"
         READ_PATH = "/DBSReader"
         READ_PATH_1 = "/DBSReader/"
 
-        if destURL.endswith(WRITE_PATH):
-            destReadURL = destURL[:-len(WRITE_PATH)] + READ_PATH
-            migrateURL = destURL[:-len(WRITE_PATH)] + MIGRATE_PATH
-        else:
-            migrateURL = destURL + MIGRATE_PATH
-            destReadURL = destURL + READ_PATH
-            destURL += WRITE_PATH
         if not sourceURL.endswith(READ_PATH) and not sourceURL.endswith(READ_PATH_1):
             sourceURL += READ_PATH
 
         self.logger.debug("Migrate datasets")
         proxy = os.environ.get("SOCKS5_PROXY")
-        self.logger.debug("Destination API URL: %s" % destURL)
-        destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
-        self.logger.debug("Destination read API URL: %s" % destReadURL)
-        destReadApi = dbsClient.DbsApi(url=destReadURL, proxy=proxy)
-        self.logger.debug("Migration API URL: %s" % migrateURL)
-        migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
+        self.logger.debug("Destination API URL: %s" % self.publish_dbs_url)
+        destApi = dbsClient.DbsApi(url=self.publish_dbs_url, proxy=proxy)
+        self.logger.debug("Destination read API URL: %s" % self.publish_read_url)
+        destReadApi = dbsClient.DbsApi(url=self.publish_read_url, proxy=proxy)
+        self.logger.debug("Migration API URL: %s" % self.publish_migrate_url)
+        migrateApi = dbsClient.DbsApi(url=self.publish_migrate_url, proxy=proxy)
 
         if not noInput:
-            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, migrateURL))
+            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, self.publish_migrate_url))
             # Submit migration
             sourceApi = dbsClient.DbsApi(url=sourceURL)
             try:
@@ -619,7 +621,7 @@ class PublisherWorker:
                 existing_datasets = []
             if not existing_datasets:
                 self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
-                                 (inputDataset, sourceURL, migrateURL))
+                                 (inputDataset, sourceURL, self.publish_migrate_url))
                 return [], [], []
 
             # Get basic data about the parent dataset
