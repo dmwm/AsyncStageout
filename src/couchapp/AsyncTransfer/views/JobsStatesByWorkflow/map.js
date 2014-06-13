@@ -1,5 +1,5 @@
 function(doc) {
 	if(doc.workflow){
-		emit(doc.workflow, doc.state);
+		emit(doc.workflow, {'jobid': doc.jobid, 'state': doc.state});
 	}
 }
