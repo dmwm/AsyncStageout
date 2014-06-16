@@ -181,13 +181,13 @@ class PublisherWorker:
                 self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
                 self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
                 continue
-            self.logger.info('active files of %s: %s' %(user_wf['key'], len(active_files)))
+            self.logger.info('active files in %s: %s' %(user_wf['key'], len(active_files)))
             for file in active_files:
                 self.logger.debug(file)
                 if file['value'][5]:
                     # Get the list of jobs end_time for each WF.
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(\
-                                           str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
+                                           str(file['value'][4]), '%Y-%m-%d %H:%M:%S'))) \
                                            - time.timezone)
                 # To move once the remote stageout from WN is fixed.
                 if "/temp/temp" in file['value'][1]:
@@ -200,7 +200,7 @@ class PublisherWorker:
                 else:
                     self.lfn_map[lfn_orig] = file['value'][1]
                 lfn_ready.append(lfn_orig)
-            self.logger.info('LFNs %s ready in %s' %(len(lfn_ready), user_wf['value']))
+            self.logger.info('%s LFNs ready in %s active files' %(len(lfn_ready), user_wf['value']))
 
             # Check if the workflow is still valid
             if wf_jobs_endtime:
@@ -414,13 +414,17 @@ class PublisherWorker:
             else:
                 toPublish[outdataset] = []
                 toPublish[outdataset].append(files)
+        # FIXME: the following code takes the last user dataset referred in the cache area.
+        # So it will not work properly if there are more than 1 user dataset to publish.
         if toPublish:
-            self.logger.info("cleaning...%s LFN ready from %s" %(len(lfn_ready), len(toPublish[outdataset])))
+            self.logger.info("Checking the metadata of %s LFNs ready in %s records got from cache" %(len(lfn_ready), len(toPublish[outdataset])))
             fail_files, toPublish = self.clean(lfn_ready, toPublish)
             if toPublish.has_key(outdataset):
                 self.logger.info('to_publish %s files in %s' % (len(toPublish[outdataset]), outdataset))
             else:
-                self.logger.info('No files to publish in %s' % outdataset)
+                self.logger.error('No files to publish in %s' % outdataset)
+                self.logger.error('The metadata is still not available in the cache area or \
+                                   there are more than 1 dataset to publish for the same workflow')
             self.logger.debug('to_publish %s' % toPublish)
         return toPublish
 
