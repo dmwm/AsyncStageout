@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+
+"""
+Retry publish by changing the state of documents in couchDB to 'not published'.
+For a given task, it can retry all failed publishing.
+"""
+
+import os
+import sys, getopt
+
+from WMCore.Database.CMSCouch import CouchServer
+from WMCore.Configuration import loadConfigurationFile
+import urllib
+import datetime
+import time
+import traceback
+
+if __name__ == "__main__":
+
+    if not os.environ.has_key("WMAGENT_CONFIG"):
+        print "The WMAGENT_CONFIG environment variable needs to be set."
+        sys.exit(0)
+
+    def usage():
+        msg = """
+Usage:
+  retry-publish -t <taskname> [-i docID comma separated list]
+Examples:
+  - To retry publication of all files in a task:
+    retry-publish -t <taskname>
+  - To retry publication for specific documents in a task:
+    retry-publish -t <taskname> -i <docID1,docID2,...>
+"""
+        print(msg)
+
+    argv = sys.argv[1:]
+    if len(argv) == 0:
+        msg = "No arguments provided."
+        msg += " You need to provide (at least) the name of the task whose failed publication you want to retry."
+        print msg
+        usage()
+        sys.exit(1)
+
+    valid_opts = ["-h","-t:","-i:"]
+    valid_long_opts = ["--help"]
+    try:
+        opts, args = getopt.getopt(argv,"".join([vo.strip("-") for vo in valid_opts]),[vo.strip("--") for vo in valid_long_opts])
+    except getopt.GetoptError, ex:
+        print str(ex)
+        usage()
+        sys.exit(2)
+
+    taskname = ''
+    docIDs = ''
+    valid_opts_no_colon = [vo.strip(":") for vo in valid_opts]
+    valid_long_opts_no_equal = [vo.strip("=") for vo in valid_long_opts]
+    for opt, arg in opts:
+        if opt in ("-h","--help"):
+            usage()
+            sys.exit(0)
+        if opt == "-t" and str(arg) not in valid_opts_no_colon + valid_long_opts_no_equal:
+            taskname = str(arg)
+        if opt == "-i" and str(arg) not in valid_opts_no_colon + valid_long_opts_no_equal:
+            docIDs = [id for id in str(arg).split(",") if id != '']
+    if taskname == '':
+        msg = "No task name provided."
+        print msg
+        usage()
+        sys.exit(3)
+    if len(docIDs):
+        print "Will retry publication that failed for task %s, documents %s." % (taskname,str(docIDs))
+    else:
+        print "Will retry all publications failed for task %s." % taskname
+
+    config = loadConfigurationFile(os.environ["WMAGENT_CONFIG"])
+    server = CouchServer(config.AsyncTransfer.couch_instance,config.AsyncTransfer.opsProxy,config.AsyncTransfer.opsProxy)
+    try:
+        database = server.connectDatabase(config.AsyncTransfer.files_database)
+    except Exception, ex:
+        msg = "Error while connecting to %s couchDB." % config.AsyncTransfer.files_database
+        print msg
+        sys.exit(4)
+    try:
+        docs_pubFailed = database.loadView('DBSPublisher','PublicationFailedByWorkflow',{'reduce':False,'key':taskname})['rows']
+    except Exception, ex:
+        msg = "Error while connecting to %s couchDB" % config.AsyncTransfer.files_database
+        print msg
+        sys.exit(4)
+    if not len(docs_pubFailed):
+        msg = "Found no document publication to retry."
+        print msg
+        sys.exit(0)
+    for doc in docs_pubFailed:
+        if doc['key'] != taskname:
+            continue
+        docid = doc['value']
+        print docid
+        if len(docIDs) and (docid not in docIDs):
+            continue
+        now = str(datetime.datetime.now())
+        data = {}
+        data['last_update'] = time.time()
+        data['retry'] = now
+        data['publication_state'] = 'not_published'
+
+        valid = True
+        while valid:
+            try:
+                database.updateDocument(docid,'DBSPublisher','updateFile',data)
+                valid = False
+            except Exception, ex:
+                msg = "Error updating document %s in %s couchDB. Retrying..." % (docid,config.AsyncTransfer.files_database)
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                print msg
+                continue
+    sys.exit(0) 
+    
+
