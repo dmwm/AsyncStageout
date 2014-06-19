@@ -169,10 +169,10 @@ class PublisherWorker:
         last_publication_time = 0
         for user_wf in active_user_workflows:
             self.forceFailure = False
-            self.forcePublication = False
             lfn_ready = []
             active_files = []
             wf_jobs_endtime = []
+            workflow_status = ''
             workToDo = False
             query = {'reduce':False, 'key': user_wf['key'], 'stale': 'ok'}
             try:
@@ -212,26 +212,62 @@ class PublisherWorker:
                                       user_wf['key'], (workflow_duration - self.config.workflow_expiration_time)))
                     self.forceFailure = True
 
-            # If the number of files < max_files_per_block then check the last publication time
+            # If the number of files < max_files_per_block check first workflow status and then the last publication time
+            workflow = user_wf['key'][3]
             if user_wf['value'] <= self.max_files_per_block:
-                query = {'reduce':True, 'key': user_wf['key']}
+                url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
+                self.logger.info("Starting starting retrieving the status of %s from %s ." % (workflow, url))
+                buf = cStringIO.StringIO()
+                res = []
                 try:
-                    last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
-                except Exception, e:
-                    self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
+                    c = pycurl.Curl()
+                    c.setopt(c.URL, url)
+                    c.setopt(c.SSL_VERIFYPEER, 0)
+                    c.setopt(c.SSLKEY, self.userProxy)
+                    c.setopt(c.SSLCERT, self.userProxy)
+                    c.setopt(c.WRITEFUNCTION, buf.write)
+                    c.perform()
+                except Exception, ex:
+                    msg = "Error reading the status of %s from cache cache. \
+                           Check last publication time!" % workflow
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
                     continue
-                self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
-                if last_publication_time:
-                    self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
-                    wait_files = now - last_publication_time[0]['value']['max']
-                    if wait_files > self.block_publication_timeout:
-                        self.logger.info('Forse the publication since the publication %s ago' % wait_files)
-                        self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
-                        self.forcePublication = True
-                    elif not self.forceFailure:
+                self.logger.info("Status of %s read from cache..." % workflow)
+                try:
+                    json_string = buf.getvalue()
+                    buf.close()
+                    res = json.loads(json_string)
+                    workflow_status = res['result'][0]['status']
+                    self.logger.info("Workflow status is %s" % workflow_status)
+                except Exception, ex:
+                    msg = "Error loading the status. Check last publication time!"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    continue
+
+                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
+                    query = {'reduce':True, 'key': user_wf['key']}
+                    try:
+                        last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
+                    except Exception, e:
+                        self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
                         continue
-                    else:
-                        pass
+                    self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
+                    if last_publication_time:
+                        self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
+                        wait_files = now - last_publication_time[0]['value']['max']
+                        if wait_files > self.block_publication_timeout:
+                            self.logger.info('Forse the publication since the last publication was %s ago' % wait_files)
+                            self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
+                        elif not self.forceFailure:
+                            continue
+                        else:
+                            pass
+                else:
+                    self.logger.info('Closing the publication of %s since it is completed' % workflow)
 
             if lfn_ready:
                 self.logger.debug("Retrieving SE Name from Phedex %s" %str(file['value'][0]))
