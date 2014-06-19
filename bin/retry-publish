@@ -100,12 +100,13 @@ Examples:
         now = str(datetime.datetime.now())
         data = {}
         data['last_update'] = time.time()
+        data['retry'] = now
         data['publication_state'] = 'not_published'
 
         valid = True
         while valid:
             try:
-                database.updateDocument(docid,'AsyncTransfer','updateJobPublication',data)
+                database.updateDocument(docid,'DBSPublisher','updateFile',data)
                 valid = False
             except Exception, ex:
                 msg = "Error updating document %s in %s couchDB. Retrying..." % (docid,config.AsyncTransfer.files_database)
