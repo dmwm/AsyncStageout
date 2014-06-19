@@ -81,7 +81,7 @@ Examples:
         print msg
         sys.exit(4)
     try:
-        docs_pubFailed = database.loadView('AsyncTransfer','PublicationFailedByWorkflow',{'reduce':False,'key':taskname})['rows']
+        docs_pubFailed = database.loadView('DBSPublisher','PublicationFailedByWorkflow',{'reduce':False,'key':taskname})['rows']
     except Exception, ex:
         msg = "Error while connecting to %s couchDB" % config.AsyncTransfer.files_database
         print msg
