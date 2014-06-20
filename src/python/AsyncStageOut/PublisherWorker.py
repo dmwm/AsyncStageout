@@ -183,8 +183,7 @@ class PublisherWorker:
                 continue
             self.logger.info('active files in %s: %s' %(user_wf['key'], len(active_files)))
             for file in active_files:
-                self.logger.debug(file)
-                if file['value'][5]:
+                if file['value'][4]:
                     # Get the list of jobs end_time for each WF.
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(\
                                            str(file['value'][4]), '%Y-%m-%d %H:%M:%S'))) \
@@ -216,7 +215,7 @@ class PublisherWorker:
             workflow = user_wf['key'][3]
             if user_wf['value'] <= self.max_files_per_block:
                 url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
-                self.logger.info("Starting starting retrieving the status of %s from %s ." % (workflow, url))
+                self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
                 buf = cStringIO.StringIO()
                 res = []
                 try:
@@ -233,7 +232,7 @@ class PublisherWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    continue
+                    pass
                 self.logger.info("Status of %s read from cache..." % workflow)
                 try:
                     json_string = buf.getvalue()
@@ -246,7 +245,7 @@ class PublisherWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    continue
+                    pass
 
                 if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
                     query = {'reduce':True, 'key': user_wf['key']}

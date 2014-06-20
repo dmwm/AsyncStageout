@@ -101,6 +101,7 @@ config.DBSPublisher.workflow_expiration_time = 3
 config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
 config.DBSPublisher.block_closure_timeout = 18800
+config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DBSWriter'
 #config.component_('Analytics')
 #config.Analytics.user_monitoring_db = user_monitoring_db
 #config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
