@@ -193,7 +193,10 @@ class PublisherWorker:
                     lfn_hash = file['value'][1].replace('store/temp/temp', 'store', 1)
                 else:
                     lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
-                lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                if lfn_hash.startswith("/store/user"):
+                    lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                else:
+                    lfn_orig = lfn_hash
                 if "/temp/temp" in file['value'][1]:
                     self.lfn_map[lfn_orig] = file['value'][1].replace('temp/temp', 'temp', 1)
                 else:

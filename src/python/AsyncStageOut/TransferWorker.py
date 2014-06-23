@@ -246,9 +246,14 @@ class TransferWorker:
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
                     source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']), True)
-                    destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
+                    destination_pfn = ""
+                    if item['value'].startswith("/store/temp/user"):
+                        destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                        item['value'].replace('store/temp', 'store', 1).replace(\
                                                                        '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)), False)
+                    else:
+                        destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
+                                                                       item['value'].replace('store/temp', 'store', 1)), False)
                     if source_pfn and destination_pfn:
                         acquired_file = self.mark_acquired([item])
                         if acquired_file:
