@@ -1,8 +1,8 @@
 function(keys, values, rereduce) {
 
-    var output = {'published': {'njobs': 0, 'size': 0}, 'not_published': {'njobs': 0, 'size': 0}};
+    var output = {'published': {'njobs': 0, 'size': 0}, 'not_published': {'njobs': 0, 'size': 0}, 'publication_failed': {'njobs': 0, 'size': 0}, 'publishing': {'njobs': 0, 'size': 0}};
 
-    var _keys = ['published', 'not_published'];
+    var _keys = ['published', 'not_published', 'publication_failed', 'publishing'];
     var _values = ['njobs','size'];
 
     if (rereduce) {
@@ -21,16 +21,13 @@ function(keys, values, rereduce) {
         for (var v in values) {
             var value = values[v];
             var state = value['publication_state'];
-            if (_keys.indexOf(state) > -1) {
-                output[state]['njobs'] += 1;
-                for (var _v in _values) {
-                    var _value = _values[_v];
-                    if (_value == 'njobs') continue;
-                    output[state][_value] += value[_value];
-                }
+            output[state]['njobs'] += 1;
+            for (var _v in _values) {
+                var _value = _values[_v];
+                if (_value == 'njobs') continue;
+                output[state][_value] += value[_value];
             }
         }
     }
     return output;
 }
-

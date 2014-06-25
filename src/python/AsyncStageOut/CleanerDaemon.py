@@ -35,7 +35,7 @@ def execute_command( command, logger, timeout ):
         if timeout and seconds_passed > timeout:
             proc.terminate()
             logger.error('Timeout in %s execution.' % command )
-            return stdout, rc
+            return rc, stdout, stderr
 
         time.sleep(0.1)
     stdout, stderr = proc.communicate()

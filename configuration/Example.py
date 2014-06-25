@@ -58,7 +58,7 @@ config.AsyncTransfer.db_source = database_src
 config.AsyncTransfer.pluginName = "CentralMonitoring"
 config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
 config.AsyncTransfer.max_files_per_transfer = 100
-config.AsyncTransfer.pool_size = 20
+config.AsyncTransfer.pool_size = 60
 config.AsyncTransfer.max_retry = 3
 config.AsyncTransfer.credentialDir = credentialDir
 config.AsyncTransfer.UISetupScript = ui_script
@@ -80,7 +80,7 @@ config.AsyncTransfer.config_couch_instance = couchUrl
 config.AsyncTransfer.cache_area = cache_area
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
-config.DBSPublisher.publication_pool_size = 20
+config.DBSPublisher.publication_pool_size = 60
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
@@ -101,6 +101,7 @@ config.DBSPublisher.workflow_expiration_time = 3
 config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
 config.DBSPublisher.block_closure_timeout = 18800
+config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DBSWriter'
 #config.component_('Analytics')
 #config.Analytics.user_monitoring_db = user_monitoring_db
 #config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl

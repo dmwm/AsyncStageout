@@ -134,6 +134,19 @@ class PublisherWorker:
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
         self.block_publication_timeout = self.config.block_closure_timeout
+        self.publish_dbs_url = self.config.publish_dbs_url
+
+        WRITE_PATH = "/DBSWriter"
+        MIGRATE_PATH = "/DBSMigrate"
+        READ_PATH = "/DBSReader"
+
+        if self.publish_dbs_url.endswith(WRITE_PATH):
+            self.publish_read_url = self.publish_dbs_url[:-len(WRITE_PATH)] + READ_PATH
+            self.publish_migrate_url = self.publish_dbs_url[:-len(WRITE_PATH)] + MIGRATE_PATH
+        else:
+            self.publish_migrate_url = self.publish_dbs_url + MIGRATE_PATH
+            self.publish_read_url = self.publish_dbs_url + READ_PATH
+            self.publish_dbs_url += WRITE_PATH
 
     def __call__(self):
         """
@@ -156,10 +169,10 @@ class PublisherWorker:
         last_publication_time = 0
         for user_wf in active_user_workflows:
             self.forceFailure = False
-            self.forcePublication = False
             lfn_ready = []
             active_files = []
             wf_jobs_endtime = []
+            workflow_status = ''
             workToDo = False
             query = {'reduce':False, 'key': user_wf['key'], 'stale': 'ok'}
             try:
@@ -168,26 +181,28 @@ class PublisherWorker:
                 self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
                 self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
                 continue
-            self.logger.info('active files of %s: %s' %(user_wf['key'], len(active_files)))
+            self.logger.info('active files in %s: %s' %(user_wf['key'], len(active_files)))
             for file in active_files:
-                self.logger.debug(file)
-                if file['value'][5]:
+                if file['value'][4]:
                     # Get the list of jobs end_time for each WF.
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(\
-                                           str(file['value'][5]), '%Y-%m-%d %H:%M:%S'))) \
+                                           str(file['value'][4]), '%Y-%m-%d %H:%M:%S'))) \
                                            - time.timezone)
                 # To move once the remote stageout from WN is fixed.
                 if "/temp/temp" in file['value'][1]:
                     lfn_hash = file['value'][1].replace('store/temp/temp', 'store', 1)
                 else:
                     lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
-                lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                if lfn_hash.startswith("/store/user"):
+                    lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                else:
+                    lfn_orig = lfn_hash
                 if "/temp/temp" in file['value'][1]:
                     self.lfn_map[lfn_orig] = file['value'][1].replace('temp/temp', 'temp', 1)
                 else:
                     self.lfn_map[lfn_orig] = file['value'][1]
                 lfn_ready.append(lfn_orig)
-            self.logger.info('LFNs %s ready in %s' %(len(lfn_ready), user_wf['value']))
+            self.logger.info('%s LFNs ready in %s active files' %(len(lfn_ready), user_wf['value']))
 
             # Check if the workflow is still valid
             if wf_jobs_endtime:
@@ -199,26 +214,62 @@ class PublisherWorker:
                                       user_wf['key'], (workflow_duration - self.config.workflow_expiration_time)))
                     self.forceFailure = True
 
-            # If the number of files < max_files_per_block then check the last publication time
+            # If the number of files < max_files_per_block check first workflow status and then the last publication time
+            workflow = user_wf['key'][3]
             if user_wf['value'] <= self.max_files_per_block:
-                query = {'reduce':True, 'key': user_wf['key']}
+                url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
+                self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
+                buf = cStringIO.StringIO()
+                res = []
                 try:
-                    last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
-                except Exception, e:
-                    self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
-                    continue
-                self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
-                if last_publication_time:
-                    self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
-                    wait_files = now - last_publication_time[0]['value']['max']
-                    if wait_files > self.block_publication_timeout:
-                        self.logger.info('Forse the publication since the publication %s ago' % wait_files)
-                        self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
-                        self.forcePublication = True
-                    elif not self.forceFailure:
+                    c = pycurl.Curl()
+                    c.setopt(c.URL, url)
+                    c.setopt(c.SSL_VERIFYPEER, 0)
+                    c.setopt(c.SSLKEY, self.userProxy)
+                    c.setopt(c.SSLCERT, self.userProxy)
+                    c.setopt(c.WRITEFUNCTION, buf.write)
+                    c.perform()
+                except Exception, ex:
+                    msg = "Error reading the status of %s from cache cache. \
+                           Check last publication time!" % workflow
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    pass
+                self.logger.info("Status of %s read from cache..." % workflow)
+                try:
+                    json_string = buf.getvalue()
+                    buf.close()
+                    res = json.loads(json_string)
+                    workflow_status = res['result'][0]['status']
+                    self.logger.info("Workflow status is %s" % workflow_status)
+                except Exception, ex:
+                    msg = "Error loading the status. Check last publication time!"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    pass
+
+                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
+                    query = {'reduce':True, 'key': user_wf['key']}
+                    try:
+                        last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
+                    except Exception, e:
+                        self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
                         continue
-                    else:
-                        pass
+                    self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
+                    if last_publication_time:
+                        self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
+                        wait_files = now - last_publication_time[0]['value']['max']
+                        if wait_files > self.block_publication_timeout:
+                            self.logger.info('Forse the publication since the last publication was %s ago' % wait_files)
+                            self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
+                        elif not self.forceFailure:
+                            continue
+                        else:
+                            pass
+                else:
+                    self.logger.info('Closing the publication of %s since it is completed' % workflow)
 
             if lfn_ready:
                 self.logger.debug("Retrieving SE Name from Phedex %s" %str(file['value'][0]))
@@ -232,9 +283,9 @@ class PublisherWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-                failed_files, good_files = self.publish( str(file['key'][3]), str(file['value'][2]), \
+                failed_files, good_files = self.publish( str(file['key'][3]), \
                                                          self.userDN, str(file['key'][0]), \
-                                                         str(file['value'][3]), str(file['value'][4]), \
+                                                         str(file['value'][2]), str(file['value'][3]), \
                                                          str(seName), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
@@ -317,7 +368,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def publish(self, workflow, dbsurl, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
+    def publish(self, workflow, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
         """Perform the data publication of the workflow result.
           :arg str workflow: a workflow name
           :arg str dbsurl: the DBS URL endpoint where to publish
@@ -338,7 +389,7 @@ class PublisherWorker:
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
         failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                  inputDataset=inputDataset, toPublish=toPublish,
-                                                 destURL=dbsurl, targetSE=targetSE, workflow=workflow)
+                                                 targetSE=targetSE, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
         return failed, done
 
@@ -401,10 +452,17 @@ class PublisherWorker:
             else:
                 toPublish[outdataset] = []
                 toPublish[outdataset].append(files)
+        # FIXME: the following code takes the last user dataset referred in the cache area.
+        # So it will not work properly if there are more than 1 user dataset to publish.
         if toPublish:
-            self.logger.info("cleaning...%s LFN ready from %s" %(len(lfn_ready), len(toPublish[outdataset])))
+            self.logger.info("Checking the metadata of %s LFNs ready in %s records got from cache" %(len(lfn_ready), len(toPublish[outdataset])))
             fail_files, toPublish = self.clean(lfn_ready, toPublish)
-            self.logger.info('to_publish %s files' % len(toPublish))
+            if toPublish.has_key(outdataset):
+                self.logger.info('to_publish %s files in %s' % (len(toPublish[outdataset]), outdataset))
+            else:
+                self.logger.error('No files to publish in %s' % outdataset)
+                self.logger.error('The metadata is still not available in the cache area or \
+                                   there are more than 1 dataset to publish for the same workflow')
             self.logger.debug('to_publish %s' % toPublish)
         return toPublish
 
@@ -563,7 +621,7 @@ class PublisherWorker:
         blockDump['block']['block_size'] = sum([int(file[u'file_size']) for file in files])
         return blockDump
 
-    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, destURL, targetSE, workflow):
+    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, targetSE, workflow):
         """
         Publish files into DBS3
         """
@@ -577,33 +635,23 @@ class PublisherWorker:
         # we simply call the input dataset by the primary DS name (/foo/).
         noInput = len(inputDataset.split("/")) <= 3
 
-        # Normalize URLs
-        # TODO: set WRITE_PATH to "/DBSWriter" once fixed in CS.
-        WRITE_PATH = "/DBSWriter/"
-        MIGRATE_PATH = "/DBSMigrate"
         READ_PATH = "/DBSReader"
+        READ_PATH_1 = "/DBSReader/"
 
-        if destURL.endswith(WRITE_PATH):
-            destReadURL = destURL[:-len(WRITE_PATH)] + READ_PATH
-            migrateURL = destURL[:-len(WRITE_PATH)] + MIGRATE_PATH
-        else:
-            migrateURL = destURL + MIGRATE_PATH
-            destReadURL = destURL + READ_PATH
-            destURL += WRITE_PATH
-        if not sourceURL.endswith(READ_PATH):
+        if not sourceURL.endswith(READ_PATH) and not sourceURL.endswith(READ_PATH_1):
             sourceURL += READ_PATH
 
         self.logger.debug("Migrate datasets")
         proxy = os.environ.get("SOCKS5_PROXY")
-        self.logger.debug("Destination API URL: %s" % destURL)
-        destApi = dbsClient.DbsApi(url=destURL, proxy=proxy)
-        self.logger.debug("Destination read API URL: %s" % destReadURL)
-        destReadApi = dbsClient.DbsApi(url=destReadURL, proxy=proxy)
-        self.logger.debug("Migration API URL: %s" % migrateURL)
-        migrateApi = dbsClient.DbsApi(url=migrateURL, proxy=proxy)
+        self.logger.debug("Destination API URL: %s" % self.publish_dbs_url)
+        destApi = dbsClient.DbsApi(url=self.publish_dbs_url, proxy=proxy)
+        self.logger.debug("Destination read API URL: %s" % self.publish_read_url)
+        destReadApi = dbsClient.DbsApi(url=self.publish_read_url, proxy=proxy)
+        self.logger.debug("Migration API URL: %s" % self.publish_migrate_url)
+        migrateApi = dbsClient.DbsApi(url=self.publish_migrate_url, proxy=proxy)
 
         if not noInput:
-            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, migrateURL))
+            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, self.publish_migrate_url))
             # Submit migration
             sourceApi = dbsClient.DbsApi(url=sourceURL)
             try:
@@ -615,7 +663,7 @@ class PublisherWorker:
                 existing_datasets = []
             if not existing_datasets:
                 self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
-                                 (inputDataset, sourceURL, migrateURL))
+                                 (inputDataset, sourceURL, self.publish_migrate_url))
                 return [], [], []
 
             # Get basic data about the parent dataset

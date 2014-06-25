@@ -1,5 +1,5 @@
 function(doc) {
-    if ((doc.state)&&(doc.start_time)&&(doc.state != 'done')&&(doc.state != 'failed')&&(doc.state != 'killed')&&(doc.end_time == '')) {
+    if ((doc.state)&&(doc.start_time)&&(doc.state != 'done')&&(doc.state != 'failed')&&(doc.state != 'killed')&&(doc.state != 'retry')&&(doc.end_time == '')) {
         var start = doc.start_time;
         var day  = start.split(' ')[0];
         var time = start.split(' ')[1];
