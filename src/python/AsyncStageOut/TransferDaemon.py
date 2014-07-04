@@ -30,53 +30,22 @@ def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
     """
-    logging.debug("Start the user %s worker" % user)
-    list_process = []
-    link_process = {}
-    pfn_lfn_mapping = {}
-    lfn_pfn_mapping = {}
+    logging.debug("Trying to start the worker")
     try:
-        worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping, lfn_pfn_mapping)
+        worker = TransferWorker(user, tfc_map, config)
     except Exception, e:
         logging.debug("Worker cannot be created!:" %e)
         return user
+    logging.debug("Worker created and init %s" % worker.init)
     if worker.init:
-        logging.debug("Starting %s" % worker)
-        try:
-            worker ()
-        except Exception, e:
-            logging.debug("Worker cannot start!:" %e)
-            return user
+       logging.debug("Starting %s" %worker)
+       try:
+           worker ()
+       except Exception, e:
+           logging.debug("Worker cannot start!:" %e)
+           return user
     else:
-        logging.debug("Worker cannot be initialized!")
-        return user
-    logging.debug("Returning results: process %s, links %s, map PFN %s, and map LFN %s" % (worker.list_process, worker.link_process, worker.pfn_to_lfn_mapping, worker.lfn_to_pfn_mapping))
-    list_process = worker.list_process
-    link_process = worker.link_process
-    pfn_lfn_mapping = worker.pfn_to_lfn_mapping
-    lfn_pfn_mapping = worker.lfn_to_pfn_mapping
-    if list_process:
-        while list_process:
-            try:
-                worker = TransferWorker(user, tfc_map, config, list_process, link_process, pfn_lfn_mapping, lfn_pfn_mapping)
-            except Exception, e:
-                logging.debug("Worker cannot be created!:" %e)
-                continue
-            if worker.init:
-                logging.debug("Starting %s" % worker)
-                try:
-                    worker ()
-                except Exception, e:
-                    logging.debug("Worker cannot start!:" %e)
-                    continue
-            else:
-                logging.debug("Worker cannot be initialized!")
-                continue
-            list_process = worker.list_process
-            link_process = worker.link_process
-            pfn_lfn_mapping = worker.pfn_to_lfn_mapping
-            lfn_pfn_mapping = worker.lfn_to_pfn_mapping
-            logging.debug("Returning results: process %s and links %s, map PFN %s, and map LFN %s" % (list_process, link_process, pfn_lfn_mapping, lfn_pfn_mapping))
+       logging.debug("Worker cannot be initialized!")
     return user
 
 def log_result(result):
@@ -110,6 +79,16 @@ class TransferDaemon(BaseWorkerThread):
             self.logger.setLevel(self.config.log_level)
 
         self.logger.debug('Configuration loaded')
+        self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
+        if not os.path.isdir(self.dropbox_dir):
+            try:
+                os.makedirs(self.dropbox_dir)
+            except OSError, e:
+                if e.errno == errno.EEXIST:
+                    pass
+                else:
+                    self.logger.error('Unknown error in mkdir' % e.errno)
+                    raise
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         config_server = CouchServer(dburl=self.config.config_couch_instance)
