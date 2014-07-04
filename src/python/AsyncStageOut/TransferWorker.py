@@ -253,10 +253,10 @@ class TransferWorker:
                     if item['value'].startswith("/store/temp/user"):
                         destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                            item['value'].replace('store/temp', 'store', 1).replace(\
-                                                                           '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)), False)
+                                                                           '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
                     else:
                         destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                           item['value'].replace('store/temp', 'store', 1)), False)
+                                                                           item['value'].replace('store/temp', 'store', 1)) )
                     self.logger.debug('PFNs prepared...')
                     if source_pfn and destination_pfn:
                         acquired_file, dashboard_report = self.mark_acquired([item])
