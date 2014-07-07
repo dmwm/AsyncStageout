@@ -58,7 +58,7 @@ config.AsyncTransfer.db_source = database_src
 config.AsyncTransfer.pluginName = "CentralMonitoring"
 config.AsyncTransfer.pluginDir = "AsyncStageOut.Plugins"
 config.AsyncTransfer.max_files_per_transfer = 100
-config.AsyncTransfer.pool_size = 60
+config.AsyncTransfer.pool_size = 80
 config.AsyncTransfer.max_retry = 3
 config.AsyncTransfer.credentialDir = credentialDir
 config.AsyncTransfer.UISetupScript = ui_script
@@ -83,7 +83,7 @@ config.Reporter.namespace = 'AsyncStageOut.Reporter'
 config.Reporter.componentDir = config.General.workDir
 config.component_('DBSPublisher')
 config.DBSPublisher.pollInterval = 10
-config.DBSPublisher.publication_pool_size = 60
+config.DBSPublisher.publication_pool_size = 80
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
