@@ -28,6 +28,8 @@ from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
 import json
 from time import strftime
+import StringIO
+import pycurl
 
 def execute_command( command, logger, timeout ):
     """
@@ -332,87 +334,141 @@ class TransferWorker:
         """
         # Output: {"userProxyPath":"/path/to/proxy","LFNs":["lfn1","lfn2","lfn3"],"PFNs":["pfn1","pfn2","pfn3"],"FTSJobid":'id-of-fts-job', "username": 'username'}
         tmp_file_pool = []
-
         #Loop through all the jobs for the links we have
         for link, copyjob in jobs.items():
-
+            submission_error = False
+            status_error = False
             fts_job = {}
-
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
             if not self.validate_copyjob(copyjob): continue
-
-            tmp_copyjob_file = tempfile.NamedTemporaryFile(delete=False)
-            tmp_copyjob_file.write('\n'.join(copyjob))
-            tmp_copyjob_file.close()
-
-            tmp_file_pool.append(tmp_copyjob_file.name)
-
+            rest_copyjob='{"params":{"bring_online":null,"verify_checksum":true,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":null,"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            pairs = []
+            for SrcDest in copyjob:
+                pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
+            rest_copyjob += (','.join(pairs)) +']}'
+            self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
+            post = urllib.quote(rest_copyjob)
             fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
-
-            self.logger.debug("Running FTS submission command")
-            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
-            self.logger.debug("link: %s -> %s" % link)
-            self.logger.debug("copyjob file: %s" % tmp_copyjob_file.name)
-
-            command = 'export X509_USER_PROXY=%s ; source %s ; %s -o -s %s -f %s' % (self.userProxy, self.uiSetupScript,
-                                                                                    self.submission_command, fts_server_for_transfer,
-                                                                                    tmp_copyjob_file.name)
-
-
+            command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
+                                                                            'glite-delegation-init', fts_server_for_transfer)
             init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
             stdout, rc = execute_command(command, self.logger, self.commandTimeout)
-            self.logger.debug("Submission result %s" % rc)
-            self.logger.debug("Sending %s %s %s" % ( jobs_lfn[link], jobs_pfn[link], stdout.strip() ))
-            if not rc:
-                # Updating files to acquired in the database
-                #self.logger.info("Mark acquired %s files" % len(jobs_lfn[link]))
-                #self.logger.debug("Mark acquired %s files" % jobs_lfn[link])
-                #acquired_files = self.mark_acquired(jobs_lfn[link])
-                #self.logger.info("Marked acquired %s" % len(acquired_files))
-                #if not acquired_files:
-                #    continue
-                fts_job['userProxyPath'] = self.userProxy
-                fts_job['LFNs'] = jobs_lfn[link]
-                fts_job['PFNs'] = jobs_pfn[link]
-                fts_job['FTSJobid'] = stdout.strip()
-                fts_job['username'] = self.user
-                self.logger.debug("Creating json file %s in %s" % (fts_job, self.dropbox_dir))
-                ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid'] ), 'w')
-                jsondata = json.dumps(fts_job)
-                ftsjob_file.write(jsondata)
-                ftsjob_file.close()
-                self.logger.debug("%s ready." % fts_job)
-                # Prepare Dashboard report
-                for lfn in fts_job['LFNs']:
-                    lfn_report = {}
-                    lfn_report['FTSJobid'] = fts_job['FTSJobid']
-                    index = fts_job['LFNs'].index(lfn)
-                    lfn_report['PFN'] = fts_job['PFNs'][index]
-                    lfn_report['Workflow'] = jobs_report[link][index][2]
-                    lfn_report['JobVersion'] = jobs_report[link][index][1]
-                    job_id = '%d_https://glidein.cern.ch/%d/%s_%s' % (int(jobs_report[link][index][0]), int(jobs_report[link][index][0]), lfn_report['Workflow'].replace("_", ":"), lfn_report['JobVersion'])
-                    lfn_report['JobId'] = job_id
-                    self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
-                    dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']) , 'w')
-                    jsondata = json.dumps(lfn_report)
-                    dash_job_file.write(jsondata)
-                    dash_job_file.close()
-                    self.logger.info("%s ready for FTS Dashboard report." % lfn_report)
-            elif len(jobs_lfn[link]):
+            self.logger.debug("Running FTS submission command")
+            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
+            self.logger.debug("link: %s -> %s" % link)
+            url = 'https://fts3-pilot.cern.ch:8446/jobs'
+            headers = [ "Content-Type: application/json;" ]
+            buf = StringIO.StringIO()
+            try:
+                c = pycurl.Curl()
+                c.setopt(pycurl.CAPATH, os.getenv('X509_CERT_DIR'))
+                c.setopt(pycurl.SSLKEY, os.getenv('X509_USER_PROXY'))
+                c.setopt(pycurl.SSLCERT, os.getenv('X509_USER_PROXY'))
+                c.setopt(pycurl.URL, url)
+                c.setopt(c.HTTPHEADER, headers)
+                c.setopt(pycurl.POST, 1)
+                c.setopt(pycurl.POSTFIELDS, post)
+                c.setopt(pycurl.WRITEFUNCTION, buf.write)
+                c.perform()
+                c.close()
+            except Exception, ex:
+                msg = "Error submitting to FTS3 REST interface: %s " % url
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                submission_error = True
+                self.logger.debug(msg)
+            job_out = buf.getvalue()
+            self.logger.debug('Submission result %s' % job_out)
+            buf.close()
+            if not submission_error:
+                res = {}
+                try:
+                    res = json.loads(job_out)
+                except Exception, ex:
+                    msg = "Couldn't load json : %s " % job_out
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.debug(msg)
+                    status_error = True
+                if res.has_key('job_id'):
+                    fileId_list = []
+                    job_id = res['job_id']
+                    file_url = fts_server_for_transfer + '/jobs/' + job_id +'/files'
+                    self.logger.debug("Submitting to %s" % file_url)
+                    file_buf = StringIO.StringIO()
+                    # TODO: Add loop on fileid retrieval
+                    try:
+                        c = pycurl.Curl()
+                        c.setopt(pycurl.CAPATH, os.getenv('X509_CERT_DIR'))
+                        c.setopt(pycurl.SSLKEY, os.getenv('X509_USER_PROXY'))
+                        c.setopt(pycurl.SSLCERT, os.getenv('X509_USER_PROXY'))
+                        c.setopt(pycurl.URL, file_url)
+                        c.setopt(c.HTTPHEADER, headers)
+                        c.setopt(pycurl.WRITEFUNCTION, file_buf.write)
+                        c.perform()
+                        c.close()
+                    except Exception, ex:
+                        msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.debug(msg)
+                        status_error = True
+                    files_res = []
+                    files_in_job = file_buf.getvalue()
+                    self.logger.debug("List files in job %s" % files_in_job)
+                    file_buf.close()
+                    try:
+                        files_res = json.loads(files_in_job)
+                    except Exception, ex:
+                        msg = "Couldn't load files in job json : %s " % files_in_job
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.debug(msg)
+                        status_error = True
+                    for file_in_job in files_res:
+                        fileId_list.append(file_in_job['file_id'])
+                    self.logger.debug("File id list %s" % fileId_list)
+                else:
+                    self.logger.debug("Job id could not be retrieved")
+                    status_error = True
+            if status_error or submission_error:
                 self.logger.debug("Submission failed")
                 self.logger.info("Mark failed %s files" % len(jobs_lfn[link]))
                 self.logger.debug("Mark failed %s files" % jobs_lfn[link])
-                failed_files = self.mark_failed(jobs_lfn[link], bad_logfile=None, force_fail = False, submission_error=True)
+                failed_files = self.mark_failed(jobs_lfn[link], force_fail = False, submission_error=True)
                 self.logger.info("Marked failed %s" % len(failed_files))
                 continue
-            else:
-                continue
-        # Generate the json output
-        self.logger.debug("Jobs submission Done. Removing copy_job files")
-        for tmp in tmp_file_pool:
-            os.unlink( tmp )
+            fts_job['userProxyPath'] = self.userProxy
+            fts_job['LFNs'] = jobs_lfn[link]
+            fts_job['PFNs'] = jobs_pfn[link]
+            fts_job['FTSJobid'] = job_id
+            fts_job['files_id'] = fileId_list
+            fts_job['username'] = self.user
+            self.logger.debug("Creating json file %s in %s" % (fts_job, self.dropbox_dir))
+            ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid'] ), 'w')
+	    jsondata = json.dumps(fts_job)
+            ftsjob_file.write(jsondata)
+            ftsjob_file.close()
+            self.logger.debug("%s ready." % fts_job)
+            # Prepare Dashboard report
+            for lfn in fts_job['LFNs']:
+                lfn_report = {}
+                lfn_report['FTSJobid'] = fts_job['FTSJobid']
+                index = fts_job['LFNs'].index(lfn)
+                lfn_report['PFN'] = fts_job['PFNs'][index]
+                lfn_report['FTSFileid'] = fts_job['files_id'][index]
+                lfn_report['Workflow'] = jobs_report[link][index][2]
+                lfn_report['JobVersion'] = jobs_report[link][index][1]
+                job_id = '%d_https://glidein.cern.ch/%d/%s_%s' % (int(jobs_report[link][index][0]), int(jobs_report[link][index][0]), lfn_report['Workflow'].replace("_", ":"), lfn_report['JobVersion'])
+                lfn_report['JobId'] = job_id
+                self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
+                dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']) , 'w')
+                jsondata = json.dumps(lfn_report)
+                dash_job_file.write(jsondata)
+                dash_job_file.close()
+                self.logger.debug("%s ready for FTS Dashboard report." % lfn_report)
         return
 
     def validate_copyjob(self, copyjob):
@@ -423,7 +479,7 @@ class TransferWorker:
             if task.split()[0] == 'None' or task.split()[1] == 'None': return False
         return True
 
-    def mark_acquired(self, files=[], good_logfile=None):
+    def mark_acquired(self, files=[]):
         """
         Mark the list of files as tranferred
         """
@@ -466,7 +522,7 @@ class TransferWorker:
                 self.mark_good([good_lfn])
         return lfn_in_transfer, dash_rep
 
-    def mark_good(self, files=[], good_logfile=None):
+    def mark_good(self, files=[]):
         """
         Mark the list of files as tranferred
         """
@@ -508,7 +564,7 @@ class TransferWorker:
                     continue
         self.logger.debug("transferred file updated")
 
-    def mark_failed(self, files=[], bad_logfile=None, force_fail = False, submission_error = False):
+    def mark_failed(self, files=[], force_fail = False, submission_error = False):
         """
         Something failed for these files so increment the retry count
         """
