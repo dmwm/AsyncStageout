@@ -324,6 +324,14 @@ class TransferWorker:
             self.logger.error('Wrong site %s!' % site)
             return None
 
+    def command(self, jobs, jobs_lfn, jobs_pfn, jobs_report, retry = False):
+        """
+        For each job the worker has to complete:
+        Delete files that have failed previously
+        Create a temporary copyjob file
+        Submit the copyjob to the appropriate FTS server
+        Parse the output of the FTS transfer and return complete and failed files for recording
+        """
         # Output: {"userProxyPath":"/path/to/proxy","LFNs":["lfn1","lfn2","lfn3"],"PFNs":["pfn1","pfn2","pfn3"],"FTSJobid":'id-of-fts-job', "username": 'username'}
         tmp_file_pool = []
         #Loop through all the jobs for the links we have
