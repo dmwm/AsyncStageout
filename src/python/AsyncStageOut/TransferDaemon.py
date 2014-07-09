@@ -22,6 +22,7 @@ from WMCore.WMFactory import WMFactory
 #import random
 import logging
 #import time
+import os
 
 result_list = []
 current_running = []
