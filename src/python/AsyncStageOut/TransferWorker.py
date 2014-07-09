@@ -358,7 +358,7 @@ class TransferWorker:
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
-            url = 'https://fts3-pilot.cern.ch:8446/jobs'
+            url = fts_server_for_transfer + '/jobs'
             headers = [ "Content-Type: application/json;" ]
             buf = StringIO.StringIO()
             try:
@@ -416,6 +416,7 @@ class TransferWorker:
                         self.logger.debug(msg)
                         status_error = True
                     files_res = []
+                    fileId_list = []
                     files_in_job = file_buf.getvalue()
                     self.logger.debug("List files in job %s" % files_in_job)
                     file_buf.close()
@@ -428,7 +429,11 @@ class TransferWorker:
                         self.logger.debug(msg)
                         status_error = True
                     for file_in_job in files_res:
-                        fileId_list.append(file_in_job['file_id'])
+                        if file_in_job.has_key('file_id'):
+                            fileId_list.append(file_in_job['file_id'])
+                        else:
+                            self.logger.debug("Files list could not be retrieved")
+                            status_error = True
                     self.logger.debug("File id list %s" % fileId_list)
                 else:
                     self.logger.debug("Job id could not be retrieved")
