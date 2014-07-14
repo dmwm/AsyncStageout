@@ -350,8 +350,9 @@ class TransferWorker:
             self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
             post = urllib.quote(rest_copyjob)
             fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
+            fts_url_delegation = fts_server_for_transfer.replace('8446','8443')
             command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
-                                                                            'glite-delegation-init', fts_server_for_transfer)
+                                                                            'glite-delegation-init', fts_url_delegation)
             init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
             stdout, rc = execute_command(command, self.logger, self.commandTimeout)
