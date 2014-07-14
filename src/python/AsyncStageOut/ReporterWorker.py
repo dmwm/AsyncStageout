@@ -227,10 +227,11 @@ class ReporterWorker:
         """
         updated_lfn = []
         for lfn in files:
-            self.logger.info("Marking good %s" % getHashLfn(lfn))
+            hash_lfn = getHashLfn(lfn)
+            self.logger.info("Marking good %s" % hash_lfn)
             self.logger.debug("Marking good %s" % lfn)
             try:
-                document = self.db.document(getHashLfn(lfn))
+                document = self.db.document(hash_lfn)
             except Exception, ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
