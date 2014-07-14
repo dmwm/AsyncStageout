@@ -1,1 +1,1 @@
-{"pool_size": 4, "max_files_per_transfer": 1000, "scheduling_algo": "FIFOPriority", "_id": "ASYNCTRANSFER"}
+{"pool_size": 4, "max_files_per_transfer": 100, "scheduling_algo": "FIFOPriority", "_id": "ASYNCTRANSFER"}
