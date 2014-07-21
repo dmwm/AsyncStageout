@@ -342,7 +342,7 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob='{"params":{"bring_online":null,"verify_checksum":true,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":null,"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            rest_copyjob='{"params":{"bring_online":null,"verify_checksum":true,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":"{\'issuer\': \'ASO\'}","spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
             pairs = []
             for SrcDest in copyjob:
                 pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
