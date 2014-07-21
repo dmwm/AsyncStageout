@@ -82,7 +82,7 @@ config.component_('Reporter')
 config.Reporter.namespace = 'AsyncStageOut.Reporter'
 config.Reporter.componentDir = config.General.workDir
 config.component_('DBSPublisher')
-config.DBSPublisher.pollInterval = 10
+config.DBSPublisher.pollInterval = 600 
 config.DBSPublisher.publication_pool_size = 80
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
