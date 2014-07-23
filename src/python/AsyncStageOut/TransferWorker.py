@@ -190,10 +190,20 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
-        jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
-        self.logger.debug("Processing files for %s " %self.userProxy )
-        if jobs:
-            self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
+        fts_url_delegation = self.fts_server_for_transfer.replace('8446','8443')
+        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
+                                                                        'glite-delegation-init', fts_url_delegation)
+        init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+        self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
+        stdout, rc = execute_command(command, self.logger, self.commandTimeout)
+        if not rc:
+            jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
+            self.logger.debug("Processing files for %s " %self.userProxy )
+            if jobs:
+                self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+        else:
+            self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
         self.logger.info('Transfers completed')
         return
 
@@ -349,17 +359,10 @@ class TransferWorker:
             rest_copyjob += (','.join(pairs)) +']}'
             self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
             post = urllib.quote(rest_copyjob)
-            fts_server_for_transfer = getFTServer(link[1], 'getRunningFTSserver', self.config_db, self.logger)
-            fts_url_delegation = fts_server_for_transfer.replace('8446','8443')
-            command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
-                                                                            'glite-delegation-init', fts_url_delegation)
-            init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-            self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
-            stdout, rc = execute_command(command, self.logger, self.commandTimeout)
+            url = self.fts_server_for_transfer + '/jobs'
             self.logger.debug("Running FTS submission command")
-            self.logger.debug("FTS server: %s" % fts_server_for_transfer)
+            self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
-            url = fts_server_for_transfer + '/jobs'
             headers = [ "Content-Type: application/json;" ]
             buf = StringIO.StringIO()
             try:
@@ -396,7 +399,7 @@ class TransferWorker:
                 if res.has_key('job_id'):
                     fileId_list = []
                     job_id = res['job_id']
-                    file_url = fts_server_for_transfer + '/jobs/' + job_id +'/files'
+                    file_url = self.fts_server_for_transfer + '/jobs/' + job_id +'/files'
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     # TODO: Add loop on fileid retrieval
