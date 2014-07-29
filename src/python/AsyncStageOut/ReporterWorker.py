@@ -239,7 +239,7 @@ class ReporterWorker:
                 self.logger.error(msg)
                 continue
             self.logger.info("Doc %s Loaded" % hash_lfn)
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                 outputLfn = document['lfn'].replace('store/temp', 'store', 1)
                 try:
                     now = str(datetime.datetime.now())
@@ -300,7 +300,7 @@ class ReporterWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
                 continue
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                 now = str(datetime.datetime.now())
                 last_update = time.time()
                 # Prepare data to update the document in couch
