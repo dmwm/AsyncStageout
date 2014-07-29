@@ -544,7 +544,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
                 continue
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                 outputLfn = document['lfn'].replace('store/temp', 'store', 1)
                 try:
                     now = str(datetime.datetime.now())
@@ -604,7 +604,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
                 continue
-            if document['state'] != 'killed':
+            if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                 now = str(datetime.datetime.now())
                 last_update = time.time()
                 # Prepare data to update the document in couch
@@ -612,18 +612,10 @@ class TransferWorker:
                     data['state'] = 'failed'
                 else:
                     data['state'] = 'retry'
-
-                if self.failures_reasons.has_key(perm_lfn):
-                    if self.failures_reasons[perm_lfn]:
-                        data['failure_reason'] = self.failures_reasons[perm_lfn]
-                    else:
-                        data['failure_reason'] = "User Proxy has expired."
+                if submission_error:
+                    data['failure_reason'] = "Job could not be submitted to FTS"
                 else:
-                    if submission_error:
-                        data['failure_reason'] = "Job could not be submitted to FTS"
-                    else:
-                        data['failure_reason'] = "Site config problem."
-
+                    data['failure_reason'] = "Site config problem."
                 data['last_update'] = last_update
                 data['retry'] = now
 
