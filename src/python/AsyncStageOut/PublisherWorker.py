@@ -588,7 +588,7 @@ class PublisherWorker:
                 return []
             elif state == 2:
                 self.logger.info("Migration of %s is complete." % inputDataset)
-                existing_datasets = destReadApi.api.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
+                existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
             else:
                 self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
                 return []
