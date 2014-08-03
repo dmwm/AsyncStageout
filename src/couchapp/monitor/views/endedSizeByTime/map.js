@@ -4,7 +4,7 @@ function(doc) {
         var day  = start.split(' ')[0];
         var time = start.split(' ')[1];
         var yy = day.split('-')[0];
-        var mm = parseInt(day.split('-')[1]) - 1;
+        var mm = parseInt(day.split('-')[1], 10) - 1;
         var dd = day.split('-')[2];
         var h = time.split(':')[0];
         var m = time.split(':')[1];
