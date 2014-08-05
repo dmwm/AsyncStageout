@@ -16,7 +16,6 @@ from WMCore.Database.CMSCouch import CouchServer
 import time
 import logging
 import subprocess, os
-import tempfile
 import datetime
 import traceback
 from WMCore.WMFactory import WMFactory
@@ -110,12 +109,7 @@ class TransferWorker:
         self.init = True
         if getattr(self.config, 'cleanEnvironment', False):
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
-        # TODO: improve how the worker gets a log
-
-        query = {'group': True,
-                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}#,
-        # 'stale': 'ok'}
-        self.logger.debug("Trying to get DN")
+        self.logger.debug("Trying to get DN for %s" % self.user)
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
         except Exception, ex:
@@ -128,7 +122,6 @@ class TransferWorker:
         if not self.userDN:
             self.init = False
             return
-
         defaultDelegation = {
                                   'logger': self.logger,
                                   'credServerPath' : \
@@ -150,20 +143,14 @@ class TransferWorker:
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
             defaultDelegation['server_key'] = self.config.serviceKey
-
         self.valid = False
-        #self.logger.debug("Trying to get user proxy: userDN: %s" %self.userDN)
         try:
-
             self.valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
-
         except Exception, ex:
-
             msg = "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-
         if self.valid:
             self.userProxy = proxy
         else:
@@ -171,18 +158,17 @@ class TransferWorker:
             # This will be moved soon
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
             self.userProxy = config.opsProxy
-
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.failures_reasons = {}
         self.commandTimeout = 1200
         self.polling_cycle = 600
-        # Proxy management in Couch
         os.environ['X509_USER_PROXY'] = self.userProxy
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.config_db = config_server.connectDatabase(self.config.config_database)
+        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
 
     def __call__(self):
         """
@@ -190,7 +176,6 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
-        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
         fts_url_delegation = self.fts_server_for_transfer.replace('8446','8443')
         command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
                                                                         'glite-delegation-init', fts_url_delegation)
@@ -222,7 +207,7 @@ class TransferWorker:
             return dict['key'][4], dict['key'][3]
         return map(keys_map, sites['rows'])
 
-    def files_for_transfer(self, retry=False):
+    def files_for_transfer(self):
         """
         Process a queue of work per transfer source:destination for a user. Return one
         ftscp copyjob per source:destination.
@@ -309,7 +294,7 @@ class TransferWorker:
         """
         try:
             site, lfn = tuple(file.split(':'))
-        except Exception, e:
+        except:
             self.logger.error('it does not seem to be an lfn %s' %file.split(':'))
             return None
         if self.tfc_map.has_key(site):
@@ -334,7 +319,7 @@ class TransferWorker:
             self.logger.error('Wrong site %s!' % site)
             return None
 
-    def command(self, jobs, jobs_lfn, jobs_pfn, jobs_report, retry = False):
+    def command(self, jobs, jobs_lfn, jobs_pfn, jobs_report):
         """
         For each job the worker has to complete:
         Delete files that have failed previously
@@ -343,7 +328,6 @@ class TransferWorker:
         Parse the output of the FTS transfer and return complete and failed files for recording
         """
         # Output: {"userProxyPath":"/path/to/proxy","LFNs":["lfn1","lfn2","lfn3"],"PFNs":["pfn1","pfn2","pfn3"],"FTSJobid":'id-of-fts-job', "username": 'username'}
-        tmp_file_pool = []
         #Loop through all the jobs for the links we have
         for link, copyjob in jobs.items():
             submission_error = False
@@ -352,7 +336,7 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob='{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":"{\'issuer\': \'ASO\'}","spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":"{\'issuer\': \'ASO\'}","spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
             pairs = []
             for SrcDest in copyjob:
                 pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
@@ -402,7 +386,6 @@ class TransferWorker:
                     file_url = self.fts_server_for_transfer + '/jobs/' + job_id +'/files'
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
-                    # TODO: Add loop on fileid retrieval
                     try:
                         c = pycurl.Curl()
                         c.setopt(pycurl.CAPATH, os.getenv('X509_CERT_DIR'))
@@ -432,16 +415,17 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.debug(msg)
                         status_error = True
-                    for file_in_job in files_res:
-                        if file_in_job.has_key('file_id'):
-                            fileId_list.append(file_in_job['file_id'])
-                        else:
-                            self.logger.debug("Files list could not be retrieved")
-                            status_error = True
+                    if isinstance(files_res, list):
+                        for file_in_job in files_res:
+                            if file_in_job.has_key('file_id'):
+                                fileId_list.append(file_in_job['file_id'])
+                            else:
+                                self.logger.debug("Files list could not be retrieved")
+                                status_error = True
+                    else:
+                        self.logger.debug("FTS server raised an error when retrieving files")
+                        status_error = True
                     self.logger.debug("File id list %s" % fileId_list)
-                else:
-                    self.logger.debug("Job id could not be retrieved")
-                    status_error = True
             if status_error or submission_error:
                 self.logger.debug("Submission failed")
                 self.logger.info("Mark failed %s files" % len(jobs_lfn[link]))
@@ -457,7 +441,7 @@ class TransferWorker:
             fts_job['username'] = self.user
             self.logger.debug("Creating json file %s in %s" % (fts_job, self.dropbox_dir))
             ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid'] ), 'w')
-	    jsondata = json.dumps(fts_job)
+            jsondata = json.dumps(fts_job)
             ftsjob_file.write(jsondata)
             ftsjob_file.close()
             self.logger.debug("%s ready." % fts_job)
@@ -585,13 +569,11 @@ class TransferWorker:
                     temp_lfn = lfn.replace('store', 'store/temp', 1)
                 else:
                     temp_lfn = lfn
-                perm_lfn = lfn
             else:
                 if 'temp' not in lfn['value']:
                     temp_lfn = lfn['value'].replace('store', 'store/temp', 1)
                 else:
                     temp_lfn = lfn['value']
-                perm_lfn = lfn['value']
 
             docId = getHashLfn(temp_lfn)
 
