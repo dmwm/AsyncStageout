@@ -268,6 +268,7 @@ class ReporterWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
+            else: updated_lfn.append(lfn)
         self.logger.debug("transferred file updated")
         return updated_lfn
 
@@ -283,13 +284,11 @@ class ReporterWorker:
                     temp_lfn = lfn.replace('store', 'store/temp', 1)
                 else:
                     temp_lfn = lfn
-                perm_lfn = lfn
             else:
                 if 'temp' not in lfn['value']:
                     temp_lfn = lfn['value'].replace('store', 'store/temp', 1)
                 else:
                     temp_lfn = lfn['value']
-                perm_lfn = lfn['value']
             docId = getHashLfn(temp_lfn)
             # Load document to get the retry_count
             try:
@@ -339,7 +338,7 @@ class ReporterWorker:
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-
+            else: updated_lfn.append(docId)
         self.logger.debug("failed file updated")
         return updated_lfn
 
