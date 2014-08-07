@@ -176,21 +176,16 @@ sub ParseListJob
   my $last_key;
   my @raw = split /\n/, $output;
   @{$result->{RAW_OUTPUT}} = @raw;
-  while ( $_ = shift @raw )
-  {
-    if ( $preamble )
-    {
-      if ( m%^\s*([A-Z,a-z]+)\s*$% ) # non-verbose case
-      {
+  while ( $_ = shift @raw ) {
+    if ( $preamble ) {
+      if ( m%^\s*([A-Z,a-z]+)\s*$% ) { # non-verbose case
         $state = $1;
         $preamble = 0;
       }
-      if ( m%^\s*Status:\s+([A-Z,a-z]+)\s*$% ) # verbose case
-      {
+      if ( m%^\s*Status:\s+([A-Z,a-z]+)\s*$% ) { # verbose case
         $state = $1;
       }
-      if ( m%^\s+Source:\s+(.*)\s*$% )
-      {
+      if ( m%^\s+Source:\s+(.*)\s*$% ) {
         unshift @raw, $_;
         $preamble = 0;
       }
@@ -198,25 +193,20 @@ sub ParseListJob
       next;
     }
 
-    if ( m%^\s*Source:\s+(.*)\s*$% )
-    {
+    if ( m%^\s*Source:\s+(.*)\s*$% ) {
 #     A 'Source' line is the first in a group for a single src->dst transfer
       push @h, $h if $h;
       undef $h;
     }
-    if ( m%^\s*(\S+):\s+(.*)\s*$% )
-    {
+    if ( m%^\s*(\S+):\s+(.*)\s*$% ) {
       $last_key = uc $1;
       $h->{$last_key} = $2;
-    }
-    elsif ( m%\S% )
-    {
-      $h->{$last_key} .= ' ' . $_;
+    } elsif ( m%\S% ) {
+      $h->{$last_key} .= ' ' . $_ if defined $last_key; # and it's an error if it's not!
     }
   }
 
-  if ( defined($state) )
-  {
+  if ( defined($state) ) {
     chomp $state;
     $result->{JOB_STATE} = $state;
   }
