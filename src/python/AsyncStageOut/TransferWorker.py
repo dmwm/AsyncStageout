@@ -28,7 +28,7 @@ from AsyncStageOut import getDNFromUserName
 import json
 from time import strftime
 import StringIO
-import pycurl
+from WMCore.Services.pycurl_manager import RequestHandler
 
 def execute_command( command, logger, timeout ):
     """
@@ -347,35 +347,34 @@ class TransferWorker:
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
-            headers = [ "Content-Type: application/json;" ]
+            heade={"Content-Type ":"application/json"}
             buf = StringIO.StringIO()
-            try:
-                c = pycurl.Curl()
-                c.setopt(pycurl.CAPATH, os.getenv('X509_CERT_DIR'))
-                c.setopt(pycurl.SSLKEY, os.getenv('X509_USER_PROXY'))
-                c.setopt(pycurl.SSLCERT, os.getenv('X509_USER_PROXY'))
-                c.setopt(pycurl.URL, url)
-                c.setopt(c.HTTPHEADER, headers)
-                c.setopt(pycurl.POST, 1)
-                c.setopt(pycurl.POSTFIELDS, post)
-                c.setopt(pycurl.WRITEFUNCTION, buf.write)
-                c.perform()
-                c.close()
+	    try:
+	                connection=RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
+ 	    except Exception, ex:
+ 			msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.debug(msg)
+ 	    try:	
+                         response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug	
             except Exception, ex:
-                msg = "Error submitting to FTS3 REST interface: %s " % url
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                submission_error = True
-                self.logger.debug(msg)
-            job_out = buf.getvalue()
-            self.logger.debug('Submission result %s' % job_out)
+	                 msg = "Error submitting to FTS3 REST interface: %s " % url
+                         msg += str(ex)
+                         msg += str(traceback.format_exc())
+                         self.logger.debug(msg)
+                         submission_error = True
+ 	    self.logger.debug("Submission done")	
+            self.logger.debug('Submission header status: %s' % response.status)
+ 	    self.logger.debug('Submission header reason: %s' % response.reason)		
             buf.close()
             if not submission_error:
                 res = {}
                 try:
-                    res = json.loads(job_out)
+		    self.logger.debug('Submission result %s' %  datares)	
+ 		    res = json.loads(datares)	
+                    res.has_key('job_id')
                 except Exception, ex:
-                    msg = "Couldn't load json : %s " % job_out
+                    msg = "Couldn't load json" 
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.debug(msg)
@@ -387,15 +386,7 @@ class TransferWorker:
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     try:
-                        c = pycurl.Curl()
-                        c.setopt(pycurl.CAPATH, os.getenv('X509_CERT_DIR'))
-                        c.setopt(pycurl.SSLKEY, os.getenv('X509_USER_PROXY'))
-                        c.setopt(pycurl.SSLCERT, os.getenv('X509_USER_PROXY'))
-                        c.setopt(pycurl.URL, file_url)
-                        c.setopt(c.HTTPHEADER, headers)
-                        c.setopt(pycurl.WRITEFUNCTION, file_buf.write)
-                        c.perform()
-                        c.close()
+		  	response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug	
                     except Exception, ex:
                         msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
                         msg += str(ex)
@@ -404,27 +395,22 @@ class TransferWorker:
                         status_error = True
                     files_res = []
                     fileId_list = []
-                    files_in_job = file_buf.getvalue()
-                    self.logger.debug("List files in job %s" % files_in_job)
+                    self.logger.debug("List files in job %s" % files_)
                     file_buf.close()
                     try:
-                        files_res = json.loads(files_in_job)
+			files_res = json.loads(files_)
                     except Exception, ex:
-                        msg = "Couldn't load files in job json : %s " % files_in_job
+                        msg = "Couldn't load files in job json " 
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.debug(msg)
                         status_error = True
-                    if isinstance(files_res, list):
-                        for file_in_job in files_res:
+                    for file_in_job in files_res:
                             if file_in_job.has_key('file_id'):
                                 fileId_list.append(file_in_job['file_id'])
                             else:
-                                self.logger.debug("Files list could not be retrieved")
-                                status_error = True
-                    else:
-                        self.logger.debug("FTS server raised an error when retrieving files")
-                        status_error = True
+				self.logger.debug("Job id could not be retrieved")
+	                        status_error = True
                     self.logger.debug("File id list %s" % fileId_list)
             if status_error or submission_error:
                 self.logger.debug("Submission failed")
