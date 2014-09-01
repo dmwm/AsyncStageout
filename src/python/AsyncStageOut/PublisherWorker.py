@@ -28,7 +28,7 @@ from AsyncStageOut import getHashLfn
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from RestClient.ErrorHandling.RestClientExceptions import HTTPError
 import dbs.apis.dbsClient as dbsClient
-import pycurl
+from WMCore.Services.pycurl_manager import RequestHandler
 import cStringIO
 from AsyncStageOut import getDNFromUserName
 
@@ -148,6 +148,13 @@ class PublisherWorker:
             self.publish_read_url = self.publish_dbs_url + READ_PATH
             self.publish_dbs_url += WRITE_PATH
 
+	try:
+                         self.connection=RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
+        except Exception, ex:
+                         msg += str(ex)
+                         msg += str(traceback.format_exc())
+                         self.logger.debug(msg)
+
     def __call__(self):
         """
         1- check the nubmer of files in wf to publish if it is < max_files_per_block
@@ -220,15 +227,10 @@ class PublisherWorker:
                 url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
                 self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
                 buf = cStringIO.StringIO()
+		header={"Content-Type ":"application/json"}
                 res = []
                 try:
-                    c = pycurl.Curl()
-                    c.setopt(c.URL, url)
-                    c.setopt(c.SSL_VERIFYPEER, 0)
-                    c.setopt(c.SSLKEY, self.userProxy)
-                    c.setopt(c.SSLCERT, self.userProxy)
-                    c.setopt(c.WRITEFUNCTION, buf.write)
-                    c.perform()
+		    response, res_ = self.connection.request(url, {},header , doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug	
                 except Exception, ex:
                     msg = "Error reading the status of %s from cache cache. \
                            Check last publication time!" % workflow
@@ -238,9 +240,8 @@ class PublisherWorker:
                     pass
                 self.logger.info("Status of %s read from cache..." % workflow)
                 try:
-                    json_string = buf.getvalue()
                     buf.close()
-                    res = json.loads(json_string)
+		    res = json.loads(res_)	
                     workflow_status = res['result'][0]['status']
                     self.logger.info("Workflow status is %s" % workflow_status)
                 except Exception, ex:
@@ -416,15 +417,10 @@ class PublisherWorker:
         buf = cStringIO.StringIO()
         res = []
         # TODO: input sanitization
+	header={"Content-Type ":"application/json"}
         url = self.cache_area + '?taskname=' + workflow + '&filetype=EDM'
         try:
-            c = pycurl.Curl()
-            c.setopt(c.URL, url)
-            c.setopt(c.SSL_VERIFYPEER, 0)
-            c.setopt(c.SSLKEY, self.userProxy)
-            c.setopt(c.SSLCERT, self.userProxy)
-            c.setopt(c.WRITEFUNCTION, buf.write)
-            c.perform()
+            response, res_ = self.connection.request(url, {},header , doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
         except Exception, ex:
             msg =  "Error reading data from cache"
             msg += str(ex)
@@ -433,9 +429,8 @@ class PublisherWorker:
             return {}
         self.logger.info("Data read from cache...")
         try:
-            json_string = buf.getvalue()
             buf.close()
-            res = json.loads(json_string)
+            res = json.loads(res_)
         except Exception, ex:
             msg =  "Error loading results. Trying next time!"
             msg += str(ex)
