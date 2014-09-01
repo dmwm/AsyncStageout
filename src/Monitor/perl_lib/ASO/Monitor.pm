@@ -15,6 +15,8 @@ use ASO::GliteAsync;
 use PHEDEX::Monitoring::Process;
 
 use Data::Dumper;
+$Data::Dumper::Terse=1;
+$Data::Dumper::Indent=0;
 
 sub new {
   my $proto = shift;
@@ -54,6 +56,8 @@ sub new {
 	  FILE_TIMEOUT		 => undef,    # Timeout for file state-changes
 	  JOB_TIMEOUT		 => undef,    # Global job timeout
 	  KEEP_INPUTS		 => 0,        # Set non-zero to keep the input JSON files
+
+	  UNLINK		 => [],       # Array of working JSON files to delete, after reporting...
         );
   $self = \%params;
   bless $self, $class;
@@ -325,8 +329,8 @@ sub read_directory {
     $lenPFNs = scalar @{$h->{PFNs}};
     for ($i=0; $i<$lenPFNs; ++$i) {
       push @Files, ASO::File->new(
-	  SOURCE	=> $h->{PFNs}[$i],
-	  DESTINATION	=> 'dummy'
+	  DESTINATION	=> $h->{PFNs}[$i],
+	  SOURCE	=> 'LFN: ' . $h->{LFNs}[$i],
 	);
       $self->{FN_MAP}{$h->{PFNs}[$i]} = $h->{LFNs}[$i];
     }
@@ -491,7 +495,7 @@ sub poll_job_postback {
           
       if ( $_ = $f->State( $s->{STATE} ) ) {
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
-        $job->Log($f->Timestamp,$f->Source,$f->Source,$f->State );
+        $job->Log($f->Timestamp,$f->Source,$f->Destination,$f->State );
         $job->{FILE_TIMESTAMP} = $f->Timestamp;
         if ( $f->ExitStates->{$f->State} ) {
 # This is a terminal state-change for the file. Log it to the Reporter
@@ -561,7 +565,8 @@ sub poll_job_postback {
       my $f = $job->Files->{$_};
       if ( $f->ExitStates->{$f->State} == 0 ) {
         my $oldstate = $f->State('abandoned');
-        $f->Log($f->Timestamp,"from $oldstate to ",$f->State);
+        $f->Log($f->Timestamp," from $oldstate to ",$f->State);
+        $self->Logmsg($job->ID," ",$f->Destination," was $oldstate, now ",$f->State);
         $f->Reason($reason);
         $self->add_file_report($job->{USERNAME},$f);
       } 
@@ -588,13 +593,13 @@ sub poll_job_postback {
 
 sub add_file_report {
   my ($self,$user,$file) = @_;
-  return unless defined $self->{FN_MAP}{$file->Source};
+  return unless defined $self->{FN_MAP}{$file->Destination};
 
   my $reason = $file->Reason;
   if ( $reason eq 'error during  phase: [] ' ) { $reason = ''; }
 
   $self->{REPORTER}{$user}{$file->Source} = {
-       LFN            => delete $self->{FN_MAP}{$file->Source},
+       LFN            => delete $self->{FN_MAP}{$file->Destination},
        transferStatus => $file->State,
        failure_reason => $reason,
        timestamp      => $file->Timestamp,
@@ -644,6 +649,12 @@ sub notify_reporter {
     }
   }
 
+# Now clear the stack of working files that need to be deleted
+  foreach ( shift @{$self->{UNLINK}} ) {
+    $self->Logmsg('Unlink ',$_);
+    unlink $_;
+  }
+
   $self->Logmsg("Notify Reporter of ",$totlen," files for all users") if $totlen;
   $kernel->delay_set('notify_reporter',$self->{REPORTER_INTERVAL});
 }
@@ -673,8 +684,8 @@ sub report_job {
 # Now I should take detailed action on any errors...
   delete $self->{JOBS}{$job->ID} if $job->{ID};
 
-# Remove the dropbox entry
-  unlink $self->{WORKDIR} . '/Monitor.' . $job->ID . '.json' unless $self->{KEEP_INPUTS};
+# Stack the dropbox entry for unlinking.
+  push @{$self->{UNLINK}}, $self->{WORKDIR} . '/Monitor.' . $job->ID . '.json' unless $self->{KEEP_INPUTS};
 }
 
 sub isKnown
