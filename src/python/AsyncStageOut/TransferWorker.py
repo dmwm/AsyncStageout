@@ -35,7 +35,6 @@ def execute_command( command, logger, timeout ):
     _execute_command_
     Funtion to manage commands.
     """
-
     stdout, stderr, rc = None, None, 99999
     proc = subprocess.Popen(
             command, shell=True, cwd=os.environ['PWD'],
@@ -43,7 +42,6 @@ def execute_command( command, logger, timeout ):
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
     )
-
     t_beginning = time.time()
     seconds_passed = 0
     while True:
@@ -56,19 +54,15 @@ def execute_command( command, logger, timeout ):
             return stdout, rc
 
         time.sleep(0.1)
-
     stdout, stderr = proc.communicate()
     rc = proc.returncode
-
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
-
     return stdout, rc
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
     _getProxy_
     """
-
     logger.debug("Retrieving proxy for %s" % userdn)
     config = defaultDelegation
     config['userDN'] = userdn
@@ -143,26 +137,22 @@ class TransferWorker:
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
             defaultDelegation['server_key'] = self.config.serviceKey
-        self.valid = False
+        self.valid_proxy = False
         try:
-            self.valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+            self.valid_proxy, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
         except Exception, ex:
             msg = "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-        if self.valid:
+        if self.valid_proxy:
             self.userProxy = proxy
         else:
-            # Use the operator's proxy when the user proxy in invalid.
-            # This will be moved soon
-            self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
+            self.logger.error('Did not get valid proxy. Setting proxy to ops proxy to contact the DB')
             self.userProxy = config.opsProxy
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
-        self.failures_reasons = {}
         self.commandTimeout = 1200
-        self.polling_cycle = 600
         os.environ['X509_USER_PROXY'] = self.userProxy
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
@@ -255,7 +245,7 @@ class TransferWorker:
                         destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
                                                                            item['value'].replace('store/temp', 'store', 1)) )
                     self.logger.debug('PFNs prepared...')
-                    if source_pfn and destination_pfn:
+                    if source_pfn and destination_pfn and self.valid_proxy:
                         acquired_file, dashboard_report = self.mark_acquired([item])
                         self.logger.debug('Files have been marked acquired')
                         if acquired_file:
@@ -347,34 +337,34 @@ class TransferWorker:
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
-            heade={"Content-Type ":"application/json"}
+            heade = {"Content-Type ":"application/json"}
             buf = StringIO.StringIO()
-	    try:
-	                connection=RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
- 	    except Exception, ex:
- 			msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.debug(msg)
- 	    try:	
-                         response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug	
+            try:
+                connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
             except Exception, ex:
-	                 msg = "Error submitting to FTS3 REST interface: %s " % url
-                         msg += str(ex)
-                         msg += str(traceback.format_exc())
-                         self.logger.debug(msg)
-                         submission_error = True
- 	    self.logger.debug("Submission done")	
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.debug(msg)
+            try:
+                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
+            except Exception, ex:
+                msg = "Error submitting to FTS3 REST interface: %s " % url
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.debug(msg)
+                submission_error = True
+            self.logger.debug("Submission done")
             self.logger.debug('Submission header status: %s' % response.status)
- 	    self.logger.debug('Submission header reason: %s' % response.reason)		
+            self.logger.debug('Submission header reason: %s' % response.reason)
             buf.close()
             if not submission_error:
                 res = {}
                 try:
-		    self.logger.debug('Submission result %s' %  datares)	
- 		    res = json.loads(datares)	
+                    self.logger.debug('Submission result %s' %  datares)
+                    res = json.loads(datares)
                     res.has_key('job_id')
                 except Exception, ex:
-                    msg = "Couldn't load json" 
+                    msg = "Couldn't load json"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.debug(msg)
@@ -386,7 +376,7 @@ class TransferWorker:
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     try:
-		  	response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug	
+                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
                     except Exception, ex:
                         msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
                         msg += str(ex)
@@ -398,19 +388,19 @@ class TransferWorker:
                     self.logger.debug("List files in job %s" % files_)
                     file_buf.close()
                     try:
-			files_res = json.loads(files_)
+                        files_res = json.loads(files_)
                     except Exception, ex:
-                        msg = "Couldn't load files in job json " 
+                        msg = "Couldn't load files in job json "
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.debug(msg)
                         status_error = True
                     for file_in_job in files_res:
-                            if file_in_job.has_key('file_id'):
-                                fileId_list.append(file_in_job['file_id'])
-                            else:
-				self.logger.debug("Job id could not be retrieved")
-	                        status_error = True
+                        if file_in_job.has_key('file_id'):
+                            fileId_list.append(file_in_job['file_id'])
+                        else:
+                            self.logger.debug("Job id could not be retrieved")
+                            status_error = True
                     self.logger.debug("File id list %s" % fileId_list)
             if status_error or submission_error:
                 self.logger.debug("Submission failed")
@@ -581,7 +571,9 @@ class TransferWorker:
                 else:
                     data['state'] = 'retry'
                 if submission_error:
-                    data['failure_reason'] = "Job could not be submitted to FTS"
+                    data['failure_reason'] = "Job could not be submitted to FTS: temporary problem of FTS"
+                elif not self.valid_proxy:
+                    data['failure_reason'] = "Job could not be submitted to FTS: user's proxy expired"
                 else:
                     data['failure_reason'] = "Site config problem."
                 data['last_update'] = last_update
