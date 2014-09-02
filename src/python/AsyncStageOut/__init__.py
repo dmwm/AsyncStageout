@@ -41,12 +41,12 @@ def execute_command(command):
 
     return stdout, stderr, rc
 
-def getDNFromUserName(username, log):
+def getDNFromUserName(username, log, ckey = None, cert = None):
     """
     Parse site string to know the fts server to use
     """
     dn = ''
-    site_db = SiteDBJSON()
+    site_db = SiteDBJSON(config={'key': ckey, 'cert': cert})
     try:
        dn = site_db.userNameDn(username)
     except IndexError:
@@ -56,4 +56,3 @@ def getDNFromUserName(username, log):
        log.error("SiteDB URL cannot be accessed")
        return dn
     return dn
-

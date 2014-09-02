@@ -105,7 +105,7 @@ class TransferWorker:
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         self.logger.debug("Trying to get DN for %s" % self.user)
         try:
-            self.userDN = getDNFromUserName(self.user, self.logger)
+            self.userDN = getDNFromUserName(self.user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
         except Exception, ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
@@ -153,7 +153,6 @@ class TransferWorker:
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.commandTimeout = 1200
-        os.environ['X509_USER_PROXY'] = self.userProxy
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
@@ -346,7 +345,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
             try:
-                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
+                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.userProxy, cert=self.userProxy, capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
             except Exception, ex:
                 msg = "Error submitting to FTS3 REST interface: %s " % url
                 msg += str(ex)
@@ -376,7 +375,7 @@ class TransferWorker:
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     try:
-                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=os.getenv('X509_USER_PROXY'), cert=os.getenv('X509_USER_PROXY'), capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
+                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.userProxy, cert=self.userProxy, capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
                     except Exception, ex:
                         msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
                         msg += str(ex)

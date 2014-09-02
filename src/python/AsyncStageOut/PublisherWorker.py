@@ -21,7 +21,6 @@ import types
 import re
 import uuid
 import pprint
-from DBSAPI.dbsApi import DbsApi
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
@@ -124,7 +123,6 @@ class PublisherWorker:
             self.userDN = opsProxy.getSubject()
             self.userProxy = self.config.opsProxy
         self.cache_area = self.config.cache_area
-        os.environ['X509_USER_PROXY'] = self.userProxy
         # If we're just testing publication, we skip the DB connection.
         if os.getenv("TEST_ASO"):
             self.db = None
@@ -148,12 +146,12 @@ class PublisherWorker:
             self.publish_read_url = self.publish_dbs_url + READ_PATH
             self.publish_dbs_url += WRITE_PATH
 
-	try:
-                         self.connection=RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
+        try:
+            self.connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
         except Exception, ex:
-                         msg += str(ex)
-                         msg += str(traceback.format_exc())
-                         self.logger.debug(msg)
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.debug(msg)
 
     def __call__(self):
         """
@@ -227,10 +225,10 @@ class PublisherWorker:
                 url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
                 self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
                 buf = cStringIO.StringIO()
-		header={"Content-Type ":"application/json"}
+                header = {"Content-Type ":"application/json"}
                 res = []
                 try:
-		    response, res_ = self.connection.request(url, {},header , doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug	
+                    response, res_ = self.connection.request(url, {}, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception, ex:
                     msg = "Error reading the status of %s from cache cache. \
                            Check last publication time!" % workflow
@@ -241,7 +239,7 @@ class PublisherWorker:
                 self.logger.info("Status of %s read from cache..." % workflow)
                 try:
                     buf.close()
-		    res = json.loads(res_)	
+                    res = json.loads(res_)
                     workflow_status = res['result'][0]['status']
                     self.logger.info("Workflow status is %s" % workflow_status)
                 except Exception, ex:
@@ -417,10 +415,10 @@ class PublisherWorker:
         buf = cStringIO.StringIO()
         res = []
         # TODO: input sanitization
-	header={"Content-Type ":"application/json"}
+        header = {"Content-Type ":"application/json"}
         url = self.cache_area + '?taskname=' + workflow + '&filetype=EDM'
         try:
-            response, res_ = self.connection.request(url, {},header , doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
+            response, res_ = self.connection.request(url, {}, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
         except Exception, ex:
             msg =  "Error reading data from cache"
             msg += str(ex)
