@@ -60,7 +60,6 @@ class RetryManagerDaemon(BaseWorkerThread):
             self.logger = logging.getLogger()
             self.logger.setLevel(self.config.log_level)
         self.logger.debug('Configuration loaded')
-        os.environ['X509_USER_PROXY'] = self.config.opsProxy
         try:
             server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
             self.db = server.connectDatabase(self.config.files_database)
