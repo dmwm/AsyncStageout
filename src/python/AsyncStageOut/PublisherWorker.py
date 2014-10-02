@@ -494,7 +494,7 @@ class PublisherWorker:
               'event_count': file['inevents'],
               'file_size': file['filesize'],
               'adler32': file['adler32'],
-              'file_parent_list': [{'file_parent_lfn': i} for i in file['parents']],
+              'file_parent_list': [{'file_parent_lfn': i} for i in set(file['parents'])],
              }
         file_lumi_list = []
         for run, lumis in file['runlumi'].items():
