@@ -135,7 +135,7 @@ class CleanerDaemon(BaseWorkerThread):
                 self.logger.info("Removing %s from %s" %(lfn, location))
                 pfn = self.apply_tfc_to_lfn( '%s:%s' %(location, lfn))
                 if pfn:
-                    command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -lv %s'  % \
+                    command = 'export X509_USER_PROXY=%s ; source %s ; lcg-del -b -lv -D srmv2 --vo cms %s'  % \
                               (self.opsProxy, self.uiSetupScript, pfn)
                     self.logger.debug("Running remove command %s" % command)
                     rc, stdout, stderr = execute_command(command, self.logger, 3600)
