@@ -222,13 +222,14 @@ class PublisherWorker:
             # If the number of files < max_files_per_block check first workflow status and then the last publication time
             workflow = user_wf['key'][3]
             if user_wf['value'] <= self.max_files_per_block:
-                url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow?workflow=' + workflow
+                url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow'
                 self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
                 buf = cStringIO.StringIO()
+                data = {'workflow': workflow}
                 header = {"Content-Type ":"application/json"}
                 res = []
                 try:
-                    response, res_ = self.connection.request(url, {}, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
+                    response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception, ex:
                     msg = "Error reading the status of %s from cache cache. \
                            Check last publication time!" % workflow
@@ -416,9 +417,10 @@ class PublisherWorker:
         res = []
         # TODO: input sanitization
         header = {"Content-Type ":"application/json"}
-        url = self.cache_area + '?taskname=' + workflow + '&filetype=EDM'
+        data = {'taskname': workflow, 'filetype': 'EDM'}
+        url = self.cache_area
         try:
-            response, res_ = self.connection.request(url, {}, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
+            response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
         except Exception, ex:
             msg =  "Error reading data from cache"
             msg += str(ex)
