@@ -1,17 +1,29 @@
-function(doc) {
-
-        if (doc.publication_state != 'published' && doc.publication_state != 'publication_failed' && doc.state == 'done' && doc.lfn && doc.dbs_url) {
-                var lfn = doc.lfn.replace('store', 'store/temp')
-                var publish = 0
-                if (doc.publish == 1) {
-                        publish = doc.publish
-                }
-                if (doc.type != 'log'){
-                        if (publish == 1){
-                                var dbs_url = doc.dbs_url
-                                        emit([doc.user, doc.group, doc.role, doc.workflow], [doc.destination, lfn, doc.inputdataset, dbs_url, doc.end_time.split('.')[0]]);
-                        }
-                }
-        }
-}
-
+fun({Doc}) ->
+  Publication_state = proplists:get_value(<<"publication_state">>, Doc, null),
+  case Publication_state of
+    <<"published">> -> ok; <<"publication_failed">> -> ok;
+    _ ->
+      State = proplists:get_value(<<"state">>, Doc, null),
+      case State of
+      <<"Done">> -> 
+        Publish = proplists:get_value(<<"dbs_url">>, Doc, null),
+        case Publish of
+          1 -> 
+            Type = proplists:get_value(<<"type">>, Doc, null),
+            case Type of
+              <<"log">> -> ok;
+              _ -> 
+                User = proplists:get_value(<<"user">>, Doc, null),
+                Lfn = proplists:get_value(<<"lfn">>, Doc, null),
+                Dbs = proplists:get_value(<<"dbs_url">>, Doc, null),
+                Group = proplists:get_value(<<"group">>, Doc, null),
+                Role = proplists:get_value(<<"role">>, Doc, null),
+                Workflow = proplists:get_value(<<"workflow">>, Doc, null),
+                Destination = proplists:get_value(<<"destination">>, Doc, null),
+                InputDataset = proplists:get_value(<<"inputdataset">>, Doc, null),
+                EndTime = proplists:get_value(<<"end_time">>, Doc, null), % Need to split!!!!!!
+                Emit([User, Group, Role, Workflow], [Destination, Lfn, InputDataset, Dbs, EndTime]);
+              undefined -> ok; <<"">> -> ok; null -> ok end;
+          _ -> ok; undefined -> ok; <<"">> -> ok; null -> ok end;
+      _ -> ok; undefined -> ok; <<"">> -> ok; null -> ok end;
+    undefined -> ok; <<"">> -> ok; null -> ok end end.

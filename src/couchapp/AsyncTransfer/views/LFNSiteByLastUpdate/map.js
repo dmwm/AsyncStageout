@@ -1,19 +1,21 @@
-function complete_job(doc, req) {
-	if ( doc['state'] != 'done' ) {
-        	return false;
-        }
-        return true;
-}
-
-function(doc) {
-	if(doc.lfn && complete_job(doc)){
-                if (doc.lfn.indexOf("temp") > 0) {
-		        var lfn = doc.lfn
-                }
-                else {
-			var final_lfn = doc.lfn
-                	var lfn = final_lfn.replace('/store/user', '/store/temp/user')
-		}
-		emit(doc.last_update, {"lfn": lfn, "location": doc.source});
-	}
-}
+fun({Doc}) ->
+  State = proplists:get_value(<<"state">>, Doc, null),
+  case State of
+    <<"done">> ->
+      Lfn = proplists:get_value(<<"lfn">>, Doc, null),
+      case Lfn of
+        undefined -> ok;
+        <<"">> -> ok;
+        null -> ok;
+        _ ->
+          Nlfn = re:replace(Lfn,"/store/user","/store/temp/user",[{return,list}]),
+          Last_update = proplists:get_value(<<"last_update">>, Doc, null),
+          Source = proplists:get_value(<<"source">>, Doc, null),
+          Emit(Last_update, {[{<<"lfn">>, Nlfn},{<<"location">>, Source}]})
+      end;
+    _ -> ok;
+    undefined -> ok;
+    <<"">> -> ok;
+    null -> ok
+  end
+end.
