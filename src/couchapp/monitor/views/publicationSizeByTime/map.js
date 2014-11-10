@@ -16,6 +16,6 @@ function(doc) {
         h = startDate.getUTCHours();
         m = startDate.getUTCMinutes();
         s = startDate.getUTCSeconds();
-	emit([yy, mm, dd, h, m, s], {"publication_state": doc.publication_state, "size": doc.size});		
+	emit([yy, mm, dd, h, m, s, doc.state], doc.size);		
     }
 }

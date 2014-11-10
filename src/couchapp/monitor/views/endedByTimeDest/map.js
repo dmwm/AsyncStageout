@@ -1,6 +1,6 @@
 function(doc) {
-    if ((doc.state)&&(doc.start_time)&&(doc.state != 'done')&&(doc.state != 'failed')&&(doc.state != 'killed')&&(doc.state != 'retry')&&(doc.end_time == '')) {
-        var start = doc.start_time;
+    if (doc.end_time) {
+        var start = doc.end_time;
         var day  = start.split(' ')[0];
         var time = start.split(' ')[1];
         var yy = day.split('-')[0];
@@ -16,6 +16,6 @@ function(doc) {
         h_utc  = startDate.getUTCHours();
         m_utc  = startDate.getUTCMinutes();
         s_utc  = startDate.getUTCSeconds();
-            emit([doc.destination, yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc], {"state": doc.state, "size": doc.size});
+            emit([doc.destination, yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc, doc.state], 1);
     }
 }

@@ -16,11 +16,6 @@ function(doc) {
         h_utc  = startDate.getUTCHours();
         m_utc  = startDate.getUTCMinutes();
         s_utc  = startDate.getUTCSeconds();
-        if (doc.state=='new'||doc.state=='retry') {
-            emit([yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc], {"state": 'resubmitted', "size": doc.size});
-        }
-        else {
-            emit([yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, s_utc], {"state": doc.state, "size": doc.size});
-        }
+            emit([doc.destination, yy_utc, mm_utc + 1, dd_utc, h_utc, m_utc, doc.state], doc.size);
     }
 }
