@@ -272,21 +272,11 @@ class PublisherWorker:
                     self.logger.info('Closing the publication of %s since it is completed' % workflow)
 
             if lfn_ready:
-                self.logger.debug("Retrieving SE Name from Phedex %s" %str(file['value'][0]))
-                try:
-                    seName = self.phedexApi.getNodeSE( str(file['value'][0]) )
-                    if not seName:
-                        continue
-                except Exception, ex:
-                    msg =  "SE of %s cannot be retrieved" % str(file['value'][0])
-                    msg += str(ex)
-                    msg += str(traceback.format_exc())
-                    self.logger.error(msg)
-                    continue
+                pnn = str(file['value'][0])
                 failed_files, good_files = self.publish( str(file['key'][3]), \
                                                          self.userDN, str(file['key'][0]), \
                                                          str(file['value'][2]), str(file['value'][3]), \
-                                                         str(seName), lfn_ready )
+                                                         str(pnn), lfn_ready )
                 self.mark_failed( failed_files )
                 self.mark_good( good_files )
 
@@ -368,7 +358,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def publish(self, workflow, userdn, userhn, inputDataset, sourceurl, targetSE, lfn_ready):
+    def publish(self, workflow, userdn, userhn, inputDataset, sourceurl, pnn, lfn_ready):
         """Perform the data publication of the workflow result.
           :arg str workflow: a workflow name
           :arg str dbsurl: the DBS URL endpoint where to publish
@@ -389,7 +379,7 @@ class PublisherWorker:
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
         failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                  inputDataset=inputDataset, toPublish=toPublish,
-                                                 targetSE=targetSE, workflow=workflow)
+                                                 pnn=pnn, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
         return failed, done
 
@@ -616,7 +606,7 @@ class PublisherWorker:
         blockDump['block']['block_size'] = sum([int(file[u'file_size']) for file in files])
         return blockDump
 
-    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, targetSE, workflow):
+    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, pnn, workflow):
         """
         Publish files into DBS3
         """
@@ -693,7 +683,6 @@ class PublisherWorker:
             appName = 'cmsRun'
             appVer  = files[0]["swversion"]
             appFam  = 'output'
-            seName  = targetSE
             pset_hash = files[0]['publishname'].split("-")[-1]
             gtag = str(files[0]['globaltag'])
             if gtag == "None":
@@ -767,7 +756,7 @@ class PublisherWorker:
                 block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
                 files_to_publish = dbsFiles[count:count+blockSize]
                 try:
-                    block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
+                    block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
                     self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
                     blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
                                                      acquisition_era_config, block_config, files_to_publish)
@@ -790,7 +779,7 @@ class PublisherWorker:
                                 publish_next_iteration.append(file['logical_file_name'])
                             count += blockSize
                             continue
-                        block_config = {'block_name': block_name, 'origin_site_name': seName, 'open_for_writing': 0}
+                        block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
                         blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
                                                          acquisition_era_config, block_config, files_to_publish)
                         self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
