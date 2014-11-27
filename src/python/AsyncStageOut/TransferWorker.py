@@ -454,7 +454,7 @@ class TransferWorker:
         lfn_in_transfer = []
         dash_rep = ()
         for lfn in files:
-            if lfn['value'].find('temp') > 1:
+            if lfn['value'].find('temp') == 7:
                 docId = getHashLfn(lfn['value'])
                 self.logger.debug("Marking acquired %s" % docId)
                 # Load document to get the retry_count
