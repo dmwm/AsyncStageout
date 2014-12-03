@@ -345,7 +345,9 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
             try:
-                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.userProxy, cert=self.userProxy, capath='/etc/grid-security/certificates', verbose=True)
+                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.userProxy, \
+                                                       cert=self.userProxy, capath='/etc/grid-security/certificates', \
+                                                       cainfo=self.userProxy, verbose=True)
                 self.logger.debug("Submission done")
                 self.logger.debug('Submission header status: %s' % response.status)
                 self.logger.debug('Submission header reason: %s' % response.reason)
@@ -375,7 +377,9 @@ class TransferWorker:
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     try:
-                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.userProxy, cert=self.userProxy, capath='/etc/grid-security/certificates', verbose=True)
+                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.userProxy, \
+                                                              cert=self.userProxy, capath='/etc/grid-security/certificates', \
+                                                              cainfo=self.userProxy, verbose=True)
                     except Exception, ex:
                         msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
                         msg += str(ex)
