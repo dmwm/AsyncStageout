@@ -329,8 +329,8 @@ sub read_directory {
     $lenPFNs = scalar @{$h->{PFNs}};
     for ($i=0; $i<$lenPFNs; ++$i) {
       push @Files, ASO::File->new(
-	  DESTINATION	=> $h->{PFNs}[$i],
-	  SOURCE	=> 'LFN: ' . $h->{LFNs}[$i],
+	SOURCE	=> $h->{PFNs}[$i],
+	DESTINATION	=> 'dummy'
 	);
       $self->{FN_MAP}{$h->{PFNs}[$i]} = $h->{LFNs}[$i];
     }
@@ -495,7 +495,7 @@ sub poll_job_postback {
           
       if ( $_ = $f->State( $s->{STATE} ) ) {
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
-        $job->Log($f->Timestamp,$f->Source,$f->Destination,$f->State );
+        $job->Log($f->Timestamp,$f->Source,$f->Source,$f->State );
         $job->{FILE_TIMESTAMP} = $f->Timestamp;
         if ( $f->ExitStates->{$f->State} ) {
 # This is a terminal state-change for the file. Log it to the Reporter
@@ -593,13 +593,13 @@ sub poll_job_postback {
 
 sub add_file_report {
   my ($self,$user,$file) = @_;
-  return unless defined $self->{FN_MAP}{$file->Destination};
-
+  return unless defined $self->{FN_MAP}{$file->Source};
+ 
   my $reason = $file->Reason;
   if ( $reason eq 'error during  phase: [] ' ) { $reason = ''; }
 
   $self->{REPORTER}{$user}{$file->Source} = {
-       LFN            => delete $self->{FN_MAP}{$file->Destination},
+       LFN => delete $self->{FN_MAP}{$file->Source},
        transferStatus => $file->State,
        failure_reason => $reason,
        timestamp      => $file->Timestamp,
