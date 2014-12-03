@@ -346,15 +346,15 @@ class TransferWorker:
                 self.logger.debug(msg)
             try:
                 response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.userProxy, cert=self.userProxy, capath=os.getenv('X509_CERT_DIR'))#, verbose=True)# for debug
+                self.logger.debug("Submission done")
+                self.logger.debug('Submission header status: %s' % response.status)
+                self.logger.debug('Submission header reason: %s' % response.reason)
             except Exception, ex:
                 msg = "Error submitting to FTS3 REST interface: %s " % url
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
                 submission_error = True
-            self.logger.debug("Submission done")
-            self.logger.debug('Submission header status: %s' % response.status)
-            self.logger.debug('Submission header reason: %s' % response.reason)
             buf.close()
             if not submission_error:
                 res = {}

@@ -227,16 +227,14 @@ class PublisherWorker:
                 buf = cStringIO.StringIO()
                 data = {'workflow': workflow}
                 header = {"Content-Type ":"application/json"}
-                res = []
                 try:
                     response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception, ex:
-                    msg = "Error reading the status of %s from cache cache. \
-                           Check last publication time!" % workflow
+                    msg = "Error reading the status of %s from cache cache." % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    pass
+                    continue
                 self.logger.info("Status of %s read from cache..." % workflow)
                 try:
                     buf.close()
@@ -244,11 +242,11 @@ class PublisherWorker:
                     workflow_status = res['result'][0]['status']
                     self.logger.info("Workflow status is %s" % workflow_status)
                 except Exception, ex:
-                    msg = "Error loading the status. Check last publication time!"
+                    msg = "Error loading the status of %s !" % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    pass
+                    continue
 
                 if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
                     query = {'reduce':True, 'key': user_wf['key']}
