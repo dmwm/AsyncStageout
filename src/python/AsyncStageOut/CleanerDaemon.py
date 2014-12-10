@@ -95,7 +95,8 @@ class CleanerDaemon(BaseWorkerThread):
         self.logger.info('%s active sites' % len(sites))
         self.logger.debug('Active sites are: %s' % sites)
         for site in sites:
-            self.site_tfc_map[site] = self.get_tfc_rules(site)
+         if str(site) != 'None' and str(site)!= 'unknown':
+	    self.site_tfc_map[site] = self.get_tfc_rules(site)
         if sites:
             query = {}
             try:
@@ -200,6 +201,9 @@ class CleanerDaemon(BaseWorkerThread):
         Get the TFC regexp for a given site.
         """
         self.phedex.getNodeTFC(site)
-        tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-
+        try:
+                tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
+        except Exception, e:
+                self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
+		return None 	 
         return readTFC(tfc_file)
