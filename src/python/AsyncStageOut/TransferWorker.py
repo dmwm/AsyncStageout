@@ -435,6 +435,7 @@ class TransferWorker:
                 lfn_report['JobVersion'] = jobs_report[link][index][1]
                 job_id = '%d_https://glidein.cern.ch/%d/%s_%s' % (int(jobs_report[link][index][0]), int(jobs_report[link][index][0]), lfn_report['Workflow'].replace("_", ":"), lfn_report['JobVersion'])
                 lfn_report['JobId'] = job_id
+                lfn_report['URL'] = self.fts_server_for_transfer
                 self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
                 dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']) , 'w')
                 jsondata = json.dumps(lfn_report)
