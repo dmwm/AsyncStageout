@@ -171,17 +171,17 @@ class CleanerDaemon(BaseWorkerThread):
                     valid_proxy = False
                     try:
                         userDN = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
-                        valid_proxy, userProxy = getProxy(userDN, "", "", self.defaultDelegation, self.logger) 
+                        valid_proxy, userProxy = getProxy(userDN, "", "", self.defaultDelegation, self.logger)
                     except Exception, ex:
                         msg = "Error getting the user proxy"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
-                        self.logger.error(msg)     
+                        self.logger.error(msg)
                     if valid_proxy:
                         lfn_to_proxy[user] = userProxy
                     else:
-                        lfn_to_proxy[user] = self.opsProxy    
-                userProxy = lfn_to_proxy[user] 
+                        lfn_to_proxy[user] = self.opsProxy
+                userProxy = lfn_to_proxy[user]
                 location = lfnDetails['value']['location']
                 self.logger.info("Removing %s from %s" %(lfn, location))
                 pfn = self.apply_tfc_to_lfn( '%s:%s' %(location, lfn))
@@ -251,5 +251,9 @@ class CleanerDaemon(BaseWorkerThread):
         Get the TFC regexp for a given site.
         """
         self.phedex.getNodeTFC(site)
-        tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
+        try:
+                tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
+        except Exception, e:
+                self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
+   	        return None
         return readTFC(tfc_file)
