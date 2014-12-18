@@ -12,6 +12,9 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 import subprocess, os, errno
 import time
+import traceback
+from AsyncStageOut import getDNFromUserName
+from WMCore.Credential.Proxy import Proxy
 
 def execute_command( command, logger, timeout ):
     """
@@ -42,6 +45,26 @@ def execute_command( command, logger, timeout ):
     rc = proc.returncode
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
     return rc, stdout, stderr
+
+def getProxy(userdn, group, role, defaultDelegation, logger):
+    """
+    _getProxy_
+    """
+    logger.debug("Retrieving proxy for %s" % userdn)
+    config = defaultDelegation
+    config['userDN'] = userdn
+    config['group'] = group
+    config['role'] = role
+    proxy = Proxy(defaultDelegation)
+    proxyPath = proxy.getProxyFilename( True )
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 3600:
+        return (True, proxyPath)
+    proxyPath = proxy.logonRenewMyProxy()
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 0:
+        return (True, proxyPath)
+    return (False, None)
 
 class CleanerDaemon(BaseWorkerThread):
     """
@@ -77,6 +100,16 @@ class CleanerDaemon(BaseWorkerThread):
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.opsProxy = self.config.opsProxy
         self.site_tfc_map = {}
+        self.defaultDelegation = { 'logger': self.logger,
+                                   'credServerPath' : \
+                                   self.config.credentialDir,
+                                   # It will be moved to be getfrom couchDB
+                                   'myProxySvr': 'myproxy.cern.ch',
+                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
+                                   'serverDN' : self.config.serverDN,
+                                   'uisource' : self.uiSetupScript,
+                                   'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
+                                 }
         os.environ['X509_USER_PROXY'] = self.opsProxy
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         try:
@@ -95,8 +128,8 @@ class CleanerDaemon(BaseWorkerThread):
         self.logger.info('%s active sites' % len(sites))
         self.logger.debug('Active sites are: %s' % sites)
         for site in sites:
-         if str(site) != 'None' and str(site)!= 'unknown':
-	    self.site_tfc_map[site] = self.get_tfc_rules(site)
+            if str(site) != 'None' and str(site)!= 'unknown':
+                self.site_tfc_map[site] = self.get_tfc_rules(site)
         if sites:
             query = {}
             try:
@@ -130,14 +163,31 @@ class CleanerDaemon(BaseWorkerThread):
             self.logger.info('LFNs to remove: %s' % len(all_LFNs))
             self.logger.debug('LFNs to remove: %s' % all_LFNs)
 
+            lfn_to_proxy = {}
             for lfnDetails in all_LFNs:
                 lfn = lfnDetails['value']['lfn']
+                user = lfn.split('/')[4].split('.')[0]
+                if not lfn_to_proxy.has_key(user):
+                    valid_proxy = False
+                    try:
+                        userDN = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
+                        valid_proxy, userProxy = getProxy(userDN, "", "", self.defaultDelegation, self.logger) 
+                    except Exception, ex:
+                        msg = "Error getting the user proxy"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)     
+                    if valid_proxy:
+                        lfn_to_proxy[user] = userProxy
+                    else:
+                        lfn_to_proxy[user] = self.opsProxy    
+                userProxy = lfn_to_proxy[user] 
                 location = lfnDetails['value']['location']
                 self.logger.info("Removing %s from %s" %(lfn, location))
                 pfn = self.apply_tfc_to_lfn( '%s:%s' %(location, lfn))
                 if pfn:
                     command = 'env -i X509_USER_PROXY=%s gfal-rm -v -t 180 %s'  % \
-                              (self.opsProxy, pfn)
+                              (userProxy, pfn)
                     self.logger.debug("Running remove command %s" % command)
                     rc, stdout, stderr = execute_command(command, self.logger, 3600)
                     if rc:
@@ -201,9 +251,5 @@ class CleanerDaemon(BaseWorkerThread):
         Get the TFC regexp for a given site.
         """
         self.phedex.getNodeTFC(site)
-        try:
-                tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-        except Exception, e:
-                self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
-		return None 	 
+        tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
         return readTFC(tfc_file)
