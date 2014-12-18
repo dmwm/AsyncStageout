@@ -132,7 +132,7 @@ class TransferDaemon(BaseWorkerThread):
         site_tfc_map = {}
         for site in sites:
             # TODO: Remove this check once the ASO request will be validated before the upload.
-            if site and str(site) != 'None':
+            if site and str(site) != 'None' and str(site) != 'unknown':
                 site_tfc_map[site] = self.get_tfc_rules(site)
         self.logger.debug('kicking off pool')
         for u in users:
