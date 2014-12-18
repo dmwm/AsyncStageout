@@ -140,6 +140,7 @@ class TransferWorker:
         self.valid_proxy = False
         try:
             self.valid_proxy, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+            self.Uproxy=proxy;
         except Exception, ex:
             msg = "Error getting the user proxy"
             msg += str(ex)
@@ -166,18 +167,18 @@ class TransferWorker:
         c. deletes successfully transferred files from the DB
         """
         fts_url_delegation = self.fts_server_for_transfer.replace('8446','8443')
-        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.userProxy, self.uiSetupScript,
+        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.Uproxy, self.uiSetupScript,
                                                                         'glite-delegation-init', fts_url_delegation)
         init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
         self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
         stdout, rc = execute_command(command, self.logger, self.commandTimeout)
-        if not rc:
-            jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
-            self.logger.debug("Processing files for %s " %self.userProxy )
-            if jobs:
-                self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+        if not rc or not self.valid_proxy:
+          jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
+          self.logger.debug("Processing files for %s " %self.userProxy )
+          if jobs:
+             self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
         else:
-            self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
+          self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
         self.logger.info('Transfers completed')
         return
 
