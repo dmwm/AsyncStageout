@@ -60,6 +60,7 @@ sub new {
 	  UNLINK		 => [],       # Array of working JSON files to delete, after reporting...
         );
   $self = \%params;
+  $self->{STARTING} = 1; # Need this to recover jobs that were monitored but not reported
   bless $self, $class;
 
 # Become a daemon, if that's what the user wants.
@@ -300,6 +301,12 @@ sub read_directory {
   $pattern = $pattern . '/Monitor\.[0-9,a-f,-]*\.json';
   @files = glob( $pattern );
 
+  if ( $self->{STARTING} ) {
+    delete $self->{STARTING};
+    $self->Logmsg("First scan on startup: look for jobs that were done but not reported");
+    push @files, glob( $pattern . '.done' );
+  }
+
   $self->Logmsg("Found ",scalar @files," new items in ",$location) if $self->{VERBOSE};
   foreach $file ( sort @files ) {
     $self->Dbgmsg("Reading ",$file) if $self->{DEBUG};
@@ -329,8 +336,8 @@ sub read_directory {
     $lenPFNs = scalar @{$h->{PFNs}};
     for ($i=0; $i<$lenPFNs; ++$i) {
       push @Files, ASO::File->new(
-	SOURCE	=> $h->{PFNs}[$i],
-	DESTINATION	=> 'dummy'
+    	DESTINATION	=> $h->{PFNs}[$i],
+    	SOURCE	=> 'LFN: ' . $h->{LFNs}[$i];
 	);
       $self->{FN_MAP}{$h->{PFNs}[$i]} = $h->{LFNs}[$i];
     }
@@ -495,7 +502,7 @@ sub poll_job_postback {
           
       if ( $_ = $f->State( $s->{STATE} ) ) {
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
-        $job->Log($f->Timestamp,$f->Source,$f->Source,$f->State );
+        $job->Log($f->Timestamp,$f->Source,$f->Destination,$f->State );
         $job->{FILE_TIMESTAMP} = $f->Timestamp;
         if ( $f->ExitStates->{$f->State} ) {
 # This is a terminal state-change for the file. Log it to the Reporter
@@ -593,13 +600,13 @@ sub poll_job_postback {
 
 sub add_file_report {
   my ($self,$user,$file) = @_;
-  return unless defined $self->{FN_MAP}{$file->Source};
+  return unless defined $self->{FN_MAP}{$file->Destination};
  
   my $reason = $file->Reason;
   if ( $reason eq 'error during  phase: [] ' ) { $reason = ''; }
 
   $self->{REPORTER}{$user}{$file->Source} = {
-       LFN => delete $self->{FN_MAP}{$file->Source},
+       LFN => delete $self->{FN_MAP}{$file->Destination},
        transferStatus => $file->State,
        failure_reason => $reason,
        timestamp      => $file->Timestamp,
@@ -685,7 +692,9 @@ sub report_job {
   delete $self->{JOBS}{$job->ID} if $job->{ID};
 
 # Stack the dropbox entry for unlinking.
-  push @{$self->{UNLINK}}, $self->{WORKDIR} . '/Monitor.' . $job->ID . '.json' unless $self->{KEEP_INPUTS};
+  my $jsonFile = $self->{WORKDIR} . '/Monitor.' . $job->ID . '.json';
+  rename($jsonFile,$jsonFile . '.done');
+  push @{$self->{UNLINK}}, $jsonFile . '.done' unless $self->{KEEP_INPUTS};
 }
 
 sub isKnown
