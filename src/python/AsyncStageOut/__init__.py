@@ -2,8 +2,9 @@ import hashlib
 import subprocess
 import os
 from WMCore.Services.SiteDB.SiteDB import SiteDBJSON
+from WMCore.Credential.Proxy import Proxy
 
-__version__ = '1.0.1'
+__version__ = '1.0.3'
 
 def getHashLfn(lfn):
     """
@@ -56,3 +57,18 @@ def getDNFromUserName(username, log, ckey = None, cert = None):
        log.error("SiteDB URL cannot be accessed")
        return dn
     return dn
+def getProxy(userdn, group, role, defaultDelegation, logger):
+    """
+    _getProxy_
+    """
+    log.debug("Retrieving proxy for %s" % userdn)
+    proxy = Proxy(defaultDelegation)
+    proxyPath = proxy.getProxyFilename( True )
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 3600:
+        return (True, proxyPath)
+    proxyPath = proxy.logonRenewMyProxy()
+    timeleft = proxy.getTimeLeft( proxyPath )
+    if timeleft is not None and timeleft > 0:
+        return (True, proxyPath)
+    return (False, None)
