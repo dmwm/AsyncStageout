@@ -22,7 +22,6 @@ import re
 import uuid
 import pprint
 from WMCore.Database.CMSCouch import CouchServer
-from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from RestClient.ErrorHandling.RestClientExceptions import HTTPError
@@ -30,26 +29,7 @@ import dbs.apis.dbsClient as dbsClient
 from WMCore.Services.pycurl_manager import RequestHandler
 import cStringIO
 from AsyncStageOut import getDNFromUserName
-
-def getProxy(userdn, group, role, defaultDelegation, logger):
-    """
-    _getProxy_
-    """
-    logger.debug("Retrieving proxy for %s" % userdn)
-    config = defaultDelegation
-    config['userDN'] = userdn
-    config['group'] = group
-    config['role'] = role
-    proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
-    proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
+from AsyncStageOut import getProxy
 
 class PublisherWorker:
 
@@ -230,7 +210,7 @@ class PublisherWorker:
                 try:
                     response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception, ex:
-                    msg = "Error reading the status of %s from cache cache." % workflow
+                    msg = "Error reading the status of %s from cache." % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
@@ -241,6 +221,9 @@ class PublisherWorker:
                     res = json.loads(res_)
                     workflow_status = res['result'][0]['status']
                     self.logger.info("Workflow status is %s" % workflow_status)
+                except ValueError:
+                    self.logger.error("Workflow %s is removed from WM" % workflow)
+                    workflow_status = 'REMOVED'
                 except Exception, ex:
                     msg = "Error loading the status of %s !" % workflow
                     msg += str(ex)
@@ -248,7 +231,7 @@ class PublisherWorker:
                     self.logger.error(msg)
                     continue
 
-                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
+                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
                     query = {'reduce':True, 'key': user_wf['key']}
                     try:
                         last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']

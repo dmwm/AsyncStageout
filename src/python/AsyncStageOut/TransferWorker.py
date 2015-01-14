@@ -21,7 +21,7 @@ import traceback
 from WMCore.WMFactory import WMFactory
 import urllib
 import re
-from WMCore.Credential.Proxy import Proxy
+from AsyncStageOut import getProxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
@@ -58,27 +58,6 @@ def execute_command( command, logger, timeout ):
     rc = proc.returncode
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
     return stdout, rc
-
-def getProxy(userdn, group, role, defaultDelegation, logger):
-    """
-    _getProxy_
-    """
-    logger.debug("Retrieving proxy for %s" % userdn)
-    config = defaultDelegation
-    config['userDN'] = userdn
-    config['group'] = group
-    config['role'] = role
-    proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
-    proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
-
 
 class TransferWorker:
 
