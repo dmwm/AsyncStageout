@@ -14,7 +14,7 @@ import subprocess, os, errno
 import time
 import traceback
 from AsyncStageOut import getDNFromUserName
-from WMCore.Credential.Proxy import Proxy
+from AsyncStageOut import getProxy
 
 def execute_command( command, logger, timeout ):
     """
@@ -45,22 +45,6 @@ def execute_command( command, logger, timeout ):
     rc = proc.returncode
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
     return rc, stdout, stderr
-
-def getProxy(userdn, group, role, defaultDelegation, logger):
-    """
-    _getProxy_
-    """
-    logger.debug("Retrieving proxy for %s" % userdn)
-    proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
-    proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
 
 class CleanerDaemon(BaseWorkerThread):
     """
