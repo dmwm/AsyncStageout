@@ -130,6 +130,8 @@ config.FilesCleaner.filesCleaningPollingInterval = 14400
 config.FilesCleaner.opsProxy = opsProxy
 config.FilesCleaner.config_database = config_database
 config.FilesCleaner.config_couch_instance = couchUrl
+config.FilesCleaner.credentialDir = credentialDir
+config.FilesCleaner.serverDN = hostDN 
 config.component_('Statistics')
 config.Statistics.log_level = logging.INFO
 config.Statistics.componentDir = config.General.workDir
