@@ -660,8 +660,9 @@ class PublisherWorker:
             existing_output = destReadApi.listOutputConfigs(dataset=inputDataset)
             if not existing_output:
                 self.logger.error("Unable to list output config for input dataset %s." % inputDataset)
-            existing_output = existing_output[0]
-            global_tag = existing_output['global_tag']
+                global_tag = 'crab3_tag'
+            else:
+                global_tag = existing_output[0]['global_tag']
         else:
             self.logger.info("This publication appears to be for private MC.")
             primary_ds_type = 'mc'
