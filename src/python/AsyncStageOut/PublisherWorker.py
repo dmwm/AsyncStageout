@@ -631,10 +631,9 @@ class PublisherWorker:
                 self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
                                  (inputDataset, sourceURL, self.publish_migrate_url))
                 return [], [], []
-
             # Get basic data about the parent dataset
-            if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
-                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
+            if not existing_datasets[0]['dataset'] == inputDataset:
+                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information" % inputDataset)
                 return [], [], []
             primary_ds_type = existing_datasets[0]['primary_ds_type']
 
