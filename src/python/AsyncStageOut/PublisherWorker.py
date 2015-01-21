@@ -505,9 +505,9 @@ class PublisherWorker:
                                                                                                       len(existing_blocks), \
                                                                                                       len(source_blocks)))
             if blocks_to_migrate:
-                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(existing_blocks), \
-                                                                                                  ", ".join(existing_blocks), \
-                                                                                                  inputDataset) )
+                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(blocks_to_migrate), \
+                                                                                                  ", ".join(blocks_to_migrate), \
+                                                                                                  inputDataset))
                 should_migrate = True
         if should_migrate:
             data = {'migration_url': sourceURL, 'migration_input': inputDataset}
