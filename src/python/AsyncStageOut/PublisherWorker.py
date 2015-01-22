@@ -546,11 +546,11 @@ class PublisherWorker:
                 status = migrateApi.statusMigration(migration_rqst_id=id)
                 state = status[0].get("migration_status")
                 self.logger.debug("Migration status: %s" % state)
-                if state != 9 or state != 2:
-                    time.sleep(wait_time)
-
+                if state in [2, 9]:
+                    break
+                time.sleep(wait_time)
             if state == 9:
-                self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status)))
+                self.logger.info("Migration of %s has failed. Full status: %s" % (inputDataset, str(status)))
                 return []
             elif state == 2:
                 self.logger.info("Migration of %s is complete." % inputDataset)
