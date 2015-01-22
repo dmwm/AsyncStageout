@@ -460,7 +460,7 @@ class PublisherWorker:
         self.logger.info('Cleaning ends')
         return fail_files, new_toPublish
 
-    def format_file_3(self, file, output_config, dataset):
+    def format_file_3(self, file):
         nf = {'logical_file_name': file['lfn'],
               'file_type': 'EDM',
               'check_sum': unicode(file['cksum']),
@@ -729,7 +729,7 @@ class PublisherWorker:
             dbsFiles = []
             for file in files:
                 if not file['lfn'] in existingFiles:
-                    dbsFiles.append(self.format_file_3(file, output_config, dbsDatasetPath))
+                    dbsFiles.append(self.format_file_3(file))
                 published.append(file['lfn'])
             count = 0
             blockCount = 0
