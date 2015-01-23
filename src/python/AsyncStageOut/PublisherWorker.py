@@ -362,8 +362,8 @@ class PublisherWorker:
                 return [], []
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
         failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
-                                                 inputDataset=inputDataset, toPublish=toPublish,
-                                                 pnn=pnn, workflow=workflow)
+                                                      inputDataset=inputDataset, toPublish=toPublish,
+                                                      pnn=pnn, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
         return failed, done
 
@@ -482,86 +482,216 @@ class PublisherWorker:
         return nf
 
 
-    def migrateDBS3(self, migrateApi, destReadApi, sourceURL, inputDataset):
-
-        try:
-            existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True)
-        except HTTPError, he:
-            msg = str(he)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
-            self.logger.error("Request to list input dataset %s failed." % inputDataset)
-            return []
-        should_migrate = False
-        if not existing_datasets or (existing_datasets[0]['dataset'] != inputDataset):
-            should_migrate = True
-            self.logger.debug("Dataset %s must be migrated; not in the destination DBS." % inputDataset)
-        if not should_migrate:
-            # The dataset exists in the destination; make sure source and destination
-            # have the same blocks.
-            existing_blocks = set([i['block_name'] for i in destReadApi.listBlocks(dataset=inputDataset)])
-            proxy = os.environ.get("SOCKS5_PROXY")
-            sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
-            source_blocks = set([i['block_name'] for i in sourceApi.listBlocks(dataset=inputDataset)])
-            blocks_to_migrate = source_blocks - existing_blocks
-            self.logger.debug("Dataset %s in destination DBS with %d blocks; %d blocks in source." % (inputDataset, \
-                                                                                                      len(existing_blocks), \
-                                                                                                      len(source_blocks)))
-            if blocks_to_migrate:
-                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(blocks_to_migrate), \
-                                                                                                  ", ".join(blocks_to_migrate), \
-                                                                                                  inputDataset))
-                should_migrate = True
-        if should_migrate:
-            data = {'migration_url': sourceURL, 'migration_input': inputDataset}
-            self.logger.debug("About to submit migrate request for %s" % str(data))
-            try:
-                result = migrateApi.submitMigration(data)
-            except HTTPError, he:
-                if he.msg.find("Requested dataset %s is already in destination" % inputDataset) >= 0:
-                    self.logger.info("Migration API believes this dataset has already been migrated.")
-                    return destReadApi.listDatasets(dataset=inputDataset, detail=True)
-                self.logger.exception("Request to migrate %s failed." % inputDataset)
-                return []
-            self.logger.info("Result of migration request %s" % str(result))
-            id = result.get("migration_details", {}).get("migration_request_id")
-            if id == None:
-                self.logger.error("Migration request failed to submit.")
-                self.logger.error("Migration request results: %s" % str(result))
-                return []
-            self.logger.debug("Migration ID: %s" % id)
-            time.sleep(1)
-            # Wait for up to 300 seconds, then return to the main loop.  Note we don't
-            # fail or cancel anything.  Just retry later.
-            # States:
-            # 0=PENDING
-            # 1=IN PROGRESS
-            # 2=COMPLETED
-            # *=FAILED
-            # 9=Terminally FAILED
-            #
-            # In the case of failure, we expect the publisher daemon to try again in
-            # the future.
-            #
-            wait_time = 30
-            for i in range(10):
-                self.logger.debug("About to get migration request for %s." % id)
-                status = migrateApi.statusMigration(migration_rqst_id=id)
-                state = status[0].get("migration_status")
-                self.logger.debug("Migration status: %s" % state)
-                if state in [2, 9]:
-                    break
-                time.sleep(wait_time)
-            if state == 9:
-                self.logger.info("Migration of %s has failed. Full status: %s" % (inputDataset, str(status)))
-                return []
-            elif state == 2:
-                self.logger.info("Migration of %s is complete." % inputDataset)
-                existing_datasets = destReadApi.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
+    def migrateByBlockDBS3(self, migrateApi, destReadApi, sourceApi, inputDataset, inputBlocks = None):
+        """
+        Submit one migration request for each block that needs to be migrated.
+        If inputBlocks is missing, migrate the full dataset.
+        :return: - the output of destReadApi.listDatasets(dataset = inputDataset)
+                   if all migrations have finished ok,
+                 - an empty list otherwise.
+        """
+        if inputBlocks:
+            blocksToMigrate = set(inputBlocks)
+        else:
+            ## This is for the case to migrate the whole dataset, which we don't do
+            ## at this point Feb/2015 (we always pass inputBlocks).
+            ## Make a set with the blocks that need to be migrated.
+            blocksInDestDBS = set([block['block_name'] for block in destReadApi.listBlocks(dataset = inputDataset)])
+            blocksInSourceDBS = set([block['block_name'] for block in sourceApi.listBlocks(dataset = inputDataset)])
+            blocksToMigrate = blocksInSourceDBS - blocksInDestDBS
+            msg = "Dataset %s in destination DBS with %d blocks; %d blocks in source DBS."
+            msg = msg % (inputDataset, len(blocksInDestDBS), len(blocksInSourceDBS))
+            self.logger.info(msg)
+        numBlocksToMigrate = len(blocksToMigrate)
+        if numBlocksToMigrate == 0:
+            self.logger.info("No migration needed.") 
+        else:
+            msg = "Have to migrate %d blocks from %s to %s."
+            msg = msg % (numBlocksToMigrate, sourceApi.url, destReadApi.url)
+            self.logger.info(msg)
+            msg = "List of blocks to migrate:\n%s." % (", ".join(blocksToMigrate))
+            self.logger.debug(msg)
+            msg = "Submitting %d block migration requests to DBS3 ..." % (numBlocksToMigrate)
+            self.logger.info(msg)
+            numBlocksAtDestination = 0
+            numQueuedUnkwonIds = 0
+            numFailedSubmissions = 0
+            migrationIdsInProgress = []
+            for block in list(blocksToMigrate):
+                ## Submit migration request for this block.
+                (id, atDestination, alreadyQueued) = self.requestBlockMigration(migrateApi, sourceApi, block)
+                ## If the block is already in the destination DBS instance, we don't need
+                ## to monitor its migration status. If the migration request failed to be
+                ## submitted, we retry it next time. Otherwise, save the migration request
+                ## id in the list of migrations in progress.
+                if id == None:
+                    blocksToMigrate.remove(block)
+                    if atDestination:
+                        numBlocksAtDestination += 1
+                    elif alreadyQueued:
+                        numQueuedUnkwonIds += 1
+                    else:
+                        numFailedSubmissions += 1
+                else:
+                    migrationIdsInProgress.append(id)
+            if numBlocksAtDestination > 0:
+                msg = "%d blocks already in destination DBS." % (numBlocksAtDestination)
+                self.logger.info(msg)
+            if numFailedSubmissions > 0:
+                msg  = "%d block migration requests failed to be submitted." % (numFailedSubmissions)
+                msg += " Will retry them later."
+                self.logger.info(msg)
+            if numQueuedUnkwonIds > 0:
+                msg  = "%d block migration requests were already queued," % (numQueuedUnkwonIds)
+                msg += " but could not retrieve their request id."
+                self.logger.info(msg)
+            numMigrationsInProgress = len(migrationIdsInProgress)
+            if numMigrationsInProgress == 0:
+                msg = "No migrations in progress."
+                self.logger.info(msg)
             else:
-                self.logger.info("Migration of %s has taken too long - will delay publication." % inputDataset)
+                msg = "%d block migration requests successfully submitted." % (numMigrationsInProgress)
+                self.logger.info(msg)
+                msg = "List of migration requests ids: %s" % (migrationIdsInProgress)
+                self.logger.info(msg)
+                ## Wait for up to 300 seconds, then return to the main loop. Note that we
+                ## don't fail or cancel any migration request, but just retry it next time.
+                ## Migration states:
+                ##   0 = PENDING
+                ##   1 = IN PROGRESS
+                ##   2 = SUCCESS
+                ##   3 = FAILED (failed migrations are retried up to 3 times automatically)
+                ##   9 = Terminally FAILED
+                ## In the case of failure, we expect the publisher daemon to try again in
+                ## the future.
+                numFailedMigrations = 0
+                numSuccessfulMigrations = 0
+                waitTime = 30
+                numTimes = 10
+                msg = "Will monitor their status for up to %d seconds." % (waitTime * numTimes)
+                self.logger.info(msg)
+                for i in range(numTimes):
+                    msg  = "%d block migrations in progress." % (numMigrationsInProgress)
+                    msg += " Will check migrations status in %d seconds." % (waitTime)
+                    self.logger.info(msg)
+                    time.sleep(waitTime)
+                    ## Check the migration status of each block migration request.
+                    ## If a block migration has succeeded or terminally failes, remove the
+                    ## migration request id from the list of migration requests in progress.
+                    for id in list(migrationIdsInProgress):
+                        try:
+                            status = migrateApi.statusMigration(migration_rqst_id = id)
+                            state = status[0].get('migration_status')
+                            retry = status[0].get('retry_count')
+                        except Exception, ex:
+                            msg = "Could not get status for migration id %d:\n%s" % (id, ex.msg)
+                            self.logger.error(msg)
+                        else:
+                            if state == 2:
+                                msg = "Migration id %d succeeded." % (id)
+                                self.logger.info(msg)
+                                migrationIdsInProgress.remove(id)
+                                numSuccessfulMigrations += 1
+                            if state == 9:
+                                msg = "Migration id %d terminally failed." % (id)
+                                self.logger.info(msg)
+                                msg = "Full status for migration id %d:\n%s" % (id, str(status))
+                                self.logger.debug(msg)
+                                migrationIdsInProgress.remove(id)
+                                numFailedMigrations += 1
+                            if state == 3:
+                                if retry < 3:
+                                    msg = "Migration id %d failed (retry %d), but should be retried." % (id, retry)
+                                    self.logger.info(msg)
+                                else:
+                                    msg = "Migration id %d failed (retry %d)." % (id, retry)
+                                    self.logger.info(msg)
+                                    msg = "Full status for migration id %d:\n%s" % (id, str(status))
+                                    self.logger.debug(msg)
+                                    migrationIdsInProgress.remove(id)
+                                    numFailedMigrations += 1
+                    numMigrationsInProgress = len(migrationIdsInProgress)
+                    ## Stop waiting if there are no more migrations in progress.
+                    if numMigrationsInProgress == 0:
+                        break
+                ## If after the 300 seconds there are still some migrations in progress,
+                ## return an empty list (the caller function should interpret this as
+                ## "migration has failed or is not complete").
+                if numMigrationsInProgress > 0:
+                    msg = "Migration of %s has taken too long - will delay the publication." % (inputDataset)
+                    self.logger.info(msg)
+                    return []
+            msg = "Migration of %s has finished." % (inputDataset)
+            self.logger.info(msg)
+            msg  = "Migration status summary (from %d input blocks to migrate):" % (numBlocksToMigrate)
+            msg += " at destination = %d," % (numBlocksAtDestination)
+            msg += " succeeded = %d," % (numSuccessfulMigrations)
+            msg += " failed = %d," % (numFailedMigrations)
+            msg += " submission failed = %d," % (numFailedSubmissions)
+            msg += " queued with unknown id = %d." % (numQueuedUnkwonIds)
+            self.logger.info(msg)
+            ## If there were failed migrations, return an empty list (the caller
+            ## function should interpret this as "migration has failed or is not
+            ## complete").
+            if numFailedMigrations > 0 or numFailedSubmissions > 0:
+                msg = "Some blocks failed to be migrated."
+                self.logger.info(msg)
                 return []
-        return existing_datasets
+            if numQueuedUnkwonIds > 0:
+                msg = "Some block migrations were already queued, but failed to retrieve the request id."
+                self.logger.info(msg)
+                return []
+            if (numBlocksAtDestination + numSuccessfulMigrations) == numBlocksToMigrate:
+                msg = "Migration was successful."
+                self.logger.info(msg)
+        existingDatasets = destReadApi.listDatasets(dataset = inputDataset, detail = True, dataset_access_type = '*')
+        return existingDatasets
+
+
+    def requestBlockMigration(self, migrateApi, sourceApi, block):
+        """
+        Submit migration request for one block, checking the request output.
+        """
+        atDestination = False
+        alreadyQueued = False
+        id = None
+        msg = "Submiting migration request for block %s ..." % (block)
+        self.logger.info(msg)
+        sourceURL = sourceApi.url
+        data = {'migration_url': sourceURL, 'migration_input': block}
+        try:
+            result = migrateApi.submitMigration(data)
+        except HTTPError, he:
+            if "is already at destination" in he.msg:
+                msg = "Block is already at destination."
+                self.logger.info(msg)
+                atDestination = True
+            else:
+                msg  = "Request to migrate %s failed." % (block)
+                msg += "\nRequest detail: %s" % (data)
+                msg += "\nDBS3 exception: %s" % (he.msg)
+                self.logger.error(msg)
+        if not atDestination:
+            msg = "Result of migration request: %s" % (str(result))
+            self.logger.debug(msg)
+            id = result.get('migration_details', {}).get('migration_request_id')
+            report = result.get('migration_report')
+            if id == None:
+                msg  = "Migration request failed to submit."
+                msg += "\nMigration request results: %s" % (str(result))
+                self.logger.error(msg)
+            if "REQUEST ALREADY QUEUED" in report:
+                ## Request could be queued in another thread, then there would be
+                ## no id here, so look by block and use the id of the queued request.
+                alreadyQueued = True
+                try:
+                    status = migrateApi.statusMigration(block_name = block)
+                    id = status[0].get('migration_request_id')
+                except Exception:
+                    msg = "Could not get status for already queued migration of block %s." % (block)
+                    self.logger.error(msg)
+        return (id, atDestination, alreadyQueued)
+
 
     def createBulkBlock(self, output_config, processing_era_config, primds_config, \
                         dataset_config, acquisition_era_config, block_config, files):
@@ -610,8 +740,18 @@ class PublisherWorker:
         if not sourceURL.endswith(READ_PATH) and not sourceURL.endswith(READ_PATH_1):
             sourceURL += READ_PATH
 
-        self.logger.debug("Migrate datasets")
+        ## When looking up parents may need to look in global DBS as well.
+        globalURL = sourceURL
+        globalURL = globalURL.replace('phys01', 'global')
+        globalURL = globalURL.replace('phys02', 'global')
+        globalURL = globalURL.replace('phys03', 'global')
+        globalURL = globalURL.replace('caf', 'global')
+
         proxy = os.environ.get("SOCKS5_PROXY")
+        self.logger.debug("Source API URL: %s" % sourceURL)
+        sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
+        self.logger.debug("Global API URL: %s" % globalURL)
+        globalApi = dbsClient.DbsApi(url=globalURL, proxy=proxy)
         self.logger.debug("Destination API URL: %s" % self.publish_dbs_url)
         destApi = dbsClient.DbsApi(url=self.publish_dbs_url, proxy=proxy)
         self.logger.debug("Destination read API URL: %s" % self.publish_read_url)
@@ -620,26 +760,8 @@ class PublisherWorker:
         migrateApi = dbsClient.DbsApi(url=self.publish_migrate_url, proxy=proxy)
 
         if not noInput:
-            self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, self.publish_migrate_url))
-            # Submit migration
-            sourceApi = dbsClient.DbsApi(url=sourceURL)
-            try:
-                existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
-            except Exception, ex:
-                msg = str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.error(msg)
-                existing_datasets = []
-            if not existing_datasets:
-                self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
-                                 (inputDataset, sourceURL, self.publish_migrate_url))
-                return [], [], {}
-            # Get basic data about the parent dataset
-            if not existing_datasets[0]['dataset'] == inputDataset:
-                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information" % inputDataset)
-                return [], [], {}
+            existing_datasets = sourceApi.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
             primary_ds_type = existing_datasets[0]['primary_ds_type']
-
             # There's little chance this is correct, but it's our best guess for now.
             # CRAB2 uses 'crab2_tag' for all cases
             existing_output = destReadApi.listOutputConfigs(dataset=inputDataset)
@@ -658,7 +780,7 @@ class PublisherWorker:
 
         self.logger.debug("Starting iteration through files for publication")
         for datasetPath, files in toPublish.iteritems():
-            results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
+            results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0}
             dbsDatasetPath = datasetPath
 
             if not files:
@@ -679,29 +801,35 @@ class PublisherWorker:
             primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
             self.logger.debug("About to insert primary dataset: %s" % str(primds_config))
             destApi.insertPrimaryDataset(primds_config)
-            self.logger.debug("Successfully inserting primary dataset %s" % primName)
+            self.logger.debug("Successfully inserted primary dataset %s" % primName)
 
-            # Find any files already in the dataset so we can skip them
+            ## Find all (valid) files already published in this dataset.
             try:
-                existingDBSFiles = destReadApi.listFiles(dataset=dbsDatasetPath)
-                existingFiles = [x['logical_file_name'] for x in existingDBSFiles]
+                existingDBSFiles = destReadApi.listFiles(dataset = dbsDatasetPath, detail = True)
+                existingFiles = [f['logical_file_name'] for f in existingDBSFiles]
+                existingFilesValid = [f['logical_file_name'] for f in existingDBSFiles if f['is_file_valid']]
+                msg  = "Dataset %s already contains %d files" % (datasetPath, len(existingFiles))
+                msg += " (%d valid, %d invalid)." % (len(existingFilesValid), len(existingFiles) - len(existingFilesValid))
+                self.logger.info(msg)
                 results[datasetPath]['existingFiles'] = len(existingFiles)
             except Exception, ex:
-                msg =  "Error when listing files in DBS"
-                msg += str(ex)
-                msg += str(traceback.format_exc())
-                self.logger.exception(msg)
+                msg  = "Error when listing files in DBS: %s" % (str(ex))
+                msg += "\n%s" % (str(traceback.format_exc()))
+                self.logger.error(msg)
                 return [], [], {}
 
+            ## Is there anything to do?
             workToDo = False
-
-            # Is there anything to do?
             for file in files:
-                if not file['lfn'] in existingFiles:
+                if file['lfn'] not in existingFilesValid:
                     workToDo = True
                     break
+            ## If there is no work to do (because all the files that were requested
+            ## to be published are already published and in VALID state), put the
+            ## files in the list of published files and continue with the next dataset.
             if not workToDo:
-                self.logger.info("Nothing uploaded, %s has these files already or not enough files" % datasetPath)
+                msg = "Nothing uploaded, %s has these files already or not enough files." % (datasetPath)
+                self.logger.info(msg)
                 for file in files:
                     published.append(file['lfn'])
                 continue
@@ -725,15 +853,111 @@ class PublisherWorker:
                               'last_modification_date': int(time.time()),
                              }
             self.logger.info("About to insert dataset: %s" % str(dataset_config))
-            #destApi.insertDataset(dataset_config)
             del dataset_config['acquisition_era_name']
-            #dataset_config['acquisition_era'] = acquisition_era_config
 
+            ## List of all files that must (and can) be published.
             dbsFiles = []
+            ## Set of all the parent files from all the files requested to be published.
+            parentFiles = set()
+            ## Set of parent files for which the migration to the destination DBS instance
+            ## should be skipped (because they were not found in DBS).
+            parentsToSkip = set()
+            ## Set of parent files to migrate from the source DBS instance
+            ## to the destination DBS instance.
+            localParentBlocks = set()
+            ## Set of parent files to migrate from the global DBS instance
+            ## to the destination DBS instance.
+            globalParentBlocks = set()
+
+            ## Loop over all files to publish.
             for file in files:
-                if not file['lfn'] in existingFiles:
+                ## Check if this file was already published and if it is valid.
+                if (file['lfn'] not in existingFiles) or (file['lfn'] in invalidExistingFiles):
+                    ## We have a file to publish.
+                    ## Get the parent files and for each parent file do the following:
+                    ## 1) Add it to the list of parent files.
+                    ## 2) Find the block to which it belongs and insert that block name in
+                    ##    (one of) the set of blocks to be migrated to the destination DBS.
+                    for parentFile in list(file['parents']):
+                        if parentFile not in parentFiles:
+                            parentFiles.add(parentFile)
+                            ## Is this parent file already in the destination DBS instance?
+                            ## (If yes, then we don't have to migrate this block.)
+                            blocksDict = destReadApi.listBlocks(logical_file_name = parentFile)
+                            if not blocksDict:
+                                ## No, this parent file is not in the destination DBS instance.
+                                ## Maybe it is in the same DBS instance as the input dataset?
+                                blocksDict = sourceApi.listBlocks(logical_file_name = parentFile)
+                                if blocksDict:
+                                    ## Yes, this parent file is in the same DBS instance as the input dataset.
+                                    ## Add the corresponding block to the set of blocks from the source DBS
+                                    ## instance that have to be migrated to the destination DBS.
+                                    localParentBlocks.add(blocksDict[0]['block_name'])
+                                else:
+                                    ## No, this parent file is not in the same DBS instance as input dataset.
+                                    ## Maybe it is in global DBS instance?
+                                    blocksDict = globalApi.listBlocks(logical_file_name = parentFile)
+                                    if blocksDict:
+                                        ## Yes, this parent file is in global DBS instance.
+                                        ## Add the corresponding block to the set of blocks from global DBS
+                                        ## instance that have to be migrated to the destination DBS.
+                                        globalParentBlocks.add(blocksDict[0]['block_name'])
+                            ## If this parent file is not in the destination DBS instance, is not
+                            ## the source DBS instance, and is not in global DBS instance, then it
+                            ## means it is not known to DBS and therefore we can not migrate it.
+                            ## Put it in the set of parent files for which migration should be skipped.
+                            if not blocksDict:
+                                parentsToSkip.add(parentFile)
+                        ## If this parent file should not be migrated because it is not known to DBS,
+                        ## we remove it from the list of parents in the file-to-publish info dictionary
+                        ## (so that when publishing, this "parent" file will not appear as a parent).
+                        if parentFile in parentsToSkip:
+                            msg = "Skipping parent file %s, as it doesn't seem to be known to DBS." % (parentFile)
+                            self.logger.info(msg)
+                            if parentFile in file['parents']:
+                                file['parents'].remove(parentFile)
+                    ## Add this file to the list of files to be published.
                     dbsFiles.append(self.format_file_3(file))
                 published.append(file['lfn'])
+
+            ## Print a message with the number of files to publish.
+            msg = "Found %d files not already present in DBS which will be published." % len(dbsFiles)
+            self.logger.info(msg)
+
+            ## If there are no files to publish, continue with the next dataset.
+            if len(dbsFiles) == 0:
+                self.logger.info("Nothing to do for this dataset.")
+                continue
+
+            ## Migrate parent blocks before publishing.
+            ## First migrate the parent blocks that are in the same DBS instance
+            ## as the input dataset.
+            if localParentBlocks:
+                msg = "List of parent blocks that need to be migrated from %s:\n%s" % (sourceApi.url, localParentBlocks)
+                self.logger.info(msg)
+                existingDatasets = self.migrateByBlockDBS3(migrateApi, destReadApi, sourceApi, inputDataset, localParentBlocks)
+                if not existingDatasets:
+                    msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceApi.url, destReadApi.url)
+                    self.logger.info(msg)
+                    return [], [], {}
+                if not existingDatasets[0]['dataset'] == inputDataset:
+                    msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information." % (inputDataset)
+                    self.logger.info(msg)
+                    return [], [], {}
+            ## Then migrate the parent blocks that are in the global DBS instance.
+            if globalParentBlocks:
+                msg = "List of parent blocks that need to be migrated from %s:\n%s" % (globalApi.url, globalParentBlocks)
+                self.logger.info(msg)
+                existingDatasets = self.migrateByBlockDBS3(migrateApi, destReadApi, globalApi, inputDataset, globalParentBlocks)
+                if not existingDatasets:
+                    msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, globalApi.url, destReadApi.url)
+                    self.logger.info(msg)
+                    return [], [], {}
+                if not existingDatasets[0]['dataset'] == inputDataset:
+                    msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information" % (inputDataset)
+                    self.logger.info(msg)
+                    return [], [], {}
+
             count = 0
             blockCount = 0
             if len(dbsFiles) < self.max_files_per_block:
