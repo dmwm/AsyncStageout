@@ -680,7 +680,7 @@ class PublisherWorker:
 
             # Find any files already in the dataset so we can skip them
             try:
-                existingDBSFiles = destApi.listFiles(dataset=dbsDatasetPath)
+                existingDBSFiles = destReadApi.listFiles(dataset=dbsDatasetPath)
                 existingFiles = [x['logical_file_name'] for x in existingDBSFiles]
                 results[datasetPath]['existingFiles'] = len(existingFiles)
             except Exception, ex:
