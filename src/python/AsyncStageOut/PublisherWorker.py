@@ -656,7 +656,7 @@ class PublisherWorker:
         acquisition_era_name = "CRAB"
         processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
-        self.logger.debug("Starting iteratation through files for publication")
+        self.logger.debug("Starting iteration through files for publication")
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
             dbsDatasetPath = datasetPath
