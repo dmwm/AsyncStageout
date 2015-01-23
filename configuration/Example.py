@@ -82,7 +82,7 @@ config.component_('Reporter')
 config.Reporter.namespace = 'AsyncStageOut.Reporter'
 config.Reporter.componentDir = config.General.workDir
 config.component_('DBSPublisher')
-config.DBSPublisher.pollInterval = 600 
+config.DBSPublisher.pollInterval = 600
 config.DBSPublisher.publication_pool_size = 80
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
@@ -131,7 +131,7 @@ config.FilesCleaner.opsProxy = opsProxy
 config.FilesCleaner.config_database = config_database
 config.FilesCleaner.config_couch_instance = couchUrl
 config.FilesCleaner.credentialDir = credentialDir
-config.FilesCleaner.serverDN = hostDN 
+config.FilesCleaner.serverDN = hostDN
 config.component_('Statistics')
 config.Statistics.log_level = logging.INFO
 config.Statistics.componentDir = config.General.workDir
@@ -142,7 +142,7 @@ config.Statistics.config_couch_instance = couchUrl
 config.Statistics.couch_instance = couchUrl
 config.Statistics.pollStatInterval = 1800
 config.Statistics.couch_statinstance = statCouchUrl
-config.Statistics.expiration_days = 7
+config.Statistics.expiration_days = 15
 config.Statistics.statitics_database = statitics_database
 config.Statistics.opsProxy = opsProxy
 config.Statistics.mon_database = files_database

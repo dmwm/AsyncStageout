@@ -57,11 +57,11 @@ def getDNFromUserName(username, log, ckey = None, cert = None):
        log.error("SiteDB URL cannot be accessed")
        return dn
     return dn
-def getProxy(userdn, group, role, defaultDelegation, logger):
+def getProxy(defaultDelegation, logger):
     """
     _getProxy_
     """
-    log.debug("Retrieving proxy for %s" % userdn)
+    log.debug("Retrieving proxy for %s" % defaultDelegation['userDN'])
     proxy = Proxy(defaultDelegation)
     proxyPath = proxy.getProxyFilename( True )
     timeleft = proxy.getTimeLeft( proxyPath )

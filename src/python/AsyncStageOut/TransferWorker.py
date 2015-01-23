@@ -118,7 +118,10 @@ class TransferWorker:
             defaultDelegation['server_key'] = self.config.serviceKey
         self.valid_proxy = False
         try:
-            self.valid_proxy, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+            defaultDelegation['userDN'] = self.userDN
+            defaultDelegation['group'] = self.group
+            defaultDelegation['role'] = self.role
+            self.valid_proxy, proxy = getProxy(defaultDelegation, self.logger)
             self.Uproxy=proxy;
         except Exception, ex:
             msg = "Error getting the user proxy"

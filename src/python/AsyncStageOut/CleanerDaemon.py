@@ -150,8 +150,8 @@ class CleanerDaemon(BaseWorkerThread):
                 if not lfn_to_proxy.has_key(user):
                     valid_proxy = False
                     try:
-                        userDN = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
-                        valid_proxy, userProxy = getProxy(userDN, "", "", self.defaultDelegation, self.logger)
+                        self.defaultDelegation['userDN'] = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
+                        valid_proxy, userProxy = getProxy(self.defaultDelegation, self.logger)
                     except Exception, ex:
                         msg = "Error getting the user proxy"
                         msg += str(ex)
