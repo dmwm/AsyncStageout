@@ -609,6 +609,8 @@ class PublisherWorker:
 
         self.logger.debug("Migrate datasets")
         proxy = os.environ.get("SOCKS5_PROXY")
+        self.logger.debug("Source API URL: %s" % sourceURL)
+        sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
         self.logger.debug("Destination API URL: %s" % self.publish_dbs_url)
         destApi = dbsClient.DbsApi(url=self.publish_dbs_url, proxy=proxy)
         self.logger.debug("Destination read API URL: %s" % self.publish_read_url)
@@ -619,7 +621,6 @@ class PublisherWorker:
         if not noInput:
             self.logger.debug("Submit migration from source DBS %s to destination %s." % (sourceURL, self.publish_migrate_url))
             # Submit migration
-            sourceApi = dbsClient.DbsApi(url=sourceURL)
             try:
                 existing_datasets = self.migrateDBS3(migrateApi, destReadApi, sourceURL, inputDataset)
             except Exception, ex:
@@ -635,8 +636,9 @@ class PublisherWorker:
             if not existing_datasets[0]['dataset'] == inputDataset:
                 self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information" % inputDataset)
                 return [], [], []
+            ## Get the primary dataset type from the input dataset in the source DBS instance.
+            existing_datasets = sourceApi.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
             primary_ds_type = existing_datasets[0]['primary_ds_type']
-
             # There's little chance this is correct, but it's our best guess for now.
             # CRAB2 uses 'crab2_tag' for all cases
             existing_output = destReadApi.listOutputConfigs(dataset=inputDataset)
