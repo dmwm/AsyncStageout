@@ -103,7 +103,7 @@ inputs.popolate = function() {
     var acqfile = [];
     var resubfile = [];
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/filesCountByTask?stale=ok&group_level=2", false);
+    xmlhttp.open("GET", "../MonitorFilesCount/_view/filesCountByTask?stale=ok&group_level=2", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     for (i in response) {
@@ -120,7 +120,7 @@ inputs.popolate = function() {
             inputs.labels.push(response[i].key[0]);
             inputs.data.push(value);
             inputs.info.push(rowinfo);
-        }        
+        }
     }
     inputs.stacked.push(donefile);
     inputs.stacked.push(failfile);
