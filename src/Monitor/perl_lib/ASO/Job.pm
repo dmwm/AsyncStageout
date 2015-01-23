@@ -148,7 +148,7 @@ sub Files
   my $self = shift;
   return $self->{FILES} unless @_;
   foreach ( @_ ) {
-    $self->{FILES}{ $_->SOURCE } = $_;
+    $self->{FILES}{ $_->DESTINATION } = $_;
   }
 }
 
