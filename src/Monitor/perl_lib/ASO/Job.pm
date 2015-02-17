@@ -42,7 +42,7 @@ our %exit_states =
 	  Active		=> 0,
 	  Ready			=> 0,
 	  Done			=> 1,
-	  DoneWithErrors	=> 0,
+	  DoneWithErrors	=> 1,
 	  Failed		=> 1,
 	  Finishing		=> 0,
 	  Finished		=> 1,
@@ -138,6 +138,8 @@ sub State
     my $oldstate = $self->{STATE};
     $self->{STATE} = $state;
     $self->{TIMESTAMP} = $timestamp || time;
+    print "Job ",$self->{ID}," state changed from $oldstate to $state at ",($timestamp || time),"\n";
+print "Current raw output:\n",$self->RawOutput(),"\n";
     return $oldstate;
   }
   return undef;
