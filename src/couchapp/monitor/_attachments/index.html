@@ -298,7 +298,7 @@ inpute.popolate = function() {
     var startkey = getDateTimeKey(startd,"view");
     var endkey = getDateTimeKey(endd,"view");
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/endedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+    xmlhttp.open("GET", "../MonitorStartedEnded/_view/endedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     var rs = 0;
@@ -336,7 +336,7 @@ inputs.popolate = function() {
     var startkey = getDateTimeKey(startd,"view");
     var endkey = getDateTimeKey(endd,"view");
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/startedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
+    xmlhttp.open("GET", "../MonitorStartedEnded/_view/startedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey + "]", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     var rs = 0;
@@ -374,7 +374,7 @@ inputes.popolate = function() {
     var startkey = getDateTimeKey(startd,"view");
     var endkey = getDateTimeKey(endd,"view");
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/endedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey +"]", false);
+    xmlhttp.open("GET", "../MonitorStartedEnded/_view/endedSizeByTime?stale=ok&group_level=4&startkey=[" + startkey + "]&endkey=[" + endkey +"]", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     var rs = 0;

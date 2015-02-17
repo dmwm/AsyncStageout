@@ -21,7 +21,7 @@ import traceback
 from WMCore.WMFactory import WMFactory
 import urllib
 import re
-from WMCore.Credential.Proxy import Proxy
+from AsyncStageOut import getProxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
@@ -58,27 +58,6 @@ def execute_command( command, logger, timeout ):
     rc = proc.returncode
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
     return stdout, rc
-
-def getProxy(userdn, group, role, defaultDelegation, logger):
-    """
-    _getProxy_
-    """
-    logger.debug("Retrieving proxy for %s" % userdn)
-    config = defaultDelegation
-    config['userDN'] = userdn
-    config['group'] = group
-    config['role'] = role
-    proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
-    proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
-
 
 class TransferWorker:
 
@@ -139,7 +118,10 @@ class TransferWorker:
             defaultDelegation['server_key'] = self.config.serviceKey
         self.valid_proxy = False
         try:
-            self.valid_proxy, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+            defaultDelegation['userDN'] = self.userDN
+            defaultDelegation['group'] = self.group
+            defaultDelegation['role'] = self.role
+            self.valid_proxy, proxy = getProxy(defaultDelegation, self.logger)
             self.Uproxy=proxy;
         except Exception, ex:
             msg = "Error getting the user proxy"
@@ -326,7 +308,7 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":"{\'issuer\': \'ASO\'}","spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
             pairs = []
             for SrcDest in copyjob:
                 pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')

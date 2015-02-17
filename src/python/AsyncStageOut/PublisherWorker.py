@@ -22,7 +22,6 @@ import re
 import uuid
 import pprint
 from WMCore.Database.CMSCouch import CouchServer
-from WMCore.Credential.Proxy import Proxy
 from AsyncStageOut import getHashLfn
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from RestClient.ErrorHandling.RestClientExceptions import HTTPError
@@ -30,26 +29,7 @@ import dbs.apis.dbsClient as dbsClient
 from WMCore.Services.pycurl_manager import RequestHandler
 import cStringIO
 from AsyncStageOut import getDNFromUserName
-
-def getProxy(userdn, group, role, defaultDelegation, logger):
-    """
-    _getProxy_
-    """
-    logger.debug("Retrieving proxy for %s" % userdn)
-    config = defaultDelegation
-    config['userDN'] = userdn
-    config['group'] = group
-    config['role'] = role
-    proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
-    proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
-    if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
+from AsyncStageOut import getProxy
 
 class PublisherWorker:
 
@@ -105,7 +85,10 @@ class PublisherWorker:
         valid = False
         try:
             if not os.getenv("TEST_ASO"):
-                valid, proxy = getProxy(self.userDN, self.group, self.role, defaultDelegation, self.logger)
+                defaultDelegation['userDN'] = self.userDN
+                defaultDelegation['group'] = self.group
+                defaultDelegation['role'] = self.role
+                valid, proxy = getProxy(defaultDelegation, self.logger)
         except Exception, ex:
             msg =  "Error getting the user proxy"
             msg += str(ex)
@@ -230,7 +213,7 @@ class PublisherWorker:
                 try:
                     response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception, ex:
-                    msg = "Error reading the status of %s from cache cache." % workflow
+                    msg = "Error reading the status of %s from cache." % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
@@ -241,6 +224,9 @@ class PublisherWorker:
                     res = json.loads(res_)
                     workflow_status = res['result'][0]['status']
                     self.logger.info("Workflow status is %s" % workflow_status)
+                except ValueError:
+                    self.logger.error("Workflow %s is removed from WM" % workflow)
+                    workflow_status = 'REMOVED'
                 except Exception, ex:
                     msg = "Error loading the status of %s !" % workflow
                     msg += str(ex)
@@ -248,7 +234,7 @@ class PublisherWorker:
                     self.logger.error(msg)
                     continue
 
-                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED']:
+                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
                     query = {'reduce':True, 'key': user_wf['key']}
                     try:
                         last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
@@ -477,7 +463,7 @@ class PublisherWorker:
         self.logger.info('Cleaning ends')
         return fail_files, new_toPublish
 
-    def format_file_3(self, file, output_config, dataset):
+    def format_file_3(self, file):
         nf = {'logical_file_name': file['lfn'],
               'file_type': 'EDM',
               'check_sum': unicode(file['cksum']),
@@ -522,9 +508,9 @@ class PublisherWorker:
                                                                                                       len(existing_blocks), \
                                                                                                       len(source_blocks)))
             if blocks_to_migrate:
-                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(existing_blocks), \
-                                                                                                  ", ".join(existing_blocks), \
-                                                                                                  inputDataset) )
+                self.logger.debug("%d blocks (%s) must be migrated to destination dataset %s." % (len(blocks_to_migrate), \
+                                                                                                  ", ".join(blocks_to_migrate), \
+                                                                                                  inputDataset))
                 should_migrate = True
         if should_migrate:
             data = {'migration_url': sourceURL, 'migration_input': inputDataset}
@@ -563,11 +549,11 @@ class PublisherWorker:
                 status = migrateApi.statusMigration(migration_rqst_id=id)
                 state = status[0].get("migration_status")
                 self.logger.debug("Migration status: %s" % state)
-                if state != 9 or state != 2:
-                    time.sleep(wait_time)
-
+                if state in [2, 9]:
+                    break
+                time.sleep(wait_time)
             if state == 9:
-                self.logger.info("Migration of %s has failed.  Full status: %s" % (inputDataset, str(status)))
+                self.logger.info("Migration of %s has failed. Full status: %s" % (inputDataset, str(status)))
                 return []
             elif state == 2:
                 self.logger.info("Migration of %s is complete." % inputDataset)
@@ -647,12 +633,11 @@ class PublisherWorker:
             if not existing_datasets:
                 self.logger.info("Failed to migrate %s from %s to %s; not publishing any files." % \
                                  (inputDataset, sourceURL, self.publish_migrate_url))
-                return [], [], []
-
+                return [], [], {}
             # Get basic data about the parent dataset
-            if not (existing_datasets and existing_datasets[0]['dataset'] == inputDataset):
-                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information")
-                return [], [], []
+            if not existing_datasets[0]['dataset'] == inputDataset:
+                self.logger.error("Inconsistent state: %s migrated, but listDatasets didn't return any information" % inputDataset)
+                return [], [], {}
             primary_ds_type = existing_datasets[0]['primary_ds_type']
 
             # There's little chance this is correct, but it's our best guess for now.
@@ -660,8 +645,9 @@ class PublisherWorker:
             existing_output = destReadApi.listOutputConfigs(dataset=inputDataset)
             if not existing_output:
                 self.logger.error("Unable to list output config for input dataset %s." % inputDataset)
-            existing_output = existing_output[0]
-            global_tag = existing_output['global_tag']
+                global_tag = 'crab3_tag'
+            else:
+                global_tag = existing_output[0]['global_tag']
         else:
             self.logger.info("This publication appears to be for private MC.")
             primary_ds_type = 'mc'
@@ -670,7 +656,7 @@ class PublisherWorker:
         acquisition_era_name = "CRAB"
         processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
-        self.logger.debug("Starting iteratation through files for publication")
+        self.logger.debug("Starting iteration through files for publication")
         for datasetPath, files in toPublish.iteritems():
             results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0,}
             dbsDatasetPath = datasetPath
@@ -697,7 +683,7 @@ class PublisherWorker:
 
             # Find any files already in the dataset so we can skip them
             try:
-                existingDBSFiles = destApi.listFiles(dataset=dbsDatasetPath)
+                existingDBSFiles = destReadApi.listFiles(dataset=dbsDatasetPath)
                 existingFiles = [x['logical_file_name'] for x in existingDBSFiles]
                 results[datasetPath]['existingFiles'] = len(existingFiles)
             except Exception, ex:
@@ -705,7 +691,7 @@ class PublisherWorker:
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.exception(msg)
-                return [], [], []
+                return [], [], {}
 
             workToDo = False
 
@@ -746,7 +732,7 @@ class PublisherWorker:
             dbsFiles = []
             for file in files:
                 if not file['lfn'] in existingFiles:
-                    dbsFiles.append(self.format_file_3(file, output_config, dbsDatasetPath))
+                    dbsFiles.append(self.format_file_3(file))
                 published.append(file['lfn'])
             count = 0
             blockCount = 0

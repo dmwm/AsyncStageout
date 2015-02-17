@@ -32,7 +32,7 @@ popolate = function() {
     var failfile = [];
     var otherfile = [];
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/filesCountByDestSource?stale=ok&group_level=2", false);
+    xmlhttp.open("GET", "../MonitorFilesCount/_view/filesCountByDestSource?stale=ok&group_level=2", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     for (i=0; i<response.length; i++) {
@@ -53,7 +53,7 @@ inputm.popolate = function() {
     var failfile = [];
     var otherfile = [];
     xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", "_view/filesCountByDestSource?stale=ok&group_level=2", false);
+    xmlhttp.open("GET", "../MonitorFilesCount/_view/filesCountByDestSource?stale=ok&group_level=2", false);
     xmlhttp.send();
     var response = eval("(" + xmlhttp.responseText + ")")["rows"];
     for (r in response) {
