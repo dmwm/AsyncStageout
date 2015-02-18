@@ -57,7 +57,8 @@ def getDNFromUserName(username, log, ckey = None, cert = None):
        log.error("SiteDB URL cannot be accessed")
        return dn
     return dn
-def getProxy(defaultDelegation, logger):
+
+def getProxy(defaultDelegation, log):
     """
     _getProxy_
     """
