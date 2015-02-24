@@ -162,7 +162,7 @@ class PublisherWorker:
             wf_jobs_endtime = []
             workflow_status = ''
             workToDo = False
-            query = {'reduce':False, 'key': user_wf['key'], 'stale': 'ok'}
+            query = {'reduce':False, 'key': user_wf['key']}#'stale': 'ok'}
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
@@ -504,7 +504,7 @@ class PublisherWorker:
             self.logger.info(msg)
         numBlocksToMigrate = len(blocksToMigrate)
         if numBlocksToMigrate == 0:
-            self.logger.info("No migration needed.") 
+            self.logger.info("No migration needed.")
         else:
             msg = "Have to migrate %d blocks from %s to %s."
             msg = msg % (numBlocksToMigrate, sourceApi.url, destReadApi.url)
