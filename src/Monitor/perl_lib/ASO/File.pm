@@ -58,8 +58,7 @@ our %exit_states =
 	  abandoned     => 2,
 	);
 
-sub new
-{
+sub new {
   my $proto = shift;
   my $class = ref($proto) || $proto;
   my $self  = ref($proto) ? $class->SUPER::new(@_) : {};
@@ -79,8 +78,7 @@ sub new
   return $self;
 }
 
-sub AUTOLOAD
-{
+sub AUTOLOAD {
   my $self = shift;
   my $attr = our $AUTOLOAD;
   $attr =~ s/.*:://;
@@ -98,8 +96,7 @@ sub AUTOLOAD
   $self->$parent(@_);
 }
 
-sub Log
-{
+sub Log {
   my $self = shift;
   push @{$self->{LOG}}, join(' ',@_,"\n") if @_;
 
@@ -108,8 +105,7 @@ sub Log
   return join('',@{$self->{LOG}});
 }
 
-sub State
-{
+sub State {
   my ($self,$state,$time) = @_;
   return $self->{STATE} unless $state;
   return undef if ( $state eq $self->{STATE} );
@@ -122,8 +118,7 @@ sub State
 
 sub ExitStates { return \%ASO::File::exit_states; }
 
-sub Retry
-{
+sub Retry {
   my $self = shift;
   $self->{RETRIES}++;
   return 0 if $self->{RETRIES} >= $self->{MAX_TRIES};
@@ -132,21 +127,18 @@ sub Retry
   return $self->{RETRIES};
 }
 
-sub Retries
-{
+sub Retries {
   my $self = shift;
   return $self->{RETRIES};
 }
 
-sub Nice
-{
+sub Nice {
   my $self = shift;
   my $nice = shift || -4;
   $self->{PRIORITY} += $nice;
 }
 
-sub WriteLog
-{
+sub WriteLog {
   my $self = shift;
   my $dir = shift;
   return unless $dir;
@@ -164,114 +156,98 @@ sub WriteLog
   close $fh;
 }
 
-sub Timeout
-{
+sub Timeout {
   my $self = shift;
   $self->{TIMEOUT} = shift if @_;
   return $self->{TIMEOUT};
 }
 
-sub Priority
-{
+sub Priority {
   my $self = shift;
   $self->{PRIORITY} = shift if @_;
   return $self->{PRIORITY};
 }
 
-sub MaxTries
-{
+sub MaxTries {
   my $self = shift;
   $self->{MAX_TRIES} = shift if @_;
   return $self->{MAX_TRIES};
 }
 
-sub Source
-{
+sub Source {
   my $self = shift;
   $self->{SOURCE} = shift if @_;
   return $self->{SOURCE};
 }
 
-sub ChecksumType
-{
+sub ChecksumType {
   my $self = shift;
   $self->{CHECKSUM_TYPE} = shift if @_;
   return $self->{CHECKSUM_TYPE};
 }
 
-sub ChecksumValue
-{
+sub ChecksumValue {
   my $self = shift;
   $self->{CHECKSUM_VAL} = shift if @_;
   return $self->{CHECKSUM_VAL};
 }
 
-sub Destination
-{
+sub Destination {
   my $self = shift;
   $self->{DESTINATION} = shift if @_;
   return $self->{DESTINATION};   
 }
 
-sub TaskID
-{
+sub TaskID {
   my $self = shift;
   $self->{TASKID} = shift if @_;
   $self->{ME} = $self->{TASKID};
   return $self->{TASKID};
 }
 
-sub FromNode
-{
+sub FromNode {
   my $self = shift;
   $self->{FROM_NODE} = shift if @_;
   return $self->{FROM_NODE};
 }
 
-sub ToNode
-{
+sub ToNode {
   my $self = shift;
   $self->{TO_NODE} = shift if @_;
   return $self->{TO_NODE};
 }
 
-sub Workdir
-{
+sub Workdir {
   my $self = shift;
   $self->{WORKDIR} = shift if @_;
   return $self->{WORKDIR};
 }
 
-sub Timestamp
-{
+sub Timestamp {
   my $self = shift;
   $self->{TIMESTAMP} = shift if @_;
   return $self->{TIMESTAMP};
 }
 
-sub Reason
-{
+sub Reason {
   my $self = shift;
   $self->{REASON} = shift if @_;
   return $self->{REASON};
 }
 
-sub Duration
-{
+sub Duration {
   my $self = shift;
   $self->{DURATION} = shift if @_;
   return $self->{DURATION};
 }
 
-sub Start
-{
+sub Start {
   my $self = shift;
   $self->{START} = shift if @_;
   return $self->{START};
 }
 
-sub RetryMaxAge
-{
+sub RetryMaxAge {
   my $self = shift;
   $self->{RETRY_MAX_AGE} = shift if @_;
   return $self->{RETRY_MAX_AGE};

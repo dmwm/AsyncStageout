@@ -25,39 +25,41 @@ sub new {
   %args = @_;
   map { $args{uc $_} = delete $args{$_} } keys %args;
   %params = (
-          CONFIG		 => undef,
-	  CONFIG_POLL		 => 11,
-          INBOX			 => undef,
-          OUTBOX		 => undef,
-          WORKDIR		 => undef,
-          SERVICE		 => undef,
-          VERBOSE		 => 0,
-          DEBUG			 => 0,
-	  LOGFILE		 => undef,
+          CONFIG       => undef,
+      	  CONFIG_POLL  => 11,
+          INBOX	       => undef,
+          OUTBOX       => undef,
+          WORKDIR      => undef,
+          SERVICE      => undef,
+          VERBOSE      => 0,
+          DEBUG	       => 0,
+      	  LOGFILE      => undef,
+          JOB_LOGS     => undef,
+          LOG_ALL_JOBS => undef,
 
-	  JOBMANAGER		 => undef,
-	  JOB_PARALLELISM	 =>  4,       # Max number of monitoring jobs to run in parallel
-	  DEBUG_JOBS		 => undef,    # set true for debugging the job-manager
+      	  JOBMANAGER       => undef,
+      	  JOB_PARALLELISM  =>  4,       # Max number of monitoring jobs to run in parallel
+      	  DEBUG_JOBS       => undef,    # set true for debugging the job-manager
 
-          Q_INTERFACE		 => undef,    # A transfer queue interface object
-          Q_TIMEOUT		 => 60,       # Timeout for Q_INTERFACE commands
-          INBOX_POLL_INTERVAL	 => 10,       # Inbox polling interval
+          Q_INTERFACE	         => undef,    # A transfer queue interface object
+          Q_TIMEOUT	         => 60,       # Timeout for Q_INTERFACE commands
+          INBOX_POLL_INTERVAL    => 10,       # Inbox polling interval
           JOB_POLL_INTERVAL_SLOW => 10,       # Job polling interval
           JOB_POLL_INTERVAL_FAST =>  2,       # Job polling interval
           PER_JOB_POLL_INTERVAL  => 7,        # Maximum poll rate per job
           ME                     => 'ASOMon', # Arbitrary name for this object
           STATISTICS_INTERVAL    => 900,      # Interval for reporting statistics
-          QUEUE			 => undef,    # A POE::Queue of transfer jobs...
-          JOBS			 => {},       # A hash of Job-IDs.
+          QUEUE	                 => undef,    # A POE::Queue of transfer jobs...
+          JOBS	                 => {},       # A hash of Job-IDs.
           LAST_SUCCESSFULL_POLL  => time,     # When I last got a job status
           QUEUE_STATS_INTERVAL   => 60,       # How often do I report the job-queue length
-          REPORTER_INTERVAL	 => 30,       # How often to notify the Reporter of progress
+          REPORTER_INTERVAL      => 30,       # How often to notify the Reporter of progress
 
-	  FILE_TIMEOUT		 => undef,    # Timeout for file state-changes
-	  JOB_TIMEOUT		 => undef,    # Global job timeout
-	  KEEP_INPUTS		 => 0,        # Set non-zero to keep the input JSON files
+          FILE_TIMEOUT => undef,    # Timeout for file state-changes
+          JOB_TIMEOUT  => undef,    # Global job timeout
+          KEEP_INPUTS  => 0,        # Set non-zero to keep the input JSON files
 
-	  UNLINK		 => undef,    # Array of working JSON files to delete, after reporting...
+      	  UNLINK => undef,    # Array of working JSON files to delete, after reporting...
         );
   $self = \%params;
   $self->{STARTING} = 1; # Need this to recover jobs that were monitored but not reported
@@ -96,19 +98,19 @@ sub new {
   POE::Session->create(
     object_states => [
       $self => {
-        poll_inbox		=> 'poll_inbox',
-        _default		=> '_default',
-        _start			=> '_start',
-        _child			=> '_child',
+        poll_inbox => 'poll_inbox',
+        _default   => '_default',
+        _start	   => '_start',
+        _child	   => '_child',
 
-        poll_job		=> 'poll_job',
-        poll_job_postback	=> 'poll_job_postback',
-        report_job		=> 'report_job',
-        report_queue		=> 'report_queue',
-        notify_reporter		=> 'notify_reporter',
+        poll_job         => 'poll_job',
+        poll_job_postback=> 'poll_job_postback',
+        report_job       => 'report_job',
+        report_queue     => 'report_queue',
+        notify_reporter  => 'notify_reporter',
 
-        make_stats		=> 'make_stats',
-        re_read_config		=> 're_read_config',
+        make_stats     => 'make_stats',
+        re_read_config => 're_read_config',
 
       },
     ],
@@ -123,6 +125,8 @@ sub new {
     next if $_ eq 'FILE_TIMEOUT';
     next if $_ eq 'LOGFILE';
     next if $_ eq 'DEBUG_JOBS';
+    next if $_ eq 'JOB_LOGS';
+    next if $_ eq 'LOG_ALL_JOBS';
     next if $_ eq 'UNLINK';
     defined $self->{$_} or die "Fatal: $_ not defined after reading config file\n";
   }
@@ -223,11 +227,11 @@ sub ReadConfig {
   }
   if ( $self->{FAKE_TRANSFER_RATE} ) {
     my $rate = $self->{FAKE_TRANSFER_RATE}; my $units = 'B/s';
-    if ( $rate > 10240 ) { $rate /= 1024; $units = 'kB/s'; }
-    if ( $rate > 10240 ) { $rate /= 1024; $units = 'MB/s'; }
-    if ( $rate > 10240 ) { $rate /= 1024; $units = 'GB/s'; }
-    if ( $rate > 10240 ) { $rate /= 1024; $units = 'TB/s'; }
-    if ( $rate > 10240 ) { $rate /= 1024; $units = 'PB/s'; }
+    if ( $rate > 10240 ) { $rate = $rate / 1024; $units = 'kB/s'; }
+    if ( $rate > 10240 ) { $rate = $rate / 1024; $units = 'MB/s'; }
+    if ( $rate > 10240 ) { $rate = $rate / 1024; $units = 'GB/s'; }
+    if ( $rate > 10240 ) { $rate = $rate / 1024; $units = 'TB/s'; }
+    if ( $rate > 10240 ) { $rate = $rate / 1024; $units = 'PB/s'; }
     $rate = int(10*$rate)/10;
     $self->Logmsg("Faking transfers rate: ",$rate,' ',$units) if $self->{VERBOSE};
   }
@@ -270,8 +274,7 @@ sub _start {
   $kernel->delay_set('re_read_config',$self->{CONFIG_POLL});
 }
 
-sub make_stats
-{
+sub make_stats {
   my ( $self, $kernel ) = @_[ OBJECT, KERNEL ];
 
   my $summary = 'AGENT_STATISTICS ' . $self->{pmon}->FormatStats($self->{pmon}->ReadProcessStats);
@@ -323,23 +326,23 @@ sub read_directory {
     }
 
     $job = ASO::Job->new(
-	  ID		  => $h->{FTSJobid},
-	  STATE		  => 'undefined',
-	  SERVICE	  => $self->{SERVICE},
-	  TIMESTAMP	  => time,
-	  TIMEOUT	  => $self->{JOB_TIMEOUT},
-	  FILE_TIMEOUT    => $self->{FILE_TIMEOUT},
-	  VERBOSE	  => 1,
-	  X509_USER_PROXY => $h->{userProxyPath},
-	  USERNAME        => $h->{username},
-	);
+      ID         => $h->{FTSJobid},
+      STATE      => 'undefined',
+      SERVICE    => $self->{SERVICE},
+      TIMESTAMP  => time,
+      TIMEOUT    => $self->{JOB_TIMEOUT},
+      VERBOSE    => 1,
+      FILE_TIMEOUT    => $self->{FILE_TIMEOUT},
+      X509_USER_PROXY => $h->{userProxyPath},
+      USERNAME        => $h->{username},
+    );
     my (@Files,$i,$lenPFNs);
     $lenPFNs = scalar @{$h->{PFNs}};
     for ($i=0; $i<$lenPFNs; ++$i) {
       push @Files, ASO::File->new(
-	  DESTINATION	=> $h->{PFNs}[$i],
-	  SOURCE	=> 'LFN: ' . $h->{LFNs}[$i],
-	);
+        DESTINATION => $h->{PFNs}[$i],
+        SOURCE      => 'LFN: ' . $h->{LFNs}[$i],
+      );
       $self->{FN_MAP}{$h->{PFNs}[$i]} = $h->{LFNs}[$i];
     }
     $job->Files( @Files );
@@ -393,9 +396,9 @@ sub poll_job {
   ($priority,$id,$job) = $self->{QUEUE}->dequeue_next();
   $self->Logmsg('dequeue JOBID=',$job->ID) if $self->{VERBOSE};
   $logfile = '/dev/null';
-  if ( $self->{JOBLOGS} ) {
-    $logfile = $self->{JOBLOGS} . '/' . $job->ID . '.' . time() . '.log';
-  }
+
+  $self->dumpJobToLog($job) if $self->{LOG_ALL_JOBS};
+  
   $self->{JOBMANAGER}->addJob(
     $self->{POLL_JOB_POSTBACK},
     {
@@ -420,6 +423,7 @@ sub poll_job {
     $next_poll = $self->{JOB_POLL_INTERVAL_SLOW};
   }
 
+  $next_poll = 0 if $next_poll < 0;
   $self->Logmsg('Poll again in ',$next_poll,' seconds') if $self->{DEBUG};
   $kernel->delay_set('poll_job', $next_poll);
 }
@@ -427,7 +431,9 @@ sub poll_job {
 sub poll_job_postback {
   my ( $self, $kernel, $arg0, $arg1 ) = @_[ OBJECT, KERNEL, ARG0, ARG1 ];
   my ($result,$priority,$id,$job,$summary,$command,$error);
+  my ($nFiles,$nEnded,$nErrors);
 
+  $nFiles = $nEnded = $nErrors = 0;
   $error = '';
   $command = $arg1->[0];
   if ($command->{STATUS} ne "0") { 
@@ -440,8 +446,7 @@ sub poll_job_postback {
   $job = $command->{FTSJOB};
   $result = $self->{Q_INTERFACE}->ParseListJob( $job, $command->{STDOUT} );
 
-  if ( $self->{DEBUG} && $command->{DURATION} > 8 )
-  {
+  if ( $self->{DEBUG} && $command->{DURATION} > 8 ) {
     my $subtime = int(1000*$command->{DURATION})/1000;
     $self->Dbgmsg('ListJob took ',$subtime,' seconds');
   }
@@ -453,17 +458,19 @@ sub poll_job_postback {
   # Log the monitoring command once when the job enters the queue, or on every error
   if ( $job->VERBOSE || $error ) {
     # Log the command
+    my $t = time;
     my $logsafe_cmd = join(' ', @{$command->{CMD}});
     $logsafe_cmd =~ s/ -p [\S]+/ -p _censored_/;
-    $job->Log($logsafe_cmd);
+    $job->Log($t,$logsafe_cmd);
 
     # Log any extra info
-    foreach ( @{$result->{INFO}} ) { chomp; $job->Log($_) };
+    foreach ( @{$result->{INFO}} ) { chomp; $job->Log($t,$_) };
     
     # Log any error message
-    foreach ( split /\n/, $command->{STDERR} ) { chomp;  $job->Log($_) };
+    foreach ( split /\n/, $command->{STDERR} ) { chomp;  $job->Log($t,$_) };
     
     # Only do the verbose logging once
+    $job->Log($t,'Verbose logging ends...');
     $job->VERBOSE(0);
   };
 
@@ -477,66 +484,77 @@ sub poll_job_postback {
   if ($error) { # Job monitoring failed
     $self->Alert("ListJob for ",$job->ID," returned error: $error\n");
   } else { # Job monitoring was successful
-    $job->State($result->{JOB_STATE});
+    my $oldstate;
+    if ( $oldstate = $job->State($result->{JOB_STATE}) ) {
+      $self->Logmsg('Job ',$job->ID,' changed state from ',$oldstate,' to ',$job->State);
+    }
     $job->RawOutput(@{$result->{RAW_OUTPUT}});
 
     my $files = $job->Files;
     foreach ( keys %{$result->{FILES}} ) {
       my $s = $result->{FILES}{$_};
       my $f = $files->{$s->{DESTINATION}};
+      $nFiles++;
+      if ( ! $f ) {
+        # This is bad news, it means the job monitoring output got mangled.
+        $nErrors++;
+        $self->Logmsg("Job: ",$job->ID,", unrecognised file: ",$s->{DESTINATION});
 
-      if ( ! $f )
-      {
-        $f = ASO::File->new( %{$s} );
-        $job->Files($f);
+        # Record the error and skip this cycle, hope to get it right next time...
+        # Rather than just skip this cycle, continue monitoring, but don't report
+        # the job as completed if it's in a terminal state and not all files are
+        # in a terminal state yet.
+        $self->dumpJobToLog($job,'error-');
+        $priority = time() + $self->{PER_JOB_POLL_INTERVAL};
+        $self->Logmsg('requeue JOBID=',$job->ID," Priority=",$priority," after failed monitoring...");
+        $self->{QUEUE}->enqueue( $priority, $job );
+        return;
       }
 
-      if ( ! exists $f->ExitStates->{$s->{STATE}} )
-      { 
+      if ( ! exists $f->ExitStates->{$s->{STATE}} ) { 
         my $last = $self->{_new_file_states}{$s->{STATE}} || 0;
-        if ( time - $last > 300 )
-        {
+        if ( time - $last > 300 ) {
           $self->{_new_file_states}{$s->{STATE}} = time;
           $self->Alert("Unknown file-state: " . $s->{STATE});
         }
       }
-          
+
+      if ( $f->ExitStates->{$f->State} ) { $nEnded++; }
+
       if ( $_ = $f->State( $s->{STATE} ) ) {
+        $self->Logmsg("File: ",$s->{DESTINATION},", state: ",$s->{STATE});
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
         $job->Log($f->Timestamp,$f->Source,$f->Destination,$f->State );
         $job->{FILE_TIMESTAMP} = $f->Timestamp;
         if ( $f->ExitStates->{$f->State} ) {
 # This is a terminal state-change for the file. Log it to the Reporter
           $f->Reason($s->{REASON});
+          $self->Logmsg("File: ",$f->Destination," has reached an exit state (",$f->Reason,")");
           $self->add_file_report($job->{USERNAME},$f);
 
           $summary = join (' ',
                            map { "$_=\"" . $s->{$_} ."\"" }
                            qw / SOURCE DESTINATION DURATION RETRIES REASON /
                           );
-          $job->Log( time, 'file transfer details',$summary,"\n" );
-          $f->Log  ( time, 'file transfer details',$summary,"\n" );
-
+          $job->Log( $f->Timestamp, 'file transfer details',$summary,"\n" );
+          $f->Log  ( $f->Timestamp, 'file transfer details',$summary,"\n" );
           foreach ( qw / DURATION RETRIES REASON / ) { $f->$_($s->{$_}); }
         }
       }
     }
 
     $summary = join(' ',
-                    "ETC=" . $result->{ETC},
                     'JOB_STATE=' . $result->{JOB_STATE},
                     'FILE_STATES:',
                     map { $_.'='.$result->{FILE_STATES}{$_} }
                     sort keys %{$result->{FILE_STATES}}
                     );
-    if ( $job->Summary ne $summary )
-    {
-      $self->Dbgmsg('JOBID=',$job->ID," $summary") if $self->{DEBUG};
+    if ( $job->Summary ne $summary ) {
+      $self->Logmsg('JOBID=',$job->ID," $summary");
       $job->Summary($summary);
     }
 
-    if ( ! exists $job->ExitStates->{$result->{JOB_STATE}} )
-    { 
+    if ( ! exists $job->ExitStates->{$result->{JOB_STATE}} ) { 
       my $last = $self->{_new_job_states}{$result->{JOB_STATE}} || 0;
       if ( time - $last > 300 )
       {
@@ -545,7 +563,9 @@ sub poll_job_postback {
       }
     }
 
-    $job->State($result->{JOB_STATE});
+    if ( $oldstate = $job->State($result->{JOB_STATE}) ) {
+      $self->Logmsg('Job ',$job->ID,' changed state from ',$oldstate,' to ',$job->State);
+    }
   }
 
 # If the job hasn't finished in time, give up on it
@@ -581,10 +601,19 @@ sub poll_job_postback {
     }
   }
 
-  if ( $job->ExitStates->{$job->State} ) {
+# $self->Logmsg('JOBID=',$job->ID,' State=',$job->State,' nFiles=',$nFiles,' nEnded=',$nEnded,' nErrors=',$nErrors);
+
+  $self->Dbgmsg('JOBID=',$job->ID,' State=',$job->State) if ( $self->{DEBUG});
+  if ( $job->ExitStates->{$job->State} && ($nEnded == $nFiles) ) {
 #   If the job is done/dead/abandoned, report it, but don't re-queue it.
+    $self->Logmsg("Job: ",$job->ID," has reached an exit state (",$job->State,")");
     $kernel->yield('report_job',$job);
   } else {
+#   Either not an exit-state or there were errors and not all files are ended yet.
+#   If there were errors, report that before continuing.
+    if ( $nErrors ) {
+      $self->Logmsg('JOBID=',$job->ID,' nFiles=',$nFiles,' nEnded=',$nEnded,' nErrors=',$nErrors)
+    }
 #   Could get smart here: Check the rate at which files are completing in
 #   this job, adjust the offset (PER_JOB_POLL_INTERVAL) accordingly.
 #   In practice, this is not likely to be worth it. The fixed load on FTS is
@@ -593,7 +622,6 @@ sub poll_job_postback {
 #   a large number of jobs are being monitored (because faster transefers
 #   have to compete for job-slots with transfers that take forever)
     $priority = time() + $self->{PER_JOB_POLL_INTERVAL};
-
     $self->Dbgmsg('requeue JOBID=',$job->ID," Priority=",$priority) if $self->{DEBUG};
     $self->{QUEUE}->enqueue( $priority, $job );
   }
@@ -612,49 +640,52 @@ sub add_file_report {
        failure_reason => $reason,
        timestamp      => $file->Timestamp,
   };
+  $self->Logmsg("add_file_report: ",
+    join(', ',
+      map { $_ . '=' . $self->{REPORTER}{$user}{$file->Source}{$_} }
+      sort keys %{$self->{REPORTER}{$user}{$file->Source}}
+    )
+  );
 }
 
 sub notify_reporter {
   my ( $self, $kernel ) = @_[ OBJECT, KERNEL ];
   my ($len,$totlen,$output,$user,$userdir,$reporter,$h,$f,$k,$dst);
 
+  $kernel->delay_set('notify_reporter',$self->{REPORTER_INTERVAL});
   $totlen = 0;
-  if ( defined($reporter = $self->{REPORTER}) ) {
-    foreach $user ( keys %{$reporter} ) {
-      undef $h;
-      $len = 0;
-      foreach $dst ( keys %{$reporter->{$user}} ) {
-        $f = $reporter->{$user}{$dst};
-        foreach $k ( qw / LFN transferStatus timestamp / ) {
-          if ( !defined($f->{$k}) ) {
-            $self->Alert("File error: $k undefined for ",$dst);
-          }
-          push @{$h->{$k}}, $f->{$k};
+  $reporter = $self->{REPORTER};
+  return unless defined($reporter);
+  foreach $user ( keys %{$reporter} ) {
+    undef $h;
+    $len = 0;
+    foreach $dst ( keys %{$reporter->{$user}} ) {
+      $f = $reporter->{$user}{$dst};
+      foreach $k ( qw / LFN transferStatus timestamp / ) {
+        if ( !defined($f->{$k}) ) {
+          $self->Alert("File error: $k undefined for ",$dst);
         }
-#       push @{$h->{LFNs}},           $_->{LFN};
-#       push @{$h->{transferStatus}}, $_->{transferStatus};
-#       push @{$h->{failure_reason}}, $_->{failure_reason};
-#       push @{$h->{timestamp}},      $_->{timestamp};
-        $len++;
+        push @{$h->{$k}}, $f->{$k};
       }
-      $totlen += $len;
-      $h->{LFNs} = delete $h->{LFN};
-      $self->Logmsg("Notify Reporter of ",$len," files for $user") if $len;
-      $h->{username} = $user;
-
-      $userdir = $output = $self->{OUTBOX} . '/' . $user;
-      if ( ! -d $userdir ) {
-        eval {
-          mkpath $userdir;
-        };
-        die "Cannot make directory $userdir: $@\n" if $@
-      }
-      $output = $userdir . '/Reporter-' . time() . '.json';
-      open OUT, "> $output" or die "open $output: $!\n";
-      print OUT encode_json($h);
-      close OUT;
-      delete $self->{REPORTER}{$user};
+      $len++;
     }
+    $totlen += $len;
+    $h->{LFNs} = delete $h->{LFN};
+    $self->Logmsg("Notify Reporter of ",$len," files for $user") if $len;
+    $h->{username} = $user;
+
+    $userdir = $output = $self->{OUTBOX} . '/' . $user;
+    if ( ! -d $userdir ) {
+      eval {
+        mkpath $userdir;
+      };
+      die "Cannot make directory $userdir: $@\n" if $@
+    }
+    $output = $userdir . '/Reporter-' . time() . '.json';
+    open OUT, "> $output" or die "open $output: $!\n";
+    print OUT encode_json($h);
+    close OUT;
+    delete $self->{REPORTER}{$user};
   }
   $self->Logmsg("Notify Reporter of ",$totlen," files for all users") if $totlen;
 
@@ -663,8 +694,6 @@ sub notify_reporter {
     $self->Logmsg('Unlink ',$_);
     unlink $_;
   }
-
-  $kernel->delay_set('notify_reporter',$self->{REPORTER_INTERVAL});
 }
 
 sub report_job {
@@ -673,17 +702,23 @@ sub report_job {
 
   $self->Logmsg("JOBID=$jobid ended in state ",$job->State);
   $job->Log(time,'Job ended');
+  my $coreDump = 0;
   foreach ( values %{$job->Files} ) {
 #   Log the state-change in case it hasn't been logged already
+    $self->Logmsg("File: ",$_->Destination,", state: ",$_->State);
     if ( ! $_->ExitStates->{$_->State} ) {
       $_->Reason("job-ended " . $job->State);
       $_->State('Failed');
+      $self->Logmsg("...set state to 'Failed': ",$_->Destination,' ',$job->ID);
+      $coreDump = 1;
     }
     if ( !defined($_->Timestamp) ) {
       $_->Timestamp(time);
     }
     $self->add_file_report($job->{USERNAME},$_);
   }
+
+  $self->dumpJobToLog($job,'failed-') if $coreDump;
 
   $self->Dbgmsg('Log for ',$job->ID,"\n",
                 $job->Log,
@@ -698,15 +733,29 @@ sub report_job {
   push @{$self->{UNLINK}}, $jsonFile . '.done' unless $self->{KEEP_INPUTS};
 }
 
-sub isKnown
-{
+sub dumpJobToLog {
+  my ($self,$job,$logfile) = @_;
+  return unless $self->{JOB_LOGS};
+
+  $logfile = '' unless $logfile;
+  $logfile .= $job->ID . '.log';
+  $logfile = $self->{JOB_LOGS} . '/' . $logfile . '.gz';
+  open JOB_LOG, "| gzip - >$logfile" or die "Cannot open $logfile: $!\n";
+  $Data::Dumper::Terse=0;
+  $Data::Dumper::Indent=1;
+  print JOB_LOG Dumper($job),"\n";
+  close JOB_LOG;
+  $Data::Dumper::Terse=1;
+  $Data::Dumper::Indent=0;
+}
+
+sub isKnown {
   my ( $self, $job ) = @_;
   return 0 unless defined $self->{JOBS}{$job->ID};
   return 1;
 }
 
-sub QueueJob
-{
+sub QueueJob {
   my ( $self, $job, $priority ) = @_;
 
   return if $self->isKnown($job);
@@ -715,7 +764,6 @@ sub QueueJob
 
   $job->Timestamp(time);
 
-  $self->Dbgmsg('enqueue JOBID=',$job->ID," Priority=",$priority) if $self->{VERBOSE};
   $self->{QUEUE}->enqueue( $priority, $job );
   $self->{JOBS}{$job->ID} = $job;
 }
