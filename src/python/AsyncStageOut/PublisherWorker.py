@@ -162,7 +162,7 @@ class PublisherWorker:
             wf_jobs_endtime = []
             workflow_status = ''
             workToDo = False
-            query = {'reduce':False, 'key': user_wf['key'], 'stale': 'ok'}
+            query = {'reduce':False, 'key': user_wf['key']}#'stale': 'ok'}
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
