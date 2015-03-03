@@ -358,8 +358,9 @@ class PublisherWorker:
             return lfn_ready, []
         if not toPublish:
             if self.forceFailure:
-                self.logger.error("FWJR seems not in cache! Forcing the failure")
-                self.mark_failed(lfn_ready, True)
+                msg = "FWJR not found in cache! Forcing the failure"
+                self.logger.error(msg)
+                self.mark_failed(lfn_ready, msg, True)
             else:
                 return [], "", []
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
@@ -730,6 +731,7 @@ class PublisherWorker:
         failed = []
         published = []
         results = {}
+        failure_reason = ""
         blockSize = self.max_files_per_block
 
         # In the case of MC input (or something else which has no 'real' input dataset),
