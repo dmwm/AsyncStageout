@@ -257,11 +257,11 @@ class PublisherWorker:
 
             if lfn_ready:
                 pnn = str(file['value'][0])
-                failed_files, good_files = self.publish( str(file['key'][3]), \
+                failed_files, failure_reason, good_files = self.publish( str(file['key'][3]), \
                                                          self.userDN, str(file['key'][0]), \
                                                          str(file['value'][2]), str(file['value'][3]), \
                                                          str(pnn), lfn_ready )
-                self.mark_failed( failed_files )
+                self.mark_failed( failed_files, failure_reason )
                 self.mark_good( good_files )
 
         self.logger.info('Publications completed')
@@ -295,7 +295,7 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def mark_failed( self, files=[], forceFailure=False ):
+    def mark_failed( self, files=[], failure_reason="", forceFailure=False ):
         """
         Something failed for these files so increment the retry count
         """
@@ -323,6 +323,8 @@ class PublisherWorker:
                 data['publication_state'] = 'publishing'
             data['last_update'] = last_update
             data['retry'] = now
+            data['publication_failure_reason'] = failure_reason
+
             # Update the document in couch
             try:
                 updateUri = "/" + self.db.name + "/_design/DBSPublisher/_update/updateFile/" + docId
@@ -359,13 +361,13 @@ class PublisherWorker:
                 self.logger.error("FWJR seems not in cache! Forcing the failure")
                 self.mark_failed(lfn_ready, True)
             else:
-                return [], []
+                return [], "", []
         self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
-        failed, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
+        failed, failure_reason, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
                                                       inputDataset=inputDataset, toPublish=toPublish,
                                                       pnn=pnn, workflow=workflow)
         self.logger.debug("DBS publication results %s" % dbsResults)
-        return failed, done
+        return failed, failure_reason, done
 
     def readToPublishFiles(self, workflow, userhn, lfn_ready):
         """
@@ -504,7 +506,7 @@ class PublisherWorker:
             self.logger.info(msg)
         numBlocksToMigrate = len(blocksToMigrate)
         if numBlocksToMigrate == 0:
-            self.logger.info("No migration needed.") 
+            self.logger.info("No migration needed.")
         else:
             msg = "Have to migrate %d blocks from %s to %s."
             msg = msg % (numBlocksToMigrate, sourceApi.url, destReadApi.url)
@@ -939,11 +941,15 @@ class PublisherWorker:
                 if not existingDatasets:
                     msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceApi.url, destReadApi.url)
                     self.logger.info(msg)
-                    return [], [], {}
+                    failed += [i['logical_file_name'] for i in dbsFiles]
+                    failure_reason = msg
+                    return failed, failure_reason, [], {}
                 if not existingDatasets[0]['dataset'] == inputDataset:
                     msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information." % (inputDataset)
                     self.logger.info(msg)
-                    return [], [], {}
+                    failed += [i['logical_file_name'] for i in dbsFiles]
+                    failure_reason = msg
+                    return failed, failure_reason, [], {}
             ## Then migrate the parent blocks that are in the global DBS instance.
             if globalParentBlocks:
                 msg = "List of parent blocks that need to be migrated from %s:\n%s" % (globalApi.url, globalParentBlocks)
@@ -952,11 +958,15 @@ class PublisherWorker:
                 if not existingDatasets:
                     msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, globalApi.url, destReadApi.url)
                     self.logger.info(msg)
-                    return [], [], {}
+                    failed += [i['logical_file_name'] for i in dbsFiles]
+                    failure_reason = msg
+                    return failed, failure_reason, [], {}
                 if not existingDatasets[0]['dataset'] == inputDataset:
                     msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information" % (inputDataset)
                     self.logger.info(msg)
-                    return [], [], {}
+                    failed += [i['logical_file_name'] for i in dbsFiles]
+                    failure_reason = msg
+                    return failed, failure_reason, [], {}
 
             count = 0
             blockCount = 0
@@ -977,6 +987,7 @@ class PublisherWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
+                    failure_reason = str(ex)
             else:
                 while count < len(dbsFiles):
                     block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
@@ -1001,10 +1012,11 @@ class PublisherWorker:
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
+                        failure_reason = str(ex)
                         count += blockSize
             results[datasetPath]['files'] = len(dbsFiles) - len(failed)
             results[datasetPath]['blocks'] = blockCount
         published = filter(lambda x: x not in failed + publish_next_iteration, published)
         self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \
                          % (failed, published, publish_next_iteration, results))
-        return failed, published, results
+        return failed, failure_reason, published, results
