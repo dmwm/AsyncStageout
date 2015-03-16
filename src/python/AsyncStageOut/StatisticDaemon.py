@@ -132,7 +132,7 @@ class StatisticDaemon(BaseWorkerThread):
                  'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute],
                  'stale': 'ok'}
         try:
-            oldJobs = self.mon_db.loadView('monitor', 'endedSizeByTime', query)['rows']
+            oldJobs = self.mon_db.loadView('MonitorStartedEnded', 'endedSizeByTime', query)['rows']
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
