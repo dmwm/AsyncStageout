@@ -334,6 +334,7 @@ class TransferWorker:
                 self.logger.debug("Submission done")
                 self.logger.debug('Submission header status: %s' % response.status)
                 self.logger.debug('Submission header reason: %s' % response.reason)
+                self.logger.debug('Submission result %s' %  datares)
             except Exception, ex:
                 msg = "Error submitting to FTS3 REST interface: %s " % url
                 msg += str(ex)
@@ -344,9 +345,7 @@ class TransferWorker:
             if not submission_error:
                 res = {}
                 try:
-                    self.logger.debug('Submission result %s' %  datares)
                     res = json.loads(datares)
-                    res.has_key('job_id')
                 except Exception, ex:
                     msg = "Couldn't load json"
                     msg += str(ex)
@@ -355,6 +354,8 @@ class TransferWorker:
                     status_error = True
                 if res.has_key('job_id'):
                     fileId_list = []
+                    files_res = []
+                    files_ = {}
                     job_id = res['job_id']
                     file_url = self.fts_server_for_transfer + '/jobs/' + job_id +'/files'
                     self.logger.debug("Submitting to %s" % file_url)
@@ -363,24 +364,15 @@ class TransferWorker:
                         response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.userProxy, \
                                                               cert=self.userProxy, capath='/etc/grid-security/certificates', \
                                                               cainfo=self.userProxy, verbose=True)
-                    except Exception, ex:
-                        msg = "Error retrieveing files from FTS3 REST interface: %s " % file_url
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.debug(msg)
-                        status_error = True
-                    files_res = []
-                    fileId_list = []
-                    self.logger.debug("List files in job %s" % files_)
-                    file_buf.close()
-                    try:
                         files_res = json.loads(files_)
                     except Exception, ex:
-                        msg = "Couldn't load files in job json "
+                        msg = "Error retrieveing and decoding files from FTS3 REST interface: %s " % file_url
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.debug(msg)
                         status_error = True
+                    self.logger.debug("List files in job %s" % files_)
+                    file_buf.close()
                     for file_in_job in files_res:
                         if file_in_job.has_key('file_id'):
                             fileId_list.append(file_in_job['file_id'])
