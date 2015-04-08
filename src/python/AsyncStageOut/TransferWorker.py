@@ -117,22 +117,18 @@ class TransferWorker:
         if getattr(self.config, 'serviceKey', None):
             defaultDelegation['server_key'] = self.config.serviceKey
         self.valid_proxy = False
+        self.user_proxy = None
         try:
             defaultDelegation['userDN'] = self.userDN
             defaultDelegation['group'] = self.group
             defaultDelegation['role'] = self.role
-            self.valid_proxy, proxy = getProxy(defaultDelegation, self.logger)
-            self.Uproxy=proxy;
+            self.valid_proxy, self.user_proxy = getProxy(defaultDelegation, self.logger)
         except Exception, ex:
             msg = "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-        if self.valid_proxy:
-            self.userProxy = proxy
-        else:
-            self.logger.error('Did not get valid proxy. Setting proxy to ops proxy to contact the DB')
-            self.userProxy = config.opsProxy
+
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
         self.commandTimeout = 1200
@@ -149,7 +145,7 @@ class TransferWorker:
         c. deletes successfully transferred files from the DB
         """
         fts_url_delegation = self.fts_server_for_transfer.replace('8446','8443')
-        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.Uproxy, self.uiSetupScript,
+        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
                                                                         'glite-delegation-init', fts_url_delegation)
         init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
         self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
