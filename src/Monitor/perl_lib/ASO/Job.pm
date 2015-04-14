@@ -42,7 +42,7 @@ our %exit_states =
 	  Active		=> 0,
 	  Ready			=> 0,
 	  Done			=> 1,
-	  DoneWithErrors	=> 0,
+	  DoneWithErrors	=> 1,
 	  Failed		=> 1,
 	  Finishing		=> 0,
 	  Finished		=> 1,
@@ -76,8 +76,7 @@ sub new {
   return $self;
 }
 
-sub AUTOLOAD
-{
+sub AUTOLOAD {
   my $self = shift;
   my $attr = our $AUTOLOAD;
   $attr =~ s/.*:://;
@@ -95,18 +94,14 @@ sub AUTOLOAD
   $self->$parent(@_);
 }
 
-sub DESTROY
-{
+sub DESTROY {
   my $self = shift;
 
   return unless $self->{COPYJOB};
-# unlink $self->{COPYJOB} if -f $self->{COPYJOB};
-# print $self->{ID},": Unlinked ",$self->{COPYJOB},"\n";
   $self = {};
 }
 
-sub Log
-{
+sub Log {
   my $self = shift;
   push @{$self->{LOG}}, join(' ',@_,"\n") if @_;
 
@@ -114,8 +109,7 @@ sub Log
   return join('',@{$self->{LOG}});
 }
 
-sub RawOutput
-{
+sub RawOutput {
   my $self = shift;
   foreach ( @_ )
   {
@@ -127,8 +121,7 @@ sub RawOutput
   return join('',@{$self->{RAW_OUTPUT}});
 }
 
-sub State
-{
+sub State {
   my ($self,$state,$timestamp) = @_;
   return $self->{STATE} unless $state;
   return undef unless $self->{STATE};
@@ -138,13 +131,13 @@ sub State
     my $oldstate = $self->{STATE};
     $self->{STATE} = $state;
     $self->{TIMESTAMP} = $timestamp || time;
+    # print "Job ",$self->{ID}," state changed from $oldstate to $state at ",($timestamp || time),"\n";
     return $oldstate;
   }
   return undef;
 }
 
-sub Files
-{
+sub Files {
   my $self = shift;
   return $self->{FILES} unless @_;
   foreach ( @_ ) {
@@ -153,11 +146,9 @@ sub Files
 }
 
 use Data::Dumper;
-sub Dump
-{
+sub Dump {
   my $self = shift;
-  my ($file);
-  $file = $self->{WORKDIR} . '/job-' . $self->{ID} . '.dump';
+  my $file = $self->{WORKDIR} . '/job-' . $self->{ID} . '.dump';
 
   open DUMP, "> $file" or $self->Fatal("Cannot open $file for dump of job");
   print DUMP Dumper($self);
@@ -182,7 +173,6 @@ die "Prepare... to die...?\n";
 			  );
   }
 
-# print "Using temporary file $filename\n";
   $self->{COPYJOB} = $file;
   foreach ( values %{$self->{FILES}} )
   { my $checksum_str=(defined $_->CHECKSUM_TYPE && defined $_->CHECKSUM_VAL)?
@@ -195,78 +185,67 @@ die "Prepare... to die...?\n";
 
 sub ExitStates { return \%ASO::Job::exit_states; }
 
-sub ID
-{
+sub ID {
   my $self = shift;
   $self->{ID} = $self->{ME} = shift if @_;
   return $self->{ID};
 }
 
-sub Service
-{
+sub Service {
   my $self = shift;
   $self->{SERVICE} = shift if @_;
   return $self->{SERVICE};
 }
 
-sub Timeout
-{
+sub Timeout {
   my $self = shift;
   $self->{TIMEOUT} = shift if @_;
   return $self->{TIMEOUT};
 }
 
-sub FileTimeout
-{
+sub FileTimeout {
   my $self = shift;
   $self->{FILE_TIMEOUT} = shift if @_;
   return $self->{FILE_TIMEOUT};
 }
 
-sub Priority
-{
+sub Priority {
   my $self = shift;
   $self->{PRIORITY} = shift if @_;
   return $self->{PRIORITY};
 }
 
-sub Copyjob
-{
+sub Copyjob {
   my $self = shift;
   $self->{COPYJOB} = shift if @_;
   return $self->{COPYJOB};
 }
 
-sub Workdir
-{
+sub Workdir {
   my $self = shift;
   $self->{WORKDIR} = shift if @_;
   return $self->{WORKDIR};
 }
 
-sub Summary
-{
+sub Summary {
   my $self = shift;
   $self->{SUMMARY} = shift if @_;
   return $self->{SUMMARY};
 }
 
-sub Timestamp
-{
+sub Timestamp {
   my $self = shift;
   $self->{TIMESTAMP} = shift if @_;
   return $self->{TIMESTAMP};
 }
 
-sub FileTimestamp
-{
+sub FileTimestamp {
   my $self = shift;
   $self->{FILE_TIMESTAMP} = shift if @_;
   return $self->{FILE_TIMESTAMP};
 }
 
-sub Tempdir
-{
+sub Tempdir {
   my $self = shift;
   $self->{Tempdir} = shift if @_;
   return $self->{Tempdir};
