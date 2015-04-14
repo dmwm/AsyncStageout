@@ -1,5 +1,4 @@
 #!/usr/bin/env
-#pylint: disable-msg=C0103
 '''
 The TransferWorker does the following:
 
@@ -8,40 +7,35 @@ b. submit ftscp and watch
 c. delete successfully transferred files from the database
 
 There should be one worker per user transfer.
-
-
 '''
-from WMCore.Database.CMSCouch import CouchServer
-
 import time
 import logging
 import subprocess, os
 import datetime
 import traceback
-from WMCore.WMFactory import WMFactory
 import urllib
 import re
+import json
+from time import strftime
+import StringIO
+from WMCore.WMFactory import WMFactory
+from WMCore.Database.CMSCouch import CouchServer
+from WMCore.Services.pycurl_manager import RequestHandler
 from AsyncStageOut import getProxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
-import json
-from time import strftime
-import StringIO
-from WMCore.Services.pycurl_manager import RequestHandler
 
-def execute_command( command, logger, timeout ):
+def execute_command(command, logger, timeout):
     """
     _execute_command_
     Funtion to manage commands.
     """
     stdout, stderr, rc = None, None, 99999
-    proc = subprocess.Popen(
-            command, shell=True, cwd=os.environ['PWD'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-    )
+    proc = subprocess.Popen(command, shell=True, cwd=os.environ['PWD'],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            stdin=subprocess.PIPE,)
     t_beginning = time.time()
     seconds_passed = 0
     while True:
@@ -50,9 +44,8 @@ def execute_command( command, logger, timeout ):
         seconds_passed = time.time() - t_beginning
         if timeout and seconds_passed > timeout:
             proc.terminate()
-            logger.error('Timeout in %s execution.' % command )
+            logger.error('Timeout in %s execution.' % command)
             return stdout, rc
-
         time.sleep(0.1)
     stdout, stderr = proc.communicate()
     rc = proc.returncode
@@ -84,7 +77,7 @@ class TransferWorker:
             self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
         self.logger.debug("Trying to get DN for %s" % self.user)
         try:
-            self.userDN = getDNFromUserName(self.user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
+            self.userDN = getDNFromUserName(self.user, self.logger, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         except Exception, ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
@@ -95,17 +88,14 @@ class TransferWorker:
         if not self.userDN:
             self.init = False
             return
-        defaultDelegation = {
-                                  'logger': self.logger,
-                                  'credServerPath' : \
-                                      self.config.credentialDir,
-                                  # It will be moved to be getfrom couchDB
-                                  'myProxySvr': 'myproxy.cern.ch',
-                                  'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
-                                  'serverDN' : self.config.serverDN,
-                                  'uisource' : self.uiSetupScript,
-                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
-                            }
+        defaultDelegation = {'logger': self.logger,
+                             'credServerPath' : self.config.credentialDir,
+                             # It will be moved to be getfrom couchDB
+                             'myProxySvr': 'myproxy.cern.ch',
+                             'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
+                             'serverDN' : self.config.serverDN,
+                             'uisource' : self.uiSetupScript,
+                             'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)}
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
@@ -130,7 +120,7 @@ class TransferWorker:
             self.logger.error(msg)
 
         # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
+        self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
         self.commandTimeout = 1200
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
@@ -144,19 +134,19 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
-        fts_url_delegation = self.fts_server_for_transfer.replace('8446','8443')
+        fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
         command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
                                                                         'glite-delegation-init', fts_url_delegation)
         init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
         self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
         stdout, rc = execute_command(command, self.logger, self.commandTimeout)
         if not rc or not self.valid_proxy:
-          jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
-          self.logger.debug("Processing files for %s " %self.userProxy )
-          if jobs:
-             self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+            jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
+            self.logger.debug("Processing files for %s " %self.user_proxy)
+            if jobs:
+                self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
         else:
-          self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
+            self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
         self.logger.info('Transfers completed')
         return
 
@@ -193,18 +183,15 @@ class TransferWorker:
                 # this would be faster, but might use up less memory. Probably more
                 # complicated, though.
                 query = {'reduce':False,
-                     'limit': self.config.max_files_per_transfer,
-                     'key':[self.user, self.group, self.role, destination, source],
-                     'stale': 'ok'}
-                     # TODO: Set stale to ok since the results has been got in the last call.
+                         'limit': self.config.max_files_per_transfer,
+                         'key':[self.user, self.group, self.role, destination, source],
+                         'stale': 'ok'}
                 try:
                     active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
                 except:
                     continue
-                self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user,
-                                                                                 len(active_files),
-                                                                                 source,
-                                                                                  destination))
+                self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files),
+                                                                                 source, destination))
                 new_job = []
                 lfn_list = []
                 pfn_list = []
@@ -221,7 +208,7 @@ class TransferWorker:
                                                                            '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
                     else:
                         destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                           item['value'].replace('store/temp', 'store', 1)) )
+                                                                           item['value'].replace('store/temp', 'store', 1)))
                     self.logger.debug('PFNs prepared...')
                     if source_pfn and destination_pfn and self.valid_proxy:
                         acquired_file, dashboard_report = self.mark_acquired([item])
@@ -247,7 +234,7 @@ class TransferWorker:
                     jobs_lfn[(source, destination)] = lfn_list
                     jobs_pfn[(source, destination)] = pfn_list
                     jobs_report[(source, destination)] = dash_report
-                    self.logger.debug('FTS job ready for submission over  %s ---> %s ...going to next job' % (source, destination) )
+                    self.logger.debug('FTS job ready for submission over  %s ---> %s ...going to next job' % (source, destination))
 
             self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
             return jobs, jobs_lfn, jobs_pfn, jobs_report
@@ -269,8 +256,8 @@ class TransferWorker:
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
             # TODO: improve fix for wrong tfc on sites
             try:
-                if pfn.find("\\") != -1: pfn = pfn.replace("\\","")
-                if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp' :
+                if pfn.find("\\") != -1: pfn = pfn.replace("\\", "")
+                if pfn.split(':')[0] != 'srm' and pfn.split(':')[0] != 'gsiftp':
                     self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                     return None
             except IndexError:
@@ -297,12 +284,13 @@ class TransferWorker:
         """
         # Output: {"userProxyPath":"/path/to/proxy","LFNs":["lfn1","lfn2","lfn3"],"PFNs":["pfn1","pfn2","pfn3"],"FTSJobid":'id-of-fts-job', "username": 'username'}
         #Loop through all the jobs for the links we have
+        failure_reasons = []
         for link, copyjob in jobs.items():
             submission_error = False
             status_error = False
             fts_job = {}
             # Validate copyjob file before doing anything
-            self.logger.debug("Valid %s" % self.validate_copyjob(copyjob) )
+            self.logger.debug("Valid %s" % self.validate_copyjob(copyjob))
             if not self.validate_copyjob(copyjob): continue
             rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
             pairs = []
@@ -320,22 +308,23 @@ class TransferWorker:
             try:
                 connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
             except Exception, ex:
-                msg += str(ex)
+                msg = str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
             try:
-                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.userProxy, \
-                                                       cert=self.userProxy, capath='/etc/grid-security/certificates', \
-                                                       cainfo=self.userProxy, verbose=True)
+                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.user_proxy, \
+                                                       cert=self.user_proxy, capath='/etc/grid-security/certificates', \
+                                                       cainfo=self.user_proxy, verbose=True)
                 self.logger.debug("Submission done")
                 self.logger.debug('Submission header status: %s' % response.status)
                 self.logger.debug('Submission header reason: %s' % response.reason)
                 self.logger.debug('Submission result %s' %  datares)
             except Exception, ex:
-                msg = "Error submitting to FTS3 REST interface: %s " % url
+                msg = "Error submitting to FTS: %s " % url
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
+                failure_reasons.append(msg)
                 submission_error = True
             buf.close()
             if not submission_error:
@@ -343,11 +332,12 @@ class TransferWorker:
                 try:
                     res = json.loads(datares)
                 except Exception, ex:
-                    msg = "Couldn't load json"
+                    msg = "Couldn't load submission acknowledgment from FTS"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.debug(msg)
-                    status_error = True
+                    submission_error = True
+                    failure_reasons.append(msg)
                 if res.has_key('job_id'):
                     fileId_list = []
                     files_res = []
@@ -357,40 +347,43 @@ class TransferWorker:
                     self.logger.debug("Submitting to %s" % file_url)
                     file_buf = StringIO.StringIO()
                     try:
-                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.userProxy, \
-                                                              cert=self.userProxy, capath='/etc/grid-security/certificates', \
-                                                              cainfo=self.userProxy, verbose=True)
+                        response, files_ = connection.request(file_url, {}, heade, doseq=True, ckey=self.user_proxy, \
+                                                              cert=self.user_proxy, capath='/etc/grid-security/certificates', \
+                                                              cainfo=self.user_proxy, verbose=True)
                         files_res = json.loads(files_)
                     except Exception, ex:
-                        msg = "Error retrieveing and decoding files from FTS3 REST interface: %s " % file_url
+                        msg = "Error contacting FTS to retrieve file: %s " % file_url
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.debug(msg)
-                        status_error = True
+                        submission_error = True
+                        failure_reasons.append(msg)
                     self.logger.debug("List files in job %s" % files_)
                     file_buf.close()
                     for file_in_job in files_res:
                         if file_in_job.has_key('file_id'):
                             fileId_list.append(file_in_job['file_id'])
                         else:
-                            self.logger.debug("Job id could not be retrieved")
-                            status_error = True
+                            msg = "Could not load submitted file %s from FTS" % file_url
+                            self.logger.debug(msg)
+                            submission_error = True
+                            failure_reasons.append(msg)
                     self.logger.debug("File id list %s" % fileId_list)
-            if status_error or submission_error:
+            if submission_error:
                 self.logger.debug("Submission failed")
                 self.logger.info("Mark failed %s files" % len(jobs_lfn[link]))
                 self.logger.debug("Mark failed %s files" % jobs_lfn[link])
-                failed_files = self.mark_failed(jobs_lfn[link], force_fail = False, submission_error=True)
+                failed_files = self.mark_failed(jobs_lfn[link], force_fail=False, submission_error=True, failure_reasons=failure_reasons)
                 self.logger.info("Marked failed %s" % len(failed_files))
                 continue
-            fts_job['userProxyPath'] = self.userProxy
+            fts_job['userProxyPath'] = self.user_proxy
             fts_job['LFNs'] = jobs_lfn[link]
             fts_job['PFNs'] = jobs_pfn[link]
             fts_job['FTSJobid'] = job_id
             fts_job['files_id'] = fileId_list
             fts_job['username'] = self.user
             self.logger.debug("Creating json file %s in %s" % (fts_job, self.dropbox_dir))
-            ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid'] ), 'w')
+            ftsjob_file = open('%s/Monitor.%s.json' % (self.dropbox_dir, fts_job['FTSJobid']), 'w')
             jsondata = json.dumps(fts_job)
             ftsjob_file.write(jsondata)
             ftsjob_file.close()
@@ -408,7 +401,7 @@ class TransferWorker:
                 lfn_report['JobId'] = job_id
                 lfn_report['URL'] = self.fts_server_for_transfer
                 self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
-                dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']) , 'w')
+                dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']), 'w')
                 jsondata = json.dumps(lfn_report)
                 dash_job_file.write(jsondata)
                 dash_job_file.close()
@@ -435,7 +428,7 @@ class TransferWorker:
                 self.logger.debug("Marking acquired %s" % docId)
                 # Load document to get the retry_count
                 try:
-                    document = self.db.document( docId )
+                    document = self.db.document(docId)
                 except Exception, ex:
                     msg = "Error loading document from couch"
                     msg += str(ex)
@@ -449,7 +442,7 @@ class TransferWorker:
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
                     updateUri += "?" + urllib.urlencode(data)
                     try:
-                        self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                        self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                     except Exception, ex:
                         msg = "Error updating document in couch"
                         msg += str(ex)
@@ -472,7 +465,7 @@ class TransferWorker:
         """
         for lfn in files:
             try:
-                document = self.db.document( getHashLfn(lfn) )
+                document = self.db.document(getHashLfn(lfn))
             except Exception, ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
@@ -491,7 +484,7 @@ class TransferWorker:
                     data['last_update'] = last_update
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
                     updateUri += "?" + urllib.urlencode(data)
-                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                    self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                 except Exception, ex:
                     msg = "Error updating document in couch"
                     msg += str(ex)
@@ -508,7 +501,7 @@ class TransferWorker:
                     continue
         self.logger.debug("transferred file updated")
 
-    def mark_failed(self, files=[], force_fail = False, submission_error = False):
+    def mark_failed(self, files=[], force_fail=False, submission_error=False, failure_reasons=[]):
         """
         Something failed for these files so increment the retry count
         """
@@ -530,7 +523,7 @@ class TransferWorker:
 
             # Load document to get the retry_count
             try:
-                document = self.db.document( docId )
+                document = self.db.document(docId)
             except Exception, ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
@@ -559,7 +552,7 @@ class TransferWorker:
                 try:
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
                     updateUri += "?" + urllib.urlencode(data)
-                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                    self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                     updated_lfn.append(docId)
                     self.logger.debug("Marked failed %s" % docId)
                 except Exception, ex:
