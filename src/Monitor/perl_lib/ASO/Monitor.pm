@@ -57,7 +57,7 @@ sub new {
 	  JOB_TIMEOUT		 => undef,    # Global job timeout
 	  KEEP_INPUTS		 => 0,        # Set non-zero to keep the input JSON files
 
-	  UNLINK		 => undef,    # Array of working JSON files to delete, after reporting...
+	  UNLINK		 => [],       # Array of working JSON files to delete, after reporting...
         );
   $self = \%params;
   bless $self, $class;
@@ -122,7 +122,6 @@ sub new {
     next if $_ eq 'FILE_TIMEOUT';
     next if $_ eq 'LOGFILE';
     next if $_ eq 'DEBUG_JOBS';
-    next if $_ eq 'UNLINK';
     defined $self->{$_} or die "Fatal: $_ not defined after reading config file\n";
   }
 
@@ -330,8 +329,8 @@ sub read_directory {
     $lenPFNs = scalar @{$h->{PFNs}};
     for ($i=0; $i<$lenPFNs; ++$i) {
       push @Files, ASO::File->new(
-	  DESTINATION	=> $h->{PFNs}[$i],
-	  SOURCE	=> 'LFN: ' . $h->{LFNs}[$i],
+	SOURCE	=> $h->{PFNs}[$i],
+	DESTINATION	=> 'dummy'
 	);
       $self->{FN_MAP}{$h->{PFNs}[$i]} = $h->{LFNs}[$i];
     }
@@ -476,7 +475,7 @@ sub poll_job_postback {
     my $files = $job->Files;
     foreach ( keys %{$result->{FILES}} ) {
       my $s = $result->{FILES}{$_};
-      my $f = $files->{$s->{DESTINATION}};
+      my $f = $files->{$s->{SOURCE}};
 
       if ( ! $f )
       {
@@ -496,7 +495,7 @@ sub poll_job_postback {
           
       if ( $_ = $f->State( $s->{STATE} ) ) {
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
-        $job->Log($f->Timestamp,$f->Source,$f->Destination,$f->State );
+        $job->Log($f->Timestamp,$f->Source,$f->Source,$f->State );
         $job->{FILE_TIMESTAMP} = $f->Timestamp;
         if ( $f->ExitStates->{$f->State} ) {
 # This is a terminal state-change for the file. Log it to the Reporter
@@ -594,13 +593,13 @@ sub poll_job_postback {
 
 sub add_file_report {
   my ($self,$user,$file) = @_;
-  return unless defined $self->{FN_MAP}{$file->Destination};
-
+  return unless defined $self->{FN_MAP}{$file->Source};
+ 
   my $reason = $file->Reason;
   if ( $reason eq 'error during  phase: [] ' ) { $reason = ''; }
 
   $self->{REPORTER}{$user}{$file->Source} = {
-       LFN            => delete $self->{FN_MAP}{$file->Destination},
+       LFN => delete $self->{FN_MAP}{$file->Source},
        transferStatus => $file->State,
        failure_reason => $reason,
        timestamp      => $file->Timestamp,
@@ -618,7 +617,7 @@ sub notify_reporter {
       $len = 0;
       foreach $dst ( keys %{$reporter->{$user}} ) {
         $f = $reporter->{$user}{$dst};
-        foreach $k ( qw / LFN transferStatus timestamp / ) {
+        foreach $k ( qw / LFN transferStatus failure_reason timestamp / ) {
           if ( !defined($f->{$k}) ) {
             $self->Alert("File error: $k undefined for ",$dst);
           }
@@ -649,14 +648,14 @@ sub notify_reporter {
       delete $self->{REPORTER}{$user};
     }
   }
-  $self->Logmsg("Notify Reporter of ",$totlen," files for all users") if $totlen;
 
 # Now clear the stack of working files that need to be deleted
-  while ( $_ = shift @{$self->{UNLINK}} ) {
+  foreach ( shift @{$self->{UNLINK}} ) {
     $self->Logmsg('Unlink ',$_);
     unlink $_;
   }
 
+  $self->Logmsg("Notify Reporter of ",$totlen," files for all users") if $totlen;
   $kernel->delay_set('notify_reporter',$self->{REPORTER_INTERVAL});
 }
 
