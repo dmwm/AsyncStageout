@@ -64,7 +64,7 @@ class StatisticDaemon(BaseWorkerThread):
             self.logger.debug('Got expiration_days %s from Couch' % self.config.expiration_days)
         except IndexError:
             self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
 
         expdays = datetime.timedelta(days = self.config.expiration_days)
@@ -81,7 +81,7 @@ class StatisticDaemon(BaseWorkerThread):
                 self.logger.debug('deleting %s' %doc)
                 jobDoc = self.db.document(doc)
                 self.updateStat(jobDoc)
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error retriving document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -90,7 +90,7 @@ class StatisticDaemon(BaseWorkerThread):
                 try:
                     self.db.queueDelete(jobDoc)
 
-                except Exception, ex:
+                except Exception as ex:
 
                     msg =  "Error queuing document for delete in couch"
                     msg += str(ex)
@@ -102,7 +102,7 @@ class StatisticDaemon(BaseWorkerThread):
 
                 self.statdb.queue(newDoc)
 
-            except Exception, ex:
+            except Exception as ex:
 
                 msg =  "Error queuing document in statDB"
                 msg += str(ex)
@@ -111,14 +111,14 @@ class StatisticDaemon(BaseWorkerThread):
 
         try:
             self.statdb.commit()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in statdb"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
         try:
             self.db.commit()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in files_db"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -133,7 +133,7 @@ class StatisticDaemon(BaseWorkerThread):
                  'stale': 'ok'}
         try:
             oldJobs = self.mon_db.loadView('MonitorStartedEnded', 'endedSizeByTime', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 
@@ -261,7 +261,7 @@ class StatisticDaemon(BaseWorkerThread):
 
             oldDoc['avg_size'] = int(oldDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
 
-        except Exception, ex:
+        except Exception as ex:
 
             msg =  "Error when retriving document from couch"
             msg += str(ex)

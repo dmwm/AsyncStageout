@@ -35,7 +35,7 @@ class FilesCleaner(Harness):
 str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datetime.datetime.now().day) )
             try:
                 os.makedirs(archive_dir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == errno.EEXIST:
                     pass
                 else: raise

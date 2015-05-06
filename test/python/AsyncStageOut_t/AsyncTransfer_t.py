@@ -675,7 +675,7 @@ WMTaskSpace/cmsRun1/output.root",\
         log_dir = '%s/logs/%s' % (self.config.AsyncTransfer.componentDir, file_doc['user'])
         try:
             os.makedirs(log_dir)
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.EEXIST:
                 pass
             else: raise

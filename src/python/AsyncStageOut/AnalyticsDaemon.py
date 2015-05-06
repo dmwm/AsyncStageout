@@ -65,7 +65,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             param = self.config_db.loadView('asynctransfer_config', 'GetAnalyticsConfig', query)
             self.config.summaries_expiration_days = param['rows'][0]['key']
             self.logger.debug('Got summaries_expiration_days %s from Couch' % self.config.summaries_expiration_days)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting config DB in couch: %s' % e)
         self.logger.debug('Analytics starts at: %s' %str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
         if self.amq_auth_file:
@@ -87,7 +87,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         query = {'reduce':True, 'group': True, 'stale':'ok'}
         try:
             active_jobs = self.db.loadView('AsyncTransfer', 'JobsSatesByWorkflow', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return
         for job in active_jobs:
@@ -136,7 +136,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                 try:
                     self.monitoring_db.queue(doc, True)
                     updated += 1
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing document in monitoring_db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -162,7 +162,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                                     failures_reasons[failure['key'][1]] = failure['value']
                         doc['failures_reasons'] = failures_reasons
                     doc['last_update'] = now
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error loading document from couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -170,7 +170,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                 try:
                     self.monitoring_db.queue(doc, True)
                     updated += 1
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing document in monitoring_db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -178,7 +178,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         # Perform a bulk update of documents
         try:
             self.monitoring_db.commit()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in monitoring_db"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -206,7 +206,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         except KeyError:
             self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
             return
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB to updateFilesSummaries: %s' % e)
             return
         self.logger.debug('start summaries update %f end time %f' %(since, end_time))
@@ -216,7 +216,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
             query = { 'startkey': since, 'endkey': end_time + 1 }
             all_files = self.db.loadView('AsyncTransfer', 'LastUpdatePerFile', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB for LastUpdatePerFile: %s' % e)
             return
         for file in all_files:
@@ -252,7 +252,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             try:
                 self.logger.debug("updating %s" %doc)
                 self.monitoring_db.queue(doc, True)
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error queuing document in monitoring_db"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -260,7 +260,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         try:
             self.monitoring_db.commit()
             self.logger.debug("%d summary_per_files documents updated..." % len(all_files))
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in monitoring_db"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -287,7 +287,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         except KeyError:
             self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
             return
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB to updateDatabaseSource: %s' % e)
             return
         self.logger.debug('start time %f end time %f' %(since, end_time))
@@ -296,7 +296,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         try:
             query = {'startkey': since, 'endkey': end_time + 1}
             all_jobs = self.monitoring_db.loadView('UserMonitoring', 'JobIdByEndTime', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting UserMonitoring - JobIdByEndTime: %s' % e)
             return
         self.logger.debug("Processing record...")
@@ -311,7 +311,7 @@ class AnalyticsDaemon(BaseWorkerThread):
             query = {'reduce':True, 'key':job['value']}
             try:
                 ended_files = self.monitoring_db.loadView('UserMonitoring', 'EndedLFNByJobId', query)['rows']
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting UserMonitoring - EndedLFNByJobId: %s' % e)
                 return
             if ended_files:
@@ -328,7 +328,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                     query = {'key':job['value'], 'reduce': False}
                     try:
                         done_files = self.monitoring_db.loadView('UserMonitoring', 'LFNDoneByJobId', query)['rows']
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.exception('A problem occured when contacting UserMonitoring - LFNDoneByJobId: %s' % e)
                         return
                     self.logger.info("the jobid %s has to publish %s done files" %(job, len(done_files)))
@@ -345,7 +345,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                     if len(done_files) != number_ended_files:
                         try:
                             failed_files = self.monitoring_db.loadView('UserMonitoring', 'LFNFailedByJobId', query)['rows']
-                        except Exception, e:
+                        except Exception as e:
                             self.logger.exception('A problem occured when contacting UserMonitoring - LFNFailedByJobId: %s' % e)
                             return
                         self.logger.info("the job %s has %s failed files %s" %(job, len(failed_files), failed_files))
@@ -370,7 +370,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                                                 transferError = transferError + "," + 'Publication Failure'
                                             else:
                                                 transferError = 'Publication Failure'
-                                except Exception, ex:
+                                except Exception as ex:
                                     msg =  "Error loading document from couch"
                                     msg += str(ex)
                                     msg += str(traceback.format_exc())
@@ -395,7 +395,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                                                 transferError = transferError + "," + 'Publication Failure'
                                             else:
                                                 transferError = 'Publication Failure'
-                                except Exception, ex:
+                                except Exception as ex:
                                     msg =  "Error loading document from couch"
                                     msg += str(ex)
                                     msg += str(traceback.format_exc())
@@ -412,7 +412,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                     if (len(done_files)+len(failed_files)) != number_ended_files:
                         try:
                             cancelled_files = self.monitoring_db.loadView('UserMonitoring', 'LFNKilledByJobId', query)['rows']
-                        except Exception, e:
+                        except Exception as e:
                             self.logger.exception('A problem occured when contacting UserMonitoring - LFNKilledByJobId: %s' % e)
                             return
                         self.logger.info("the jobid %s has to publish %s killed files" %(job, len(cancelled_files)))
@@ -429,7 +429,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                 self.logger.info("publish this %s" %message)
                 try:
                     self.produce(message)
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error producing message"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -443,7 +443,7 @@ class AnalyticsDaemon(BaseWorkerThread):
 
         try:
             self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-        except Exception, e:
+        except Exception as e:
             self.logger.error('A problem occured when updating last check time!!!: %s' % e)
             return
         # TODO:bulk commit of docs but not sure if it works
@@ -464,7 +464,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                 f = open(self.amq_auth_file)
                 authParams = json.loads(f.read())
                 opened = True
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error loading auth params"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -484,7 +484,7 @@ class AnalyticsDaemon(BaseWorkerThread):
                 # disconnect from the stomp server
                 conn.disconnect()
                 connected = True
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error contacting Message Broker"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -500,7 +500,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         query = {'startkey': 1, 'endkey': expiration_time, 'stale': 'ok'}
         try:
             files_to_remove = self.monitoring_db.loadView('UserMonitoring', 'DocsByTimestamp', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting UserMonitoring to get old docs: %s' % e)
             return
         self.logger.debug('removing %s docs' %len(files_to_remove))
@@ -519,7 +519,7 @@ class AnalyticsDaemon(BaseWorkerThread):
         try:
             self.monitoring_db.commit()
             self.logger.debug("%d Old summaries cleaned..." % len(files_to_remove))
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in monitoring_db"
             msg += str(ex)
             msg += str(traceback.format_exc())

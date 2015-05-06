@@ -98,7 +98,7 @@ while i <= size:
 
         pfn = apply_tfc(file_doc['source']+':'+file_doc['_id'], site_tfc_map, file_doc['source'])
 
-    except Exception, ex:
+    except Exception as ex:
 
         logger.info("Exception raised when applying TFC: \n" + str(ex) + "\n")
         logger.info( str(traceback.format_exc()) )
@@ -112,7 +112,7 @@ while i <= size:
 
     try:
         os.makedirs(log_dir)
-    except OSError, e:
+    except OSError as e:
         if e.errno == errno.EEXIST:
             pass
         else: raise

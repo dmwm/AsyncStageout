@@ -349,7 +349,7 @@ class AdderCmsPlugin(AdderPluginBase):
                     # append LFN to the list of transferring files,
                     # which gets the job status to change to transferring
                     self.result.transferringFiles.append(lfn)
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing document in asyncdb"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -361,7 +361,7 @@ class AdderCmsPlugin(AdderPluginBase):
                 try:
                     self.mon_db.queue(job_doc, True)
                     self.mon_db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing doc in monitoring db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())

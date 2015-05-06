@@ -71,7 +71,7 @@ class CleanerDaemon(BaseWorkerThread):
  str(datetime.datetime.now().month), str(datetime.datetime.now().year), "Ops")
         try:
             os.makedirs(self.log_dir)
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.EEXIST:
                 pass
             else:
@@ -94,7 +94,7 @@ class CleanerDaemon(BaseWorkerThread):
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         try:
             self.db = server.connectDatabase(self.config.files_database)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when connecting to couchDB: %s' % e)
 
     def algorithm(self, parameters = None):
@@ -120,7 +120,7 @@ class CleanerDaemon(BaseWorkerThread):
             except KeyError:
                 self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
                 return
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to determine last cleanning time: %s' % e)
                 return
 
@@ -128,7 +128,7 @@ class CleanerDaemon(BaseWorkerThread):
             query = { 'startkey': since, 'endkey': end_time, 'stale': 'ok'}
             try:
                 all_LFNs = self.db.loadView('AsyncTransfer', 'LFNSiteByLastUpdate', query)['rows']
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to retrieve LFNs: %s' % e)
                 return
 
@@ -136,7 +136,7 @@ class CleanerDaemon(BaseWorkerThread):
             updateUri += "?last_cleaning_time=%d" % end_time
             try:
                 self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to update last cleanning time: %s' % e)
                 return
 
@@ -152,7 +152,7 @@ class CleanerDaemon(BaseWorkerThread):
                     try:
                         self.defaultDelegation['userDN'] = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
                         valid_proxy, userProxy = getProxy(self.defaultDelegation, self.logger)
-                    except Exception, ex:
+                    except Exception as ex:
                         msg = "Error getting the user proxy"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -185,7 +185,7 @@ class CleanerDaemon(BaseWorkerThread):
         """
         try:
             site, lfn = tuple(file.split(':'))
-        except Exception, e:
+        except Exception as e:
             self.logger.error('It does not seem to be an lfn %s' %file.split(':'))
             return None
         if self.site_tfc_map.has_key(site):
@@ -214,7 +214,7 @@ class CleanerDaemon(BaseWorkerThread):
         query = {'group': True, 'stale': 'ok'}
         try:
             sites = self.db.loadView('AsyncTransfer', 'sites', query)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 
@@ -233,7 +233,7 @@ class CleanerDaemon(BaseWorkerThread):
         self.phedex.getNodeTFC(site)
         try:
             tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
             return None
         return readTFC(tfc_file)

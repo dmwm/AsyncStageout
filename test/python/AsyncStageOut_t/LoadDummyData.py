@@ -87,7 +87,7 @@ while i <= size:
     print "uploading docs in %s and db %s" %(config.AsyncTransfer.couch_instance, config.AsyncTransfer.files_database)
     try:
         db.queue(file_doc)
-    except Exception, ex:
+    except Exception as ex:
         print "Error when queuing docs"
         print ex
     print "doc queued %s" %file_doc
@@ -95,7 +95,7 @@ while i <= size:
     try:
         db.commit()
         print "commiting %s doc at %s" %( i, str(datetime.datetime.now()))
-    except Exception, ex:
+    except Exception as ex:
         print "Error when commiting docs"
         print ex
     i += 1
