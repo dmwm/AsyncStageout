@@ -96,12 +96,28 @@ class TransferWorker:
                              'serverDN' : self.config.serverDN,
                              'uisource' : self.uiSetupScript,
                              'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)}
-        if hasattr(self.config, "cache_area"):
+	if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+                self.cache_area = self.config.cache_area
             except IndexError:
-                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
-                pass
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
+                query = {'key':self.user}
+                try:
+                        self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
+
+                except Exception, ex:
+                        msg =  "Error getting user cache_area"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+                        pass
+                try:
+                   self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]   
+                   defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
+                except IndexError:
+                   self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
+                   pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -200,15 +216,8 @@ class TransferWorker:
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
                     self.logger.debug('Preparing PFNs...')
-                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value']))
-                    destination_pfn = ""
-                    if item['value'].startswith("/store/temp/user"):
-                        destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                           item['value'].replace('store/temp', 'store', 1).replace(\
-                                                                           '.' + item['value'].split('.', 1)[1].split('/', 1)[0], '', 1)))
-                    else:
-                        destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination,
-                                                                           item['value'].replace('store/temp', 'store', 1)))
+                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value'][1]))
+                    destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'][2]))
                     self.logger.debug('PFNs prepared...')
                     if source_pfn and destination_pfn and self.valid_proxy:
                         acquired_file, dashboard_report = self.mark_acquired([item])

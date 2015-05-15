@@ -75,9 +75,26 @@ class PublisherWorker:
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+                self.cache_area = self.config.cache_area
             except IndexError:
-                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
-                pass
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
+		query = {'key':self.user}
+           	try:
+            		self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
+                        
+		except Exception, ex:
+			msg =  "Error getting user cache_area"
+			msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+                        pass
+                try:
+  	           self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
+                   defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
+
+                except IndexError:
+                   self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
+                   pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -105,7 +122,7 @@ class PublisherWorker:
             opsProxy = Proxy({'server_key': self.config.opsProxy, 'server_cert': self.config.opsProxy, 'logger': self.logger})
             self.userDN = opsProxy.getSubject()
             self.userProxy = self.config.opsProxy
-        self.cache_area = self.config.cache_area
+        #self.cache_area = self.config.cache_area
         # If we're just testing publication, we skip the DB connection.
         if os.getenv("TEST_ASO"):
             self.db = None
