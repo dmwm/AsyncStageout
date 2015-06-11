@@ -81,7 +81,7 @@ class PublisherWorker:
 		query = {'key':self.user}
            	try:
             		self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
-                        
+
 		except Exception, ex:
 			msg =  "Error getting user cache_area"
 			msg += str(ex)
@@ -893,7 +893,7 @@ class PublisherWorker:
             ## Loop over all files to publish.
             for file in files:
                 ## Check if this file was already published and if it is valid.
-                if (file['lfn'] not in existingFiles) or (file['lfn'] in invalidExistingFiles):
+                if file['lfn'] not in existingFilesValid:
                     ## We have a file to publish.
                     ## Get the parent files and for each parent file do the following:
                     ## 1) Add it to the list of parent files.
