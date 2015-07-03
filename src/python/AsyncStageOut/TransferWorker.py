@@ -113,7 +113,7 @@ class TransferWorker:
                         self.logger.error(msg)
                         pass
                 try:
-                   self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]   
+                   self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
                    defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
                 except IndexError:
                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
@@ -301,7 +301,7 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob))
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"max_time_in_queue":20,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
             pairs = []
             for SrcDest in copyjob:
                 pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
