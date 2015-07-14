@@ -464,7 +464,7 @@ class TransferWorker:
                 else:
                     continue
             else:
-                good_lfn = lfn['value'][1].replace('store', 'store/temp', 1)
+                good_lfn = lfn['value'][0].replace('store', 'store/temp', 1)
                 self.mark_good([good_lfn])
         return lfn_in_transfer, dash_rep
 
