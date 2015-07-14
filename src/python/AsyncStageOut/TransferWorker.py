@@ -225,7 +225,7 @@ class TransferWorker:
                         if acquired_file:
                             self.logger.debug('Starting FTS Job creation...')
                             # Prepare Monitor metadata
-                            lfn_list.append(item['value'])
+                            lfn_list.append(item['value'][1])
                             pfn_list.append(source_pfn)
                             # Prepare FTS Dashboard metadata
                             dash_report.append(dashboard_report)
@@ -432,8 +432,8 @@ class TransferWorker:
         lfn_in_transfer = []
         dash_rep = ()
         for lfn in files:
-            if lfn['value'].find('temp') == 7:
-                docId = getHashLfn(lfn['value'])
+            if lfn['value'][1].find('temp') == 7:
+                docId = getHashLfn(lfn['value'][1])
                 self.logger.debug("Marking acquired %s" % docId)
                 # Load document to get the retry_count
                 try:
@@ -464,7 +464,7 @@ class TransferWorker:
                 else:
                     continue
             else:
-                good_lfn = lfn['value'].replace('store', 'store/temp', 1)
+                good_lfn = lfn['value'][1].replace('store', 'store/temp', 1)
                 self.mark_good([good_lfn])
         return lfn_in_transfer, dash_rep
 
@@ -524,9 +524,9 @@ class TransferWorker:
                     temp_lfn = lfn
             else:
                 if 'temp' not in lfn['value']:
-                    temp_lfn = lfn['value'].replace('store', 'store/temp', 1)
+                    temp_lfn = lfn['value'][1].replace('store', 'store/temp', 1)
                 else:
-                    temp_lfn = lfn['value']
+                    temp_lfn = lfn['value'][1]
 
             docId = getHashLfn(temp_lfn)
 
