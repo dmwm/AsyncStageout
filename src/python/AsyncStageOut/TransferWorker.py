@@ -216,8 +216,8 @@ class TransferWorker:
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
                     self.logger.debug('Preparing PFNs...')
-                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value'][1]))
-                    destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'][2]))
+                    source_pfn = self.apply_tfc_to_lfn('%s:%s' % (source, item['value'][0]))
+                    destination_pfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'][1]))
                     self.logger.debug('PFNs prepared...')
                     if source_pfn and destination_pfn and self.valid_proxy:
                         acquired_file, dashboard_report = self.mark_acquired([item])
@@ -225,7 +225,7 @@ class TransferWorker:
                         if acquired_file:
                             self.logger.debug('Starting FTS Job creation...')
                             # Prepare Monitor metadata
-                            lfn_list.append(item['value'][1])
+                            lfn_list.append(item['value'][0])
                             pfn_list.append(source_pfn)
                             # Prepare FTS Dashboard metadata
                             dash_report.append(dashboard_report)
@@ -432,8 +432,8 @@ class TransferWorker:
         lfn_in_transfer = []
         dash_rep = ()
         for lfn in files:
-            if lfn['value'][1].find('temp') == 7:
-                docId = getHashLfn(lfn['value'][1])
+            if lfn['value'][0].find('temp') == 7:
+                docId = getHashLfn(lfn['value'][0])
                 self.logger.debug("Marking acquired %s" % docId)
                 # Load document to get the retry_count
                 try:
@@ -524,9 +524,9 @@ class TransferWorker:
                     temp_lfn = lfn
             else:
                 if 'temp' not in lfn['value']:
-                    temp_lfn = lfn['value'][1].replace('store', 'store/temp', 1)
+                    temp_lfn = lfn['value'][0].replace('store', 'store/temp', 1)
                 else:
-                    temp_lfn = lfn['value'][1]
+                    temp_lfn = lfn['value'][0]
 
             docId = getHashLfn(temp_lfn)
 
