@@ -50,8 +50,6 @@ class PublisherWorker:
         self.myproxyServer = 'myproxy.cern.ch'
         self.init = True
         self.userDN = ''
-        query = {'group': True,
-                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
@@ -72,6 +70,12 @@ class PublisherWorker:
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript
                             }
+        # If we're just testing publication, we skip the DB connection.
+        if os.getenv("TEST_ASO"):
+            self.db = None
+        else:
+            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.db = server.connectDatabase(self.config.files_database)
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
@@ -87,14 +91,12 @@ class PublisherWorker:
 			msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
-                        pass
                 try:
   	           self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
                    defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
 
                 except IndexError:
                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
-                   pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -123,12 +125,6 @@ class PublisherWorker:
             self.userDN = opsProxy.getSubject()
             self.userProxy = self.config.opsProxy
         #self.cache_area = self.config.cache_area
-        # If we're just testing publication, we skip the DB connection.
-        if os.getenv("TEST_ASO"):
-            self.db = None
-        else:
-            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = self.config.max_files_per_block
         self.block_publication_timeout = self.config.block_closure_timeout
@@ -267,8 +263,6 @@ class PublisherWorker:
                             self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
                         elif not self.forceFailure:
                             continue
-                        else:
-                            pass
                 else:
                     self.logger.info('Closing the publication of %s since it is completed' % workflow)
 
