@@ -130,7 +130,7 @@ class PublisherWorker:
             server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
             self.db = server.connectDatabase(self.config.files_database)
         self.phedexApi = PhEDEx(responseType='json')
-        self.max_files_per_block = self.config.max_files_per_block
+        self.max_files_per_block = max(1, self.config.max_files_per_block)
         self.block_publication_timeout = self.config.block_closure_timeout
         self.publish_dbs_url = self.config.publish_dbs_url
 
@@ -749,7 +749,6 @@ class PublisherWorker:
         published = []
         results = {}
         failure_reason = ""
-        blockSize = self.max_files_per_block
 
         # In the case of MC input (or something else which has no 'real' input dataset),
         # we simply call the input dataset by the primary DS name (/foo/).
@@ -987,52 +986,31 @@ class PublisherWorker:
                     failure_reason = msg
                     return failed, failure_reason, [], {}
 
-            count = 0
             blockCount = 0
-            if len(dbsFiles) < self.max_files_per_block:
+            count = 0
+            stopLoop = False
+            while not stopLoop:
                 block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
-                files_to_publish = dbsFiles[count:count+blockSize]
+                files_to_publish = dbsFiles[count:count+self.max_files_per_block]
+                if len(dbsFiles[count+self.max_files_per_block:]) < self.max_files_per_block:
+                    for file in dbsFiles[count+self.max_files_per_block:]:
+                        publish_next_iteration.append(file['logical_file_name'])
+                    stopLoop = True
                 try:
                     block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                    self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
                     blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
                                                      acquisition_era_config, block_config, files_to_publish)
+                    self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
                     destApi.insertBulkBlock(blockDump)
-                    count += blockSize
                     blockCount += 1
                 except Exception, ex:
                     failed += [i['logical_file_name'] for i in files_to_publish]
-                    msg =  "Error when publishing"
+                    msg  = "Error when publishing (%s) " % ", ".join(failed)
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     failure_reason = str(ex)
-            else:
-                while count < len(dbsFiles):
-                    block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
-                    files_to_publish = dbsFiles[count:count+blockSize]
-                    try:
-                        if len(dbsFiles[count:len(dbsFiles)]) < self.max_files_per_block:
-                            for file in dbsFiles[count:len(dbsFiles)]:
-                                publish_next_iteration.append(file['logical_file_name'])
-                            count += blockSize
-                            continue
-                        block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
-                                                         acquisition_era_config, block_config, files_to_publish)
-                        self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
-                        destApi.insertBulkBlock(blockDump)
-
-                        count += blockSize
-                        blockCount += 1
-                    except Exception, ex:
-                        failed += [i['logical_file_name'] for i in files_to_publish]
-                        msg =  "Error when publishing (%s) " % ", ".join(failed)
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        failure_reason = str(ex)
-                        count += blockSize
+                count += self.max_files_per_block
             results[datasetPath]['files'] = len(dbsFiles) - len(failed)
             results[datasetPath]['blocks'] = blockCount
         published = filter(lambda x: x not in failed + publish_next_iteration, published)
