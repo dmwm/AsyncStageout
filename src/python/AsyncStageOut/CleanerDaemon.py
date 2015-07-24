@@ -15,6 +15,8 @@ import time
 import traceback
 from AsyncStageOut import getDNFromUserName
 from AsyncStageOut import getProxy
+from multiprocessing import Pool
+import logging
 
 def execute_command( command, logger, timeout ):
     """
@@ -45,6 +47,18 @@ def execute_command( command, logger, timeout ):
     rc = proc.returncode
     logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
     return rc, stdout, stderr
+
+def remove_files(userProxy, pfn):
+
+    command = 'env -i X509_USER_PROXY=%s gfal-rm -v -t 180 %s'  % \
+              (userProxy, pfn)
+    logging.debug("Running remove command %s" % command)
+    rc, stdout, stderr = execute_command(command, logging, 3600)
+    if rc:
+        logging.info("Deletion command failed with output %s and error %s" %(stdout, stderr))
+    else:
+        logging.info("File Deleted.")
+    return
 
 class CleanerDaemon(BaseWorkerThread):
     """
@@ -96,6 +110,7 @@ class CleanerDaemon(BaseWorkerThread):
             self.db = server.connectDatabase(self.config.files_database)
         except Exception, e:
             self.logger.exception('A problem occured when connecting to couchDB: %s' % e)
+        self.pool = Pool(processes=5)
 
     def algorithm(self, parameters = None):
         """
@@ -166,14 +181,7 @@ class CleanerDaemon(BaseWorkerThread):
                 self.logger.info("Removing %s from %s" %(lfn, location))
                 pfn = self.apply_tfc_to_lfn( '%s:%s' %(location, lfn))
                 if pfn:
-                    command = 'env -i X509_USER_PROXY=%s gfal-rm -v -t 180 %s'  % \
-                              (userProxy, pfn)
-                    self.logger.debug("Running remove command %s" % command)
-                    rc, stdout, stderr = execute_command(command, self.logger, 3600)
-                    if rc:
-                        self.logger.info("Deletion command failed with output %s and error %s" %(stdout, stderr))
-                    else:
-                        self.logger.info("File Deleted.")
+                    self.pool.apply_async(remove_files, (userProxy, pfn))
                 else:
                     self.logger.info("Removing %s from %s failed when retrieving the PFN" %(lfn, location))
         return
@@ -237,3 +245,10 @@ class CleanerDaemon(BaseWorkerThread):
             self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
             return None
         return readTFC(tfc_file)
+
+    def terminate(self, parameters = None):
+        """
+        Called when thread is being terminated.
+        """
+        self.pool.close()
+        self.pool.join()
