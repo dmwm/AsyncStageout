@@ -523,7 +523,7 @@ class TransferWorker:
                 else:
                     temp_lfn = lfn
             else:
-                if 'temp' not in lfn['value']:
+                if 'temp' not in lfn['value'][0]:
                     temp_lfn = lfn['value'][0].replace('store', 'store/temp', 1)
                 else:
                     temp_lfn = lfn['value'][0]
