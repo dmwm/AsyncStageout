@@ -27,7 +27,7 @@ class Source:
             self.since = 0
         try:
             self.phedexApi = PhEDEx( secure = True, dict = {} )
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('PhEDEx object exception: %s' % e)
 
     def __call__(self):

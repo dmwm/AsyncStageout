@@ -55,7 +55,7 @@ class PublisherWorker:
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -106,7 +106,7 @@ class PublisherWorker:
                 defaultDelegation['group'] = self.group
                 defaultDelegation['role'] = self.role
                 valid, proxy = getProxy(defaultDelegation, self.logger)
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -148,7 +148,7 @@ class PublisherWorker:
 
         try:
             self.connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
-        except Exception, ex:
+        except Exception as ex:
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.debug(msg)
@@ -164,7 +164,7 @@ class PublisherWorker:
         query = {'group':True, 'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}]}
         try:
             active_user_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' %e)
             self.logger.info('Publications for %s will be retried next time' % self.user)
             return
@@ -182,7 +182,7 @@ class PublisherWorker:
             query = {'reduce':False, 'key': user_wf['key']}#'stale': 'ok'}
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
-            except Exception, e:
+            except Exception as e:
                 self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
                 self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
                 continue
@@ -229,7 +229,7 @@ class PublisherWorker:
                 header = {"Content-Type ":"application/json"}
                 try:
                     response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error reading the status of %s from cache." % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -244,7 +244,7 @@ class PublisherWorker:
                 except ValueError:
                     self.logger.error("Workflow %s is removed from WM" % workflow)
                     workflow_status = 'REMOVED'
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error loading the status of %s !" % workflow
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -255,7 +255,7 @@ class PublisherWorker:
                     query = {'reduce':True, 'key': user_wf['key']}
                     try:
                         last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
                         continue
                     self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
@@ -299,14 +299,14 @@ class PublisherWorker:
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error updating document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
         try:
             self.db.commit()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -327,7 +327,7 @@ class PublisherWorker:
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -348,14 +348,14 @@ class PublisherWorker:
                 updateUri += "?" + urllib.urlencode(data)
                 self.logger.info(updateUri)
                 self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Error in updating document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
         try:
             self.db.commit()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error commiting documents in couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -415,7 +415,7 @@ class PublisherWorker:
         url = self.cache_area
         try:
             response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error reading data from cache"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -425,7 +425,7 @@ class PublisherWorker:
         try:
             buf.close()
             res = json.loads(res_)
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Error loading results. Trying next time!"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -603,7 +603,7 @@ class PublisherWorker:
                             status = migrateApi.statusMigration(migration_rqst_id = id)
                             state = status[0].get('migration_status')
                             retry = status[0].get('retry_count')
-                        except Exception, ex:
+                        except Exception as ex:
                             msg = "Could not get status for migration id %d:\n%s" % (id, ex.msg)
                             self.logger.error(msg)
                         else:
@@ -681,7 +681,7 @@ class PublisherWorker:
         data = {'migration_url': sourceURL, 'migration_input': block}
         try:
             result = migrateApi.submitMigration(data)
-        except HTTPError, he:
+        except HTTPError as he:
             if "is already at destination" in he.msg:
                 msg = "Block is already at destination."
                 self.logger.info(msg)
@@ -833,7 +833,7 @@ class PublisherWorker:
                 msg += " (%d valid, %d invalid)." % (len(existingFilesValid), len(existingFiles) - len(existingFilesValid))
                 self.logger.info(msg)
                 results[datasetPath]['existingFiles'] = len(existingFiles)
-            except Exception, ex:
+            except Exception as ex:
                 msg  = "Error when listing files in DBS: %s" % (str(ex))
                 msg += "\n%s" % (str(traceback.format_exc()))
                 self.logger.error(msg)
@@ -1000,7 +1000,7 @@ class PublisherWorker:
                     destApi.insertBulkBlock(blockDump)
                     count += blockSize
                     blockCount += 1
-                except Exception, ex:
+                except Exception as ex:
                     failed += [i['logical_file_name'] for i in files_to_publish]
                     msg =  "Error when publishing"
                     msg += str(ex)
@@ -1025,7 +1025,7 @@ class PublisherWorker:
 
                         count += blockSize
                         blockCount += 1
-                    except Exception, ex:
+                    except Exception as ex:
                         failed += [i['logical_file_name'] for i in files_to_publish]
                         msg =  "Error when publishing (%s) " % ", ".join(failed)
                         msg += str(ex)

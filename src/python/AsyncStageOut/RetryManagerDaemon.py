@@ -63,7 +63,7 @@ class RetryManagerDaemon(BaseWorkerThread):
         try:
             server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
             self.db = server.connectDatabase(self.config.files_database)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when connecting to couchDB: %s' % e)
             raise
         self.logger.debug('Connected to files DB')
@@ -72,7 +72,7 @@ class RetryManagerDaemon(BaseWorkerThread):
         self.factory = WMFactory(self.config.retryAlgoDir, namespace = self.config.retryAlgoDir)
         try:
             self.plugin = self.factory.loadObject(self.config.algoName, self.config, getFromCache = False, listFlag = True)
-        except Exception, ex:
+        except Exception as ex:
             msg = "Error loading plugin %s on path %s\n" % (self.config.algoName, self.config.retryAlgoDir)
             msg += str(ex)
             self.logger.error(msg)
@@ -118,7 +118,7 @@ class RetryManagerDaemon(BaseWorkerThread):
             self.logger.debug("Trying to resubmit %s" % file['id'])
             try:
                 document = self.db.document(file['id'])
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -133,7 +133,7 @@ class RetryManagerDaemon(BaseWorkerThread):
                 updateUri += "?" + urllib.urlencode(data)
                 try:
                     self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -174,7 +174,7 @@ class RetryManagerDaemon(BaseWorkerThread):
             try:
                 if self.plugin.isReady(file = file, cooloffTime = self.cooloffTime):
                     result.append(file)
-            except Exception, ex:
+            except Exception as ex:
                 msg =  "Exception while checking for cooloff timeout for file %s\n" % file
                 msg += str(ex)
                 logging.error(msg)
@@ -192,7 +192,7 @@ class RetryManagerDaemon(BaseWorkerThread):
         query = {'stale': 'ok'}
         try:
             files = self.db.loadView('AsyncTransfer', 'getFilesToRetry', query)['rows']
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB to retrieve LFNs: %s' % e)
             return
         logging.info("Found %s files in cooloff" % len(files))
