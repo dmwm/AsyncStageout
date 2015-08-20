@@ -50,8 +50,6 @@ class PublisherWorker:
         self.myproxyServer = 'myproxy.cern.ch'
         self.init = True
         self.userDN = ''
-        query = {'group': True,
-                 'startkey':[self.user], 'endkey':[self.user, {}, {}]}
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
@@ -72,6 +70,12 @@ class PublisherWorker:
                                   'serverDN' : self.config.serverDN,
                                   'uisource' : self.uiSetupScript
                             }
+        # If we're just testing publication, we skip the DB connection.
+        if os.getenv("TEST_ASO"):
+            self.db = None
+        else:
+            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.db = server.connectDatabase(self.config.files_database)
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
@@ -80,21 +84,17 @@ class PublisherWorker:
                 self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
 		query = {'key':self.user}
            	try:
-            		self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
-
+                    self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
 		except Exception, ex:
-			msg =  "Error getting user cache_area"
-			msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        pass
+                    msg =  "Error getting user cache_area"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
                 try:
-  	           self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
-                   defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
-
+                    self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
+                    defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
                 except IndexError:
-                   self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
-                   pass
+                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -123,14 +123,8 @@ class PublisherWorker:
             self.userDN = opsProxy.getSubject()
             self.userProxy = self.config.opsProxy
         #self.cache_area = self.config.cache_area
-        # If we're just testing publication, we skip the DB connection.
-        if os.getenv("TEST_ASO"):
-            self.db = None
-        else:
-            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
         self.phedexApi = PhEDEx(responseType='json')
-        self.max_files_per_block = self.config.max_files_per_block
+        self.max_files_per_block = max(1, self.config.max_files_per_block)
         self.block_publication_timeout = self.config.block_closure_timeout
         self.publish_dbs_url = self.config.publish_dbs_url
 
@@ -153,135 +147,208 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.debug(msg)
 
+
     def __call__(self):
         """
         1- check the nubmer of files in wf to publish if it is < max_files_per_block
-	2- check in wf if now - last_finished_job > max_publish_time
+        2- check in wf if now - last_finished_job > max_publish_time
         3- then call publish, mark_good, mark_failed for each wf
         """
+        ## Get the list of user workflows which contain at least one file ready to
+        ## publish (i.e. the file has been transferred, but not yet published -nor its
+        ## publication has failed-). We call them "active" files.
         active_user_workflows = []
-        self.lfn_map = {}
-        query = {'group':True, 'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}]}
+        query = {'group': True, 'startkey': [self.user, self.group, self.role], 'endkey': [self.user, self.group, self.role, {}]}
         try:
             active_user_workflows = self.db.loadView('DBSPublisher', 'publish', query)['rows']
-        except Exception, e:
-            self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' %e)
+        except Exception as ex:
+            self.logger.error('A problem occured when contacting couchDB to get the list of active WFs: %s' % ex)
             self.logger.info('Publications for %s will be retried next time' % self.user)
             return
-        self.logger.debug('active user wfs %s' % active_user_workflows)
-        self.logger.info('active user wfs %s' %len(active_user_workflows))
+        self.logger.debug('active user wfs: %s' % active_user_workflows)
+        self.logger.info('number of active user wfs: %s' % len(active_user_workflows))
         now = time.time()
-        last_publication_time = 0
+        self.lfn_map = {}
+        ## Loop over the user workflows.
         for user_wf in active_user_workflows:
-            self.forceFailure = False
-            lfn_ready = []
+            workflow = str(user_wf['key'][3])
+            ## This flag is to force calling the publish method (e.g. because the workflow
+            ## status is terminal) even if regular criteria would say not to call it (e.g.
+            ## because there was already a publication done recently for this workflow and
+            ## there are not enough files yet for another block publication).
+            self.force_publication = False
+            ## Get the list of active files in the workflow.
             active_files = []
-            wf_jobs_endtime = []
-            workflow_status = ''
-            workToDo = False
-            query = {'reduce':False, 'key': user_wf['key']}#'stale': 'ok'}
+            query = {'reduce': False, 'key': user_wf['key']}#'stale': 'ok'}
             try:
                 active_files = self.db.loadView('DBSPublisher', 'publish', query)['rows']
             except Exception, e:
-                self.logger.error('A problem occured to retrieve the list of active files for %s: %s' %(self.user, e))
-                self.logger.info('Publications of %s will be retried next time' % user_wf['key'])
+                self.logger.error('A problem occured to retrieve the list of active files for %s: %s' % (self.user, e))
+                self.logger.info('Publications of %s will be retried next time' % workflow)
                 continue
-            self.logger.info('active files in %s: %s' %(user_wf['key'], len(active_files)))
-            for file in active_files:
-                if file['value'][4]:
-                    # Get the list of jobs end_time for each WF.
-                    wf_jobs_endtime.append(int(time.mktime(time.strptime(\
-                                           str(file['value'][4]), '%Y-%m-%d %H:%M:%S'))) \
-                                           - time.timezone)
-                # To move once the remote stageout from WN is fixed.
-                if "/temp/temp" in file['value'][1]:
-                    lfn_hash = file['value'][1].replace('store/temp/temp', 'store', 1)
+            self.logger.info('active files in %s: %s' % (workflow, len(active_files)))
+            ## If there are no files to publish, continue with the next workflow.
+            if not active_files:
+                continue
+            ## Get the job endtime, destination site, input dataset and input DBS URL for
+            ## the active files in the workflow. Put the destination LFNs in a list of ready
+            ## files grouped by output dataset.
+            wf_jobs_endtime = []
+            lfn_ready = {}
+            pnn, input_dataset, input_dbs_url = "", "", ""
+            for active_file in active_files:
+                job_end_time = active_file['value'][5]
+                if job_end_time:
+                    wf_jobs_endtime.append(int(time.mktime(time.strptime(str(job_end_time), '%Y-%m-%d %H:%M:%S'))) - time.timezone)
+                source_lfn = active_file['value'][1]
+                dest_lfn = active_file['value'][2]
+                ## TODO: The next if is needed only for backward compatibility, because old
+                ## documents were injected with source_lfn not including 'temp' when direct
+                ## stageout was done. This has been changed in CRAB 3.3.1508. So in October we
+                ## can remove the next if and just leave:
+                #self.lfn_map[dest_lfn] = source_lfn
+                if not source_lfn.startswith('/store/temp/'):
+                    self.lfn_map[dest_lfn] = source_lfn.replace('/store/', '/store/temp/', 1)
                 else:
-                    lfn_hash = file['value'][1].replace('store/temp', 'store', 1)
-                if lfn_hash.startswith("/store/user"):
-                    lfn_orig = lfn_hash.replace('.' + file['value'][1].split('.', 1)[1].split('/', 1)[0], '', 1)
+                    self.lfn_map[dest_lfn] = source_lfn
+                if not pnn or not input_dataset or not input_dbs_url:
+                    pnn = str(active_file['value'][0])
+                    input_dataset = str(active_file['value'][3])
+                    input_dbs_url = str(active_file['value'][4])
+                ## Group the destination LFNs by output dataset. We don't know the dataset names
+                ## yet, but we can use the fact that there is a one-to-one correspondence
+                ## between the original (without the jobid) filenames and the dataset names.
+                filename = os.path.basename(dest_lfn)
+                left_piece, jobid_fileext = filename.rsplit('_', 1)
+                if '.' in jobid_fileext:
+                    fileext = jobid_fileext.rsplit('.', 1)[-1]
+                    orig_filename = left_piece + '.' + fileext
                 else:
-                    lfn_orig = lfn_hash
-                if "/temp/temp" in file['value'][1]:
-                    self.lfn_map[lfn_orig] = file['value'][1].replace('temp/temp', 'temp', 1)
-                else:
-                    self.lfn_map[lfn_orig] = file['value'][1]
-                lfn_ready.append(lfn_orig)
-            self.logger.info('%s LFNs ready in %s active files' %(len(lfn_ready), user_wf['value']))
-
-            # Check if the workflow is still valid
+                    orig_filename = left_piece
+                lfn_ready.setdefault(orig_filename, []).append(dest_lfn)
+            self.logger.info("There are %s ready files in %s active files." % (sum(map(len, lfn_ready.values())), user_wf['value']))
+            ## Check if the workflow has expired. If it has, force the publication for the
+            ## available ready files and mark the rest of the files as 'publication failed'.
+            self.force_failure = False
+            self.publication_failure_msg = ""
             if wf_jobs_endtime:
-                self.logger.debug('jobs_endtime of %s: %s' % (user_wf, wf_jobs_endtime))
+                self.logger.debug("jobs_endtime of %s: %s" % (workflow, wf_jobs_endtime))
                 wf_jobs_endtime.sort()
                 workflow_duration = (now - wf_jobs_endtime[0]) / 86400
                 if workflow_duration > self.config.workflow_expiration_time:
-                    self.logger.info('Workflow %s expired since %s days! Force the publication failure.' % (\
-                                      user_wf['key'], (workflow_duration - self.config.workflow_expiration_time)))
-                    self.forceFailure = True
-
-            # If the number of files < max_files_per_block check first workflow status and then the last publication time
-            workflow = user_wf['key'][3]
-            if user_wf['value'] <= self.max_files_per_block:
+                    self.force_publication = True
+                    self.force_failure = True
+                    self.publication_failure_msg = "Workflow %s expired since %s days!" % (workflow, (workflow_duration - self.config.workflow_expiration_time))
+                    msg = self.publication_failure_msg
+                    msg += " Will force the publication if possible or fail it otherwise."
+                    self.logger.info(msg)
+            ## List with the number of ready files per dataset.
+            lens_lfn_ready = map(lambda x: len(x), lfn_ready.values())
+            self.logger.info("Number of ready files per dataset: %s" % (lens_lfn_ready))
+            ## List with booleans that tell if there are more than max_files_per_block to
+            ## publish per dataset.
+            enough_lfn_ready = map(lambda x: x >= self.max_files_per_block, lens_lfn_ready)
+            ## Auxiliary flag.
+            enough_lfn_ready_in_all_datasets = not False in enough_lfn_ready
+            ## If for any of the datasets there are less than max_files_per_block to publish,
+            ## check for other conditions to decide whether to publish that dataset or not.
+            if enough_lfn_ready_in_all_datasets:
+                ## TODO: Check how often we are on this situation. I suspect it is not so often,
+                ## in which case I would remove the 'if enough_lfn_ready_in_all_datasets' and
+                ## always retrieve the workflow status as seems to me it is cleaner and makes
+                ## the code easier to understand. (Comment from Andres Tanasijczuk)
+                msg  = "All datasets in workflow have more than %s ready files." % (self.max_files_per_block)
+                msg += " No need to retrieve the workflow status nor the last publication time."
+                self.logger.info(msg)
+            else:
+                msg  = "At least one dataset has less than %s ready files." % (self.max_files_per_block)
+                self.logger.info(msg)
+                ## Retrieve the workflow status. If the status can not be retrieved, continue
+                ## with the next workflow.
+                workflow_status = ''
                 url = '/'.join(self.cache_area.split('/')[:-1]) + '/workflow'
-                self.logger.info("Starting retrieving the status of %s from %s ." % (workflow, url))
+                self.logger.info("Starting retrieving the status of %s from %s" % (workflow, url))
                 buf = cStringIO.StringIO()
                 data = {'workflow': workflow}
                 header = {"Content-Type ":"application/json"}
                 try:
                     response, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
-                except Exception, ex:
-                    msg = "Error reading the status of %s from cache." % workflow
+                except Exception as ex:
+                    msg = "Error reading the status of %s from cache." % (workflow)
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    continue
-                self.logger.info("Status of %s read from cache..." % workflow)
-                try:
-                    buf.close()
-                    res = json.loads(res_)
-                    workflow_status = res['result'][0]['status']
-                    self.logger.info("Workflow status is %s" % workflow_status)
-                except ValueError:
-                    self.logger.error("Workflow %s is removed from WM" % workflow)
-                    workflow_status = 'REMOVED'
-                except Exception, ex:
-                    msg = "Error loading the status of %s !" % workflow
-                    msg += str(ex)
-                    msg += str(traceback.format_exc())
-                    self.logger.error(msg)
-                    continue
-
-                if workflow_status not in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
-                    query = {'reduce':True, 'key': user_wf['key']}
+                else:
+                    self.logger.info("Status of %s read from cache..." % (workflow))
+                    try:
+                        buf.close()
+                        res = json.loads(res_)
+                        workflow_status = res['result'][0]['status']
+                        self.logger.info("Workflow status is %s" % (workflow_status))
+                    except ValueError:
+                        self.logger.error("Workflow %s is removed from WM" % (workflow))
+                        workflow_status = 'REMOVED'
+                    except Exception as ex:
+                        msg = "Error loading the status of %s !" % (workflow)
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+                ## If the workflow status is terminal, go ahead and publish all the ready files
+                ## in the workflow.
+                if workflow_status in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
+                    self.force_publication = True
+                    self.logger.info("Closing publication of workflow %s since its status is considered terminal." % (workflow))
+                ## Otherwise...
+                else:
+                    ## Get when was the last time a publication was done for this workflow (this
+                    ## should be more or less independent of the output dataset in case there are
+                    ## more than one).
+                    query = {'reduce': True, 'key': user_wf['key']}
                     try:
                         last_publication_time = self.db.loadView('DBSPublisher', 'last_publication', query)['rows']
-                    except Exception, e:
-                        self.logger.error('Cannot get last publication time from Couch for %s: %s' %(user_wf['key'], e))
-                        continue
-                    self.logger.debug('last_publication_time of %s: %s' % (user_wf['key'], last_publication_time))
-                    if last_publication_time:
-                        self.logger.debug('last published block: %s' % last_publication_time[0]['value']['max'])
-                        wait_files = now - last_publication_time[0]['value']['max']
-                        if wait_files > self.block_publication_timeout:
-                            self.logger.info('Forse the publication since the last publication was %s ago' % wait_files)
-                            self.logger.info('Publish number of files minor of max_files_per_block for %s.' % user_wf['key'])
-                        elif not self.forceFailure:
-                            continue
+                    except Exception as ex:
+                        self.logger.error("Cannot get last publication time from Couch for %s: %s" % (user_wf['key'], ex))
+                    else:
+                        self.logger.debug("last_publication_time of %s: %s" % (workflow, last_publication_time))
+                        ## If this is the first time a publication would be done for this workflow, go
+                        ## ahead and publish.
+                        if not last_publication_time:
+                            self.force_publication = True
+                            self.logger.info("Will force publication, since there was no previous publication for this workflow.")
+                        ## Otherwise...
                         else:
-                            pass
-                else:
-                    self.logger.info('Closing the publication of %s since it is completed' % workflow)
+                            self.logger.debug("Last published block: %s" % (last_publication_time[0]['value']['max']))
+                            ## If the last publication was long time ago (> our block publication timeout),
+                            ## go ahead and publish.
+                            time_since_last_publication = now - last_publication_time[0]['value']['max']
+                            hours = int(time_since_last_publication/60/60)
+                            minutes = int((time_since_last_publication - hours*60*60)/60)
+                            timeout_hours = int(self.block_publication_timeout/60/60)
+                            timeout_minutes = int((self.block_publication_timeout - timeout_hours*60*60)/60)
+                            msg = "Last publication for this workflow was %sh:%sm ago" % (hours, minutes)
+                            if time_since_last_publication > self.block_publication_timeout:
+                                self.force_publication = True
+                                msg += " (more than the timeout of %sh:%sm)." % (timeout_hours, timeout_minutes)
+                                msg += " Will force new publication."
+                            else:
+                                msg += " (less than the timeout of %sh:%sm)." % (timeout_hours, timeout_minutes)
+                                msg += " Not enough to force new publication."
+                            self.logger.info(msg)
+            ## Call the publish method with the lists of ready files to publish for this
+            ## workflow grouped by datasets.
+            result = self.publish(workflow, input_dataset, input_dbs_url, pnn, lfn_ready)
+            for dataset in result.keys():
+                published_files = result[dataset].get('published', [])
+                if published_files:
+                    self.mark_good(published_files)
+                failed_files = result[dataset].get('failed', [])
+                if failed_files:
+                    failure_reason = result[dataset].get('failure_reason', "")
+                    force_failure = result[dataset].get('force_failure', False)
+                    self.mark_failed(failed_files, failure_reason, force_failure)
 
-            if lfn_ready:
-                pnn = str(file['value'][0])
-                failed_files, failure_reason, good_files = self.publish( str(file['key'][3]), \
-                                                         self.userDN, str(file['key'][0]), \
-                                                         str(file['value'][2]), str(file['value'][3]), \
-                                                         str(pnn), lfn_ready )
-                self.mark_failed( failed_files, failure_reason )
-                self.mark_good( good_files )
+        self.logger.info("Publications for user %s (group: %s, role: %s) completed." % (self.user, self.group, self.role))
 
-        self.logger.info('Publications completed')
 
     def mark_good(self, files=[]):
         """
@@ -312,7 +379,8 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def mark_failed( self, files=[], failure_reason="", forceFailure=False ):
+
+    def mark_failed( self, files=[], failure_reason="", force_failure=False ):
         """
         Something failed for these files so increment the retry count
         """
@@ -334,7 +402,7 @@ class PublisherWorker:
                 self.logger.error(msg)
                 continue
             # Prepare data to update the document in couch
-            if len(document['publication_retry_count']) + 1 > self.max_retry or forceFailure:
+            if len(document['publication_retry_count']) + 1 > self.max_retry or force_failure:
                 data['publication_state'] = 'publication_failed'
             else:
                 data['publication_state'] = 'publishing'
@@ -361,31 +429,59 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-    def publish(self, workflow, userdn, userhn, inputDataset, sourceurl, pnn, lfn_ready):
+
+    def publish(self, workflow, inputDataset, sourceURL, pnn, lfn_ready):
         """Perform the data publication of the workflow result.
-          :arg str workflow: a workflow name
-          :arg str dbsurl: the DBS URL endpoint where to publish
-          :arg str inputDataset
-          :arg str sourceurl
-          :return: the publication status or result"""
+           :arg str workflow: a workflow name
+           :arg str inputDataset
+           :arg str sourceURL
+           :arg str pnn
+           :arg dict lfn_ready
+           :return: the publication status or result"""
+        retdict = {}
+        ## Don't publish anything if there are not enough ready files to make a block in
+        ## any of the datasets and publication was not forced. This is a first filtering
+        ## so to not retrieve the filemetadata unnecesarily.
+        if not False in map(lambda x: len(x) < self.max_files_per_block, lfn_ready.values()) and not self.force_publication:
+            return retdict
+        ## Get the filemetada for all the ready files in the workflow.
+        lfn_ready_list = []
+        for v in lfn_ready.values():
+            lfn_ready_list.extend(v)
+        toPublish = {}
         try:
-            toPublish = self.readToPublishFiles(workflow, userhn, lfn_ready)
+            toPublish = self.readToPublishFiles(workflow, self.user, lfn_ready_list)
         except (tarfile.ReadError, RuntimeError):
-            self.logger.error("Unable to read publication description files. ")
-            return lfn_ready, []
+            msg = "Unable to read publication description files."
+            self.logger.error(msg)
+            retdict = {'unknown_datasets': {'failed': lfn_ready_list, 'failure_reason': msg, 'force_failure': False, 'published': []}}
+            return retdict
         if not toPublish:
-            if self.forceFailure:
-                msg = "FWJR not found in cache! Forcing the failure"
+            if self.force_failure:
+                msg = "Outputs filemetadata not found in cache! Forcing publication failure."
                 self.logger.error(msg)
-                self.mark_failed(lfn_ready, msg, True)
-            else:
-                return [], "", []
-        self.logger.info("Starting data publication in %s of %s" % ("DBS", str(workflow)))
-        failed, failure_reason, done, dbsResults = self.publishInDBS3(userdn=userdn, sourceURL=sourceurl,
-                                                      inputDataset=inputDataset, toPublish=toPublish,
-                                                      pnn=pnn, workflow=workflow)
-        self.logger.debug("DBS publication results %s" % dbsResults)
-        return failed, failure_reason, done
+                if self.publication_failure_msg:
+                    msg += " %s" % (self.publication_failure_msg)
+                retdict = {'unknown_datasets': {'failed': lfn_ready_list, 'failure_reason': msg, 'force_failure': True, 'published': []}}
+            return retdict
+        ## Don't publish datasets for which there are not enough ready files to make a
+        ## block, unless publication was forced.
+        for dataset in toPublish.keys():
+            files = toPublish[dataset]
+            if len(files) < self.max_files_per_block and not self.force_publication:
+                toPublish.pop(dataset)
+        ## Finally... publish if there is something left to publish.
+        if not toPublish:
+            return retdict
+        for dataset in toPublish.keys():
+            self.logger.info('toPublish %s files in %s' % (len(toPublish[dataset]), dataset))
+        self.logger.info("Starting data publication in DBS of %s" % str(workflow))
+        failed, failure_reason, published, dbsResults = self.publishInDBS3(sourceURL, inputDataset, toPublish, pnn)
+        self.logger.debug("DBS publication results %s" % (dbsResults))
+        for dataset in toPublish.keys():
+            retdict.update({dataset: {'failed': failed.get(dataset, []), 'failure_reason': failure_reason.get(dataset, ""), 'published': published.get(dataset, [])}})
+        return retdict
+
 
     def readToPublishFiles(self, workflow, userhn, lfn_ready):
         """
@@ -434,54 +530,27 @@ class PublisherWorker:
         self.logger.info("%s records got from cache" % len(res['result']))
         self.logger.debug("results %s..." % res['result'])
         toPublish = {}
-        for files in res['result']:
-            outdataset = str(files['outdataset'])
-            if toPublish.has_key(outdataset):
-                toPublish[outdataset].append(files)
-            else:
-                toPublish[outdataset] = []
-                toPublish[outdataset].append(files)
-        # FIXME: the following code takes the last user dataset referred in the cache area.
-        # So it will not work properly if there are more than 1 user dataset to publish.
-        if toPublish:
-            self.logger.info("Checking the metadata of %s LFNs ready in %s records got from cache" %(len(lfn_ready), len(toPublish[outdataset])))
-            fail_files, toPublish = self.clean(lfn_ready, toPublish)
-            if toPublish.has_key(outdataset):
-                self.logger.info('to_publish %s files in %s' % (len(toPublish[outdataset]), outdataset))
-            else:
-                self.logger.error('No files to publish in %s' % outdataset)
-                self.logger.error('The metadata is still not available in the cache area or \
-                                   there are more than 1 dataset to publish for the same workflow')
-            self.logger.debug('to_publish %s' % toPublish)
+        for filemetadata in res['result']:
+            dataset = str(filemetadata['outdataset'])
+            toPublish.setdefault(dataset, []).append(filemetadata)
+        toPublish = self.clean(lfn_ready, toPublish)
+        self.logger.debug('toPublish = %s' % toPublish)
         return toPublish
+
 
     def clean(self, lfn_ready, toPublish):
         """
         Clean before publishing
         """
-        fail_files = []
         new_toPublish = {}
-        files_to_publish = []
-        lfn_to_publish = []
-        for ready in lfn_ready:
-            if toPublish:
-                for datasetPath, files in toPublish.iteritems():
-                    new_temp_files = []
-                    lfn_dict = {}
-                    for lfn in files:
-                        if lfn['lfn'] == ready:
-                            lfn_to_publish.append(lfn['lfn'])
-                            lfn_dict = lfn
-                            lfn_dict['lfn'] = lfn['lfn'].replace('store/temp', 'store', 1)
-                            new_temp_files.append(lfn_dict)
-                            break
-                if new_temp_files:
-                    if new_toPublish.has_key(datasetPath):
-                        new_toPublish[datasetPath].extend(new_temp_files)
-                    else:
-                        new_toPublish[datasetPath] = new_temp_files
+        for dataset, outfiles_metadata in toPublish.iteritems():
+            for outfile_metadata in outfiles_metadata:
+                dest_lfn = outfile_metadata['lfn']
+                if dest_lfn in lfn_ready:
+                    new_toPublish.setdefault(dataset, []).append(outfile_metadata)
         self.logger.info('Cleaning ends')
-        return fail_files, new_toPublish
+        return new_toPublish
+
 
     def format_file_3(self, file):
         nf = {'logical_file_name': file['lfn'],
@@ -526,8 +595,7 @@ class PublisherWorker:
         if numBlocksToMigrate == 0:
             self.logger.info("No migration needed.")
         else:
-            msg = "Have to migrate %d blocks from %s to %s."
-            msg = msg % (numBlocksToMigrate, sourceApi.url, destReadApi.url)
+            msg = "Have to migrate %d blocks from %s to %s." % (numBlocksToMigrate, sourceApi.url, destReadApi.url)
             self.logger.info(msg)
             msg = "List of blocks to migrate:\n%s." % (", ".join(blocksToMigrate))
             self.logger.debug(msg)
@@ -539,12 +607,12 @@ class PublisherWorker:
             migrationIdsInProgress = []
             for block in list(blocksToMigrate):
                 ## Submit migration request for this block.
-                (id, atDestination, alreadyQueued) = self.requestBlockMigration(migrateApi, sourceApi, block)
+                (reqid, atDestination, alreadyQueued) = self.requestBlockMigration(migrateApi, sourceApi, block)
                 ## If the block is already in the destination DBS instance, we don't need
                 ## to monitor its migration status. If the migration request failed to be
                 ## submitted, we retry it next time. Otherwise, save the migration request
                 ## id in the list of migrations in progress.
-                if id == None:
+                if reqid == None:
                     blocksToMigrate.remove(block)
                     if atDestination:
                         numBlocksAtDestination += 1
@@ -553,7 +621,7 @@ class PublisherWorker:
                     else:
                         numFailedSubmissions += 1
                 else:
-                    migrationIdsInProgress.append(id)
+                    migrationIdsInProgress.append(reqid)
             if numBlocksAtDestination > 0:
                 msg = "%d blocks already in destination DBS." % (numBlocksAtDestination)
                 self.logger.info(msg)
@@ -598,37 +666,37 @@ class PublisherWorker:
                     ## Check the migration status of each block migration request.
                     ## If a block migration has succeeded or terminally failes, remove the
                     ## migration request id from the list of migration requests in progress.
-                    for id in list(migrationIdsInProgress):
+                    for reqid in list(migrationIdsInProgress):
                         try:
-                            status = migrateApi.statusMigration(migration_rqst_id = id)
+                            status = migrateApi.statusMigration(migration_rqst_id = reqid)
                             state = status[0].get('migration_status')
                             retry = status[0].get('retry_count')
                         except Exception, ex:
-                            msg = "Could not get status for migration id %d:\n%s" % (id, ex.msg)
+                            msg = "Could not get status for migration id %d:\n%s" % (reqid, ex.msg)
                             self.logger.error(msg)
                         else:
                             if state == 2:
-                                msg = "Migration id %d succeeded." % (id)
+                                msg = "Migration id %d succeeded." % (reqid)
                                 self.logger.info(msg)
-                                migrationIdsInProgress.remove(id)
+                                migrationIdsInProgress.remove(reqid)
                                 numSuccessfulMigrations += 1
                             if state == 9:
-                                msg = "Migration id %d terminally failed." % (id)
+                                msg = "Migration id %d terminally failed." % (reqid)
                                 self.logger.info(msg)
-                                msg = "Full status for migration id %d:\n%s" % (id, str(status))
+                                msg = "Full status for migration id %d:\n%s" % (reqid, str(status))
                                 self.logger.debug(msg)
-                                migrationIdsInProgress.remove(id)
+                                migrationIdsInProgress.remove(reqid)
                                 numFailedMigrations += 1
                             if state == 3:
                                 if retry < 3:
-                                    msg = "Migration id %d failed (retry %d), but should be retried." % (id, retry)
+                                    msg = "Migration id %d failed (retry %d), but should be retried." % (reqid, retry)
                                     self.logger.info(msg)
                                 else:
-                                    msg = "Migration id %d failed (retry %d)." % (id, retry)
+                                    msg = "Migration id %d failed (retry %d)." % (reqid, retry)
                                     self.logger.info(msg)
-                                    msg = "Full status for migration id %d:\n%s" % (id, str(status))
+                                    msg = "Full status for migration id %d:\n%s" % (reqid, str(status))
                                     self.logger.debug(msg)
-                                    migrationIdsInProgress.remove(id)
+                                    migrationIdsInProgress.remove(reqid)
                                     numFailedMigrations += 1
                     numMigrationsInProgress = len(migrationIdsInProgress)
                     ## Stop waiting if there are no more migrations in progress.
@@ -674,7 +742,7 @@ class PublisherWorker:
         """
         atDestination = False
         alreadyQueued = False
-        id = None
+        reqid = None
         msg = "Submiting migration request for block %s ..." % (block)
         self.logger.info(msg)
         sourceURL = sourceApi.url
@@ -694,9 +762,9 @@ class PublisherWorker:
         if not atDestination:
             msg = "Result of migration request: %s" % (str(result))
             self.logger.debug(msg)
-            id = result.get('migration_details', {}).get('migration_request_id')
+            reqid = result.get('migration_details', {}).get('migration_request_id')
             report = result.get('migration_report')
-            if id == None:
+            if reqid == None:
                 msg  = "Migration request failed to submit."
                 msg += "\nMigration request results: %s" % (str(result))
                 self.logger.error(msg)
@@ -706,11 +774,11 @@ class PublisherWorker:
                 alreadyQueued = True
                 try:
                     status = migrateApi.statusMigration(block_name = block)
-                    id = status[0].get('migration_request_id')
+                    reqid = status[0].get('migration_request_id')
                 except Exception:
                     msg = "Could not get status for already queued migration of block %s." % (block)
                     self.logger.error(msg)
-        return (id, atDestination, alreadyQueued)
+        return (reqid, atDestination, alreadyQueued)
 
 
     def createBulkBlock(self, output_config, processing_era_config, primds_config, \
@@ -740,16 +808,16 @@ class PublisherWorker:
         blockDump['block']['block_size'] = sum([int(file[u'file_size']) for file in files])
         return blockDump
 
-    def publishInDBS3(self, userdn, sourceURL, inputDataset, toPublish, pnn, workflow):
+
+    def publishInDBS3(self, sourceURL, inputDataset, toPublish, pnn):
         """
         Publish files into DBS3
         """
-        publish_next_iteration = []
-        failed = []
-        published = []
+        published = {}
+        failed = {}
+        publish_in_next_iteration = {}
         results = {}
-        failure_reason = ""
-        blockSize = self.max_files_per_block
+        failure_reason = {}
 
         # In the case of MC input (or something else which has no 'real' input dataset),
         # we simply call the input dataset by the primary DS name (/foo/).
@@ -799,11 +867,18 @@ class PublisherWorker:
         acquisition_era_name = "CRAB"
         processing_era_config = {'processing_version': 1, 'description': 'CRAB3_processing_era'}
 
-        self.logger.debug("Starting iteration through files for publication")
-        for datasetPath, files in toPublish.iteritems():
-            results[datasetPath] = {'files': 0, 'blocks': 0, 'existingFiles': 0}
-            dbsDatasetPath = datasetPath
-
+        ## Loop over the datasets to publish.
+        self.logger.debug("Starting iteration through datasets/files for publication.")
+        for dataset, files in toPublish.iteritems():
+            ## Make sure to add the dataset name as a key in all the dictionaries that will
+            ## be returned.
+            results[dataset] = {'files': 0, 'blocks': 0, 'existingFiles': 0}
+            published[dataset] = []
+            failed[dataset] = []
+            publish_in_next_iteration[dataset] = []
+            failure_reason[dataset] = ""
+            ## If there are no files to publish for this dataset, continue with the next
+            ## dataset.
             if not files:
                 continue
 
@@ -817,7 +892,7 @@ class PublisherWorker:
             acquisitionera = str(files[0]['acquisitionera'])
             if acquisitionera == "null":
                 acquisitionera = acquisition_era_name
-            empty, primName, procName, tier =  dbsDatasetPath.split('/')
+            empty, primName, procName, tier = dataset.split('/')
 
             primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
             self.logger.debug("About to insert primary dataset: %s" % str(primds_config))
@@ -826,18 +901,18 @@ class PublisherWorker:
 
             ## Find all (valid) files already published in this dataset.
             try:
-                existingDBSFiles = destReadApi.listFiles(dataset = dbsDatasetPath, detail = True)
+                existingDBSFiles = destReadApi.listFiles(dataset = dataset, detail = True)
                 existingFiles = [f['logical_file_name'] for f in existingDBSFiles]
                 existingFilesValid = [f['logical_file_name'] for f in existingDBSFiles if f['is_file_valid']]
-                msg  = "Dataset %s already contains %d files" % (datasetPath, len(existingFiles))
+                msg  = "Dataset %s already contains %d files" % (dataset, len(existingFiles))
                 msg += " (%d valid, %d invalid)." % (len(existingFilesValid), len(existingFiles) - len(existingFilesValid))
                 self.logger.info(msg)
-                results[datasetPath]['existingFiles'] = len(existingFiles)
+                results[dataset]['existingFiles'] = len(existingFiles)
             except Exception, ex:
                 msg  = "Error when listing files in DBS: %s" % (str(ex))
                 msg += "\n%s" % (str(traceback.format_exc()))
                 self.logger.error(msg)
-                return [], [], {}
+                continue
 
             ## Is there anything to do?
             workToDo = False
@@ -846,13 +921,12 @@ class PublisherWorker:
                     workToDo = True
                     break
             ## If there is no work to do (because all the files that were requested
-            ## to be published are already published and in VALID state), put the
+            ## to be published are already published and in valid state), put the
             ## files in the list of published files and continue with the next dataset.
             if not workToDo:
-                msg = "Nothing uploaded, %s has these files already or not enough files." % (datasetPath)
+                msg = "Nothing uploaded, %s has these files already or not enough files." % (dataset)
                 self.logger.info(msg)
-                for file in files:
-                    published.append(file['lfn'])
+                published[dataset].extend([f['lfn'] for f in files])
                 continue
 
             acquisition_era_config = {'acquisition_era_name': acquisitionera, 'start_date': 0}
@@ -865,7 +939,7 @@ class PublisherWorker:
                             }
             self.logger.debug("Published output config.")
 
-            dataset_config = {'dataset': dbsDatasetPath,
+            dataset_config = {'dataset': dataset,
                               'processed_ds_name': procName,
                               'data_tier_name': tier,
                               'acquisition_era_name': acquisitionera,
@@ -939,7 +1013,7 @@ class PublisherWorker:
                                 file['parents'].remove(parentFile)
                     ## Add this file to the list of files to be published.
                     dbsFiles.append(self.format_file_3(file))
-                published.append(file['lfn'])
+                published[dataset].append(file['lfn'])
 
             ## Print a message with the number of files to publish.
             msg = "Found %d files not already present in DBS which will be published." % len(dbsFiles)
@@ -960,15 +1034,15 @@ class PublisherWorker:
                 if not existingDatasets:
                     msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceApi.url, destReadApi.url)
                     self.logger.info(msg)
-                    failed += [i['logical_file_name'] for i in dbsFiles]
-                    failure_reason = msg
-                    return failed, failure_reason, [], {}
+                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
+                    failure_reason[dataset] = msg
+                    continue
                 if not existingDatasets[0]['dataset'] == inputDataset:
                     msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information." % (inputDataset)
                     self.logger.info(msg)
-                    failed += [i['logical_file_name'] for i in dbsFiles]
-                    failure_reason = msg
-                    return failed, failure_reason, [], {}
+                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
+                    failure_reason[dataset] = msg
+                    continue
             ## Then migrate the parent blocks that are in the global DBS instance.
             if globalParentBlocks:
                 msg = "List of parent blocks that need to be migrated from %s:\n%s" % (globalApi.url, globalParentBlocks)
@@ -977,65 +1051,54 @@ class PublisherWorker:
                 if not existingDatasets:
                     msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, globalApi.url, destReadApi.url)
                     self.logger.info(msg)
-                    failed += [i['logical_file_name'] for i in dbsFiles]
-                    failure_reason = msg
-                    return failed, failure_reason, [], {}
+                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
+                    failure_reason[dataset] = msg
+                    continue
                 if not existingDatasets[0]['dataset'] == inputDataset:
                     msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information" % (inputDataset)
                     self.logger.info(msg)
-                    failed += [i['logical_file_name'] for i in dbsFiles]
-                    failure_reason = msg
-                    return failed, failure_reason, [], {}
-
+                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
+                    failure_reason[dataset] = msg
+                    continue
+            ## Publish the files in blocks. The blocks must have exactly max_files_per_block
+            ## files, unless there are less than max_files_per_block files to publish to
+            ## begin with. If there are more than max_files_per_block files to publish,
+            ## publish as many blocks as possible and leave the tail of files for the next
+            ## PublisherWorker call, unless forced to published.
+            block_count = 0
             count = 0
-            blockCount = 0
-            if len(dbsFiles) < self.max_files_per_block:
-                block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
-                files_to_publish = dbsFiles[count:count+blockSize]
+            while True:
+                block_name = "%s#%s" % (dataset, str(uuid.uuid4()))
+                files_to_publish = dbsFiles[count:count+self.max_files_per_block]
                 try:
                     block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                    self.logger.debug("Inserting files %s into block %s." % ([i['logical_file_name'] for i in files_to_publish], block_name))
+                    self.logger.debug("Inserting files %s into block %s." % ([f['logical_file_name'] for f in files_to_publish], block_name))
                     blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
                                                      acquisition_era_config, block_config, files_to_publish)
+                    #self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
                     destApi.insertBulkBlock(blockDump)
-                    count += blockSize
-                    blockCount += 1
+                    block_count += 1
                 except Exception, ex:
-                    failed += [i['logical_file_name'] for i in files_to_publish]
-                    msg =  "Error when publishing"
+                    failed[dataset].extend([f['logical_file_name'] for f in files_to_publish])
+                    msg  = "Error when publishing (%s) " % ", ".join(failed[dataset])
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    failure_reason = str(ex)
-            else:
-                while count < len(dbsFiles):
-                    block_name = "%s#%s" % (dbsDatasetPath, str(uuid.uuid4()))
-                    files_to_publish = dbsFiles[count:count+blockSize]
-                    try:
-                        if len(dbsFiles[count:len(dbsFiles)]) < self.max_files_per_block:
-                            for file in dbsFiles[count:len(dbsFiles)]:
-                                publish_next_iteration.append(file['logical_file_name'])
-                            count += blockSize
-                            continue
-                        block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                        blockDump = self.createBulkBlock(output_config, processing_era_config, primds_config, dataset_config, \
-                                                         acquisition_era_config, block_config, files_to_publish)
-                        self.logger.debug("Block to insert: %s\n" % pprint.pformat(blockDump))
-                        destApi.insertBulkBlock(blockDump)
-
-                        count += blockSize
-                        blockCount += 1
-                    except Exception, ex:
-                        failed += [i['logical_file_name'] for i in files_to_publish]
-                        msg =  "Error when publishing (%s) " % ", ".join(failed)
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        failure_reason = str(ex)
-                        count += blockSize
-            results[datasetPath]['files'] = len(dbsFiles) - len(failed)
-            results[datasetPath]['blocks'] = blockCount
-        published = filter(lambda x: x not in failed + publish_next_iteration, published)
-        self.logger.info("End of publication status: failed %s, published %s, publish_next_iteration %s, results %s" \
-                         % (failed, published, publish_next_iteration, results))
+                    failure_reason[dataset] = str(ex)
+                count += self.max_files_per_block
+                files_to_publish_next = dbsFiles[count:count+self.max_files_per_block]
+                if len(files_to_publish_next) < self.max_files_per_block:
+                    publish_in_next_iteration[dataset].extend([f['logical_file_name'] for f in files_to_publish_next])
+                    break
+            published[dataset] = filter(lambda x: x not in failed[dataset] + publish_in_next_iteration[dataset], published[dataset])
+            ## Fill number of files/blocks published for this dataset.
+            results[dataset]['files'] = len(dbsFiles) - len(failed[dataset]) - len(publish_in_next_iteration[dataset])
+            results[dataset]['blocks'] = block_count
+            ## Print a publication status summary for this dataset.
+            msg  = "End of publication status for dataset %s:" % (dataset)
+            msg += " failed (%s) %s" % (len(failed[dataset]), failed[dataset])
+            msg += ", published (%s) %s" % (len(published[dataset]), published[dataset])
+            msg += ", publish_in_next_iteration (%s) %s" % (len(publish_in_next_iteration[dataset]), publish_in_next_iteration[dataset])
+            msg += ", results %s" % (results[dataset])
+            self.logger.info(msg)
         return failed, failure_reason, published, results
