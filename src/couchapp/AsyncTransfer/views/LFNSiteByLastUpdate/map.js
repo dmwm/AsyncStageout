@@ -1,12 +1,5 @@
-function complete_job(doc, req) {
-	if ( doc['state'] != 'done' ) {
-        	return false;
-        }
-        return true;
-}
-
 function(doc) {
-	if(doc.lfn && complete_job(doc)){
+	if(doc.source_lfn && doc.state == 'done'){
 		emit(doc.last_update, {"lfn": doc.source_lfn, "location": doc.source});
 	}
 }
