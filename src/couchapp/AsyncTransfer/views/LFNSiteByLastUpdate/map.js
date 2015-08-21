@@ -11,8 +11,7 @@ function(doc) {
 		        var lfn = doc.lfn
                 }
                 else {
-			var final_lfn = doc.lfn
-                	var lfn = final_lfn.replace('/store/user', '/store/temp/user')
+                	var lfn = doc.lfn.replace('/store', '/store/temp')
 		}
 		emit(doc.last_update, {"lfn": lfn, "location": doc.source});
 	}
