@@ -7,12 +7,6 @@ function complete_job(doc, req) {
 
 function(doc) {
 	if(doc.lfn && complete_job(doc)){
-                if (doc.lfn.indexOf("temp") > 0) {
-		        var lfn = doc.lfn
-                }
-                else {
-                	var lfn = doc.lfn.replace('/store', '/store/temp')
-		}
-		emit(doc.last_update, {"lfn": lfn, "location": doc.source});
+		emit(doc.last_update, {"lfn": doc.source_lfn, "location": doc.source});
 	}
 }
