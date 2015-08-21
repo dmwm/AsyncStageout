@@ -171,7 +171,7 @@ class ReporterWorker:
 
                     if 'Failed' or 'abandoned' or 'Canceled' or 'lost' in json_data['transferStatus']:
                         # Sort failed files
-                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Failed']
+                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Failed' or x == 'Canceled']
                         abandoned_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'abandoned']
                         failed_indexes.extend(abandoned_indexes)
                         self.logger.info('failed indexes %s' % len(failed_indexes))
