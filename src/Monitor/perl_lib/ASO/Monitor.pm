@@ -84,7 +84,7 @@ sub new {
 
   $self->{QUEUE} = POE::Queue::Array->new();
   $self->{Q_INTERFACE} = ASO::GliteAsync->new
-                (  
+                (
                   SERVICE => $self->{SERVICE},
                   ME      => 'GLite',
                   VERBOSE => $self->{VERBOSE},
@@ -422,17 +422,17 @@ sub poll_job_postback {
 
   $error = '';
   $command = $arg1->[0];
-  if ($command->{STATUS} ne "0") { 
+  if ($command->{STATUS} ne "0") {
       $error = "ended with status $command->{STATUS}";
-      if ($command->{STDERR}) { 
-          $error .= " and error message: $command->{STDERR}"; 
+      if ($command->{STDERR}) {
+          $error .= " and error message: $command->{STDERR}";
       }
   }
 
   $job = $command->{FTSJOB};
   $result = $self->{Q_INTERFACE}->ParseListJob( $job, $command->{STDOUT} );
 
-  if ( $self->{DEBUG} && $command->{DURATION} > 8 )
+  if ( $self->{DEBUG} )
   {
     my $subtime = int(1000*$command->{DURATION})/1000;
     $self->Dbgmsg('ListJob took ',$subtime,' seconds');
@@ -451,10 +451,10 @@ sub poll_job_postback {
 
     # Log any extra info
     foreach ( @{$result->{INFO}} ) { chomp; $job->Log($_) };
-    
+
     # Log any error message
     foreach ( split /\n/, $command->{STDERR} ) { chomp;  $job->Log($_) };
-    
+
     # Only do the verbose logging once
     $job->VERBOSE(0);
   };
@@ -484,7 +484,7 @@ sub poll_job_postback {
       }
 
       if ( ! exists $f->ExitStates->{$s->{STATE}} )
-      { 
+      {
         my $last = $self->{_new_file_states}{$s->{STATE}} || 0;
         if ( time - $last > 300 )
         {
@@ -492,7 +492,7 @@ sub poll_job_postback {
           $self->Alert("Unknown file-state: " . $s->{STATE});
         }
       }
-          
+
       if ( $_ = $f->State( $s->{STATE} ) ) {
         $f->Log($f->Timestamp,"from $_ to ",$f->State);
         $job->Log($f->Timestamp,$f->Source,$f->Source,$f->State );
@@ -528,7 +528,7 @@ sub poll_job_postback {
     }
 
     if ( ! exists $job->ExitStates->{$result->{JOB_STATE}} )
-    { 
+    {
       my $last = $self->{_new_job_states}{$result->{JOB_STATE}} || 0;
       if ( time - $last > 300 )
       {
@@ -569,7 +569,7 @@ sub poll_job_postback {
         $self->Logmsg($job->ID," ",$f->Destination," was $oldstate, now ",$f->State);
         $f->Reason($reason);
         $self->add_file_report($job->{USERNAME},$f);
-      } 
+      }
     }
   }
 
@@ -594,7 +594,7 @@ sub poll_job_postback {
 sub add_file_report {
   my ($self,$user,$file) = @_;
   return unless defined $self->{FN_MAP}{$file->Source};
- 
+
   my $reason = $file->Reason;
   if ( $reason eq 'error during  phase: [] ' ) { $reason = ''; }
 
