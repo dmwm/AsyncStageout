@@ -432,7 +432,7 @@ sub poll_job_postback {
   $job = $command->{FTSJOB};
   $result = $self->{Q_INTERFACE}->ParseListJob( $job, $command->{STDOUT} );
 
-  if ( $self->{DEBUG} )
+  if ( $self->{DEBUG} && $command->{DURATION} > 8 )
   {
     my $subtime = int(1000*$command->{DURATION})/1000;
     $self->Dbgmsg('ListJob took ',$subtime,' seconds');
