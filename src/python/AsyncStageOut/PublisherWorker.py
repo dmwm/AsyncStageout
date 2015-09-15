@@ -234,11 +234,16 @@ class PublisherWorker:
             if wf_jobs_endtime:
                 self.logger.debug("jobs_endtime of %s: %s" % (workflow, wf_jobs_endtime))
                 wf_jobs_endtime.sort()
-                workflow_duration = (now - wf_jobs_endtime[0]) / 86400
-                if workflow_duration > self.config.workflow_expiration_time:
+                workflow_duration = (now - wf_jobs_endtime[0])
+                workflow_expiration_time = self.config.workflow_expiration_time * 24*60*60
+                if workflow_duration > workflow_expiration_time:
                     self.force_publication = True
                     self.force_failure = True
-                    self.publication_failure_msg = "Workflow %s expired since %s days!" % (workflow, (workflow_duration - self.config.workflow_expiration_time))
+                    time_since_expiration = workflow_duration - workflow_expiration_time
+                    hours = int(time_since_expiration/60/60)
+                    minutes = int((time_since_expiration - hours*60*60)/60)
+                    seconds = int(time_since_expiration - hours*60*60 - minutes*60)
+                    self.publication_failure_msg = "Workflow %s expired since %sh:%sm:%ss!" % (workflow, hours, minutes, seconds)
                     msg = self.publication_failure_msg
                     msg += " Will force the publication if possible or fail it otherwise."
                     self.logger.info(msg)
