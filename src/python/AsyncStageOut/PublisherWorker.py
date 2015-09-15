@@ -143,6 +143,7 @@ class PublisherWorker:
         try:
             self.connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
         except Exception, ex:
+            msg =  "Error initializing the connection"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.debug(msg)
