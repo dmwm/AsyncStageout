@@ -1,6 +1,9 @@
+import os
+import time
+import logging
 import hashlib
 import subprocess
-import os
+
 from WMCore.Services.SiteDB.SiteDB import SiteDBJSON
 from WMCore.Credential.Proxy import Proxy
 
@@ -73,3 +76,17 @@ def getProxy(defaultDelegation, log):
     if timeleft is not None and timeleft > 0:
         return (True, proxyPath)
     return (False, None)
+
+def getCommonLogFormatter(config):
+    """
+    Define a common log messages formatter
+    """
+    logMsgFormat = getattr(config, 'logMsgFormat', "%(asctime)s:%(levelname)s:%(module)s:%(message)s")
+    ## Note: python bug: struct_time objects are not aware of the time zone
+    ## => datefmt="%Y-%m-%d %H:%M:%S %Z(%z)" will always show %Z(%z) = CET(+0000)
+    ## even if the time in the struct_time object corresponds to other time zone.
+    ## Therefore the hardwritting of 'GMT' in the datefmt below. As long as the
+    ## converter attribute of the formatter is time.gmtime, this should be fine.
+    formatter = logging.Formatter(fmt=logMsgFormat, datefmt="%Y-%m-%d %H:%M:%S GMT")
+    formatter.converter = time.gmtime
+    return formatter

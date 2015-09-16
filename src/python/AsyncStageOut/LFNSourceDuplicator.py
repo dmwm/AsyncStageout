@@ -4,11 +4,12 @@
 _LFNSourceDuplicator_
 Duplicate view in Async. database
 """
-from WMCore.Database.CMSCouch                 import CouchServer
-from WMCore.WorkerThreads.BaseWorkerThread    import BaseWorkerThread
 from WMCore.WMFactory import WMFactory
+from WMCore.Database.CMSCouch import CouchServer
 
-class LFNSourceDuplicator(BaseWorkerThread):
+from AsyncStageOut.BaseDaemon import BaseDaemon
+
+class LFNSourceDuplicator(BaseDaemon):
     """
     _LFNSourceDuplicator_
     Load plugin to get the result of the source database query.
@@ -17,19 +18,7 @@ class LFNSourceDuplicator(BaseWorkerThread):
 
     def __init__(self, config):
 
-        BaseWorkerThread.__init__(self)
-
-        self.config = config.AsyncTransfer
-
-        # self.logger is set up by the BaseWorkerThread, we just set it's level
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-
-        self.logger.debug('Configuration loaded')
+        BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)

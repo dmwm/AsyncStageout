@@ -12,17 +12,17 @@ Here's the algorithm
     b. submits ftscp
     c. deletes successfully transferred files
 """
+import os
+import logging
+from multiprocessing import Pool
+
+from WMCore.WMFactory import WMFactory
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
+
+from AsyncStageOut.BaseDaemon import BaseDaemon
 from AsyncStageOut.TransferWorker import TransferWorker
-from multiprocessing import Pool
-from WMCore.WMFactory import WMFactory
-#import random
-import logging
-#import time
-import os
 
 result_list = []
 current_running = []
@@ -41,7 +41,7 @@ def ftscp(user, tfc_map, config):
     if worker.init:
        logging.debug("Starting %s" %worker)
        try:
-           worker ()
+           worker()
        except Exception, e:
            logging.debug("Worker cannot start!:" %e)
            return user
@@ -56,7 +56,7 @@ def log_result(result):
     result_list.append(result)
     current_running.remove(result)
 
-class TransferDaemon(BaseWorkerThread):
+class TransferDaemon(BaseDaemon):
     """
     _TransferDaemon_
     Call multiprocessing library to instantiate a TransferWorker for each user.
@@ -66,20 +66,8 @@ class TransferDaemon(BaseWorkerThread):
         Initialise class members
         """
         #Need a better way to test this without turning off this next line
-        BaseWorkerThread.__init__(self)
-        #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
-        #self.logger = logging.getLogger()
-        # self.logger is set up by the BaseWorkerThread, we just set it's level
+        BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
-        self.config = config.AsyncTransfer
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-
-        self.logger.debug('Configuration loaded')
         self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
         if not os.path.isdir(self.dropbox_dir):
             try:

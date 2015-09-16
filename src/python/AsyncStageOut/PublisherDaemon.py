@@ -8,13 +8,14 @@ Here's the algorithm
 3. create a multiprocessing Pool of size N
 4. spawn a process per user that publish their files
 """
-from WMCore.Database.CMSCouch import CouchServer
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
-from AsyncStageOut.PublisherWorker import PublisherWorker
-from multiprocessing import Pool
-from WMCore.WMFactory import WMFactory
-#import random
 import logging
+from multiprocessing import Pool
+
+from WMCore.WMFactory import WMFactory
+from WMCore.Database.CMSCouch import CouchServer
+
+from AsyncStageOut.BaseDaemon import BaseDaemon
+from AsyncStageOut.PublisherWorker import PublisherWorker
 
 result_list = []
 current_running = []
@@ -32,7 +33,7 @@ def publish(user, config):
     if worker.init:
        logging.debug("Starting %s" %worker)
        try:
-           worker ()
+           worker()
        except Exception, e:
            logging.debug("Worker cannot start!:" %e)
            return user
@@ -45,7 +46,7 @@ def log_result(result):
     result_list.append(result)
     current_running.remove(result)
 
-class PublisherDaemon(BaseWorkerThread):
+class PublisherDaemon(BaseDaemon):
     """
     _PublisherDaemon_
     Call multiprocessing library to instantiate a PublisherWorker for each user.
@@ -55,18 +56,8 @@ class PublisherDaemon(BaseWorkerThread):
         Initialise class members
         """
         #Need a better way to test this without turning off this next line
-        BaseWorkerThread.__init__(self)
-        #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
-        #self.logger = logging.getLogger()
-        # self.logger is set up by the BaseWorkerThread, we just set it's level
-        self.config = config.DBSPublisher
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-        self.logger.debug('Configuration loaded')
+        BaseDaemon.__init__(self, config, 'DBSPublisher')
+
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
@@ -76,11 +67,9 @@ class PublisherDaemon(BaseWorkerThread):
 
     def algorithm(self, parameters = None):
         """
-
         1. Get a list of users with files to publish from the couchdb instance
         2. For each user get a suitably sized input for publish
         3. Submit the publish to a subprocess
-
         """
         users = self.active_users(self.db)
         self.logger.debug('kicking off pool %s' %users)

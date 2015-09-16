@@ -5,18 +5,22 @@ It populates user_monitoring_db database
 with the details of users transfers from
 files_database.
 """
-import time, datetime
+import os
+import time
+import errno
+import logging
+import datetime
+import traceback
+import subprocess
+from multiprocessing import Pool
+
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
 from WMCore.Storage.TrivialFileCatalog import readTFC
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
-import subprocess, os, errno
-import time
-import traceback
-from AsyncStageOut import getDNFromUserName
+
 from AsyncStageOut import getProxy
-from multiprocessing import Pool
-import logging
+from AsyncStageOut import getDNFromUserName
+from AsyncStageOut.BaseDaemon import BaseDaemon
 
 def execute_command( command, logger, timeout ):
     """
@@ -60,23 +64,14 @@ def remove_files(userProxy, pfn):
         logging.info("File Deleted.")
     return
 
-class CleanerDaemon(BaseWorkerThread):
+class CleanerDaemon(BaseDaemon):
     """
     _FilesCleaner_
     Clean transferred outputs from /store/temp.
     """
     def __init__(self, config):
-        BaseWorkerThread.__init__(self)
-        self.config = config.FilesCleaner
-        self.logger.debug('Configuration loaded')
+        BaseDaemon.__init__(self, config, 'FilesCleaner')
 
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-        self.logger.debug('Configuration loaded')
         config_server = CouchServer(dburl=self.config.config_couch_instance)
         self.config_db = config_server.connectDatabase(self.config.config_database)
         self.logger.debug('Connected to files DB')

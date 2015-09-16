@@ -7,31 +7,22 @@ in runtime database. It creates a document
 per fts server per iteration and removes
 old documents from runtime database.
 """
-from WMCore.Database.CMSCouch import CouchServer
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
-from AsyncStageOut import getFTServer
-
 import datetime
 import traceback
 
-class StatisticDaemon(BaseWorkerThread):
+from WMCore.Database.CMSCouch import CouchServer
+
+from AsyncStageOut import getFTServer
+from AsyncStageOut.BaseDaemon import BaseDaemon
+
+class StatisticDaemon(BaseDaemon):
     """
     _StatisticDeamon_
     Update Async. statistics database on couch
     Delete older finished job from files_database
     """
     def __init__(self, config):
-        BaseWorkerThread.__init__(self)
-        self.config = config.Statistics
-
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-
-        self.logger.debug('Configuration loaded')
+        BaseDaemon.__init__(self, config, 'Statistics')
 
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)

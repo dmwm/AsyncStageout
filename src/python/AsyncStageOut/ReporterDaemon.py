@@ -7,14 +7,14 @@ Here's the algorithm
 2. choose N users where N is from the config
 3. create a multiprocessing Pool of size N
 """
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
-from AsyncStageOut.ReporterWorker import ReporterWorker
-from multiprocessing import Pool
-from WMCore.WMFactory import WMFactory
-#import random
-import logging
-#import time
 import os
+import logging
+from multiprocessing import Pool
+
+from WMCore.WMFactory import WMFactory
+
+from AsyncStageOut.BaseDaemon import BaseDaemon
+from AsyncStageOut.ReporterWorker import ReporterWorker
 
 result_list = []
 current_running = []
@@ -32,7 +32,7 @@ def reporter(user, config):
     if worker.init:
         logging.debug("Starting %s" % worker)
         try:
-            worker ()
+            worker()
         except Exception, e:
             logging.debug("Reporter Worker cannot start!:" %e)
             return user
@@ -47,7 +47,7 @@ def log_result(result):
     result_list.append(result)
     current_running.remove(result)
 
-class ReporterDaemon(BaseWorkerThread):
+class ReporterDaemon(BaseDaemon):
     """
     _TransferDaemon_
     Call multiprocessing library to instantiate a TransferWorker for each user.
@@ -57,18 +57,8 @@ class ReporterDaemon(BaseWorkerThread):
         Initialise class members
         """
         #Need a better way to test this without turning off this next line
-        BaseWorkerThread.__init__(self)
-        #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
-        #self.logger = logging.getLogger()
-        # self.logger is set up by the BaseWorkerThread, we just set it's level
+        BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
-        self.config = config.AsyncTransfer
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
         self.pool = Pool(processes=self.config.pool_size)
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
@@ -90,7 +80,7 @@ class ReporterDaemon(BaseWorkerThread):
         """
         1. Get a list of users with files to transfer from the FS
         2. Submit the report to a subprocess
-       """
+        """
         users = []
         for user_dir in os.listdir(self.dropbox_dir):
             if os.path.isdir(os.path.join(self.dropbox_dir, user_dir)) and os.listdir(os.path.join(self.dropbox_dir, user_dir)):
