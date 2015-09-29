@@ -9,27 +9,32 @@ The Publisherworker does the following:
 
 There should be one worker per user transfer.
 '''
-import time
-import logging
 import os
+import re
+import json
+import time
+import uuid
+import types
+import pprint
+import urllib
+import tarfile
+import logging
 import datetime
 import traceback
-import tarfile
-import urllib
-import json
-import types
-import re
-import uuid
-import pprint
-from WMCore.Database.CMSCouch import CouchServer
-from AsyncStageOut import getHashLfn
-from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
-from RestClient.ErrorHandling.RestClientExceptions import HTTPError
-import dbs.apis.dbsClient as dbsClient
-from WMCore.Services.pycurl_manager import RequestHandler
 import cStringIO
-from AsyncStageOut import getDNFromUserName
+
+import dbs.apis.dbsClient as dbsClient
+
+from RestClient.ErrorHandling.RestClientExceptions import HTTPError
+
+from WMCore.Database.CMSCouch import CouchServer
+from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
+from WMCore.Services.pycurl_manager import RequestHandler
+
 from AsyncStageOut import getProxy
+from AsyncStageOut import getHashLfn
+from AsyncStageOut import getDNFromUserName
+from AsyncStageOut import getCommonLogFormatter
 
 class PublisherWorker:
 
@@ -43,6 +48,9 @@ class PublisherWorker:
         self.config = config
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('DBSPublisher-Worker-%s' % self.user)
+        formatter = getCommonLogFormatter(self.config)
+        for handler in logging.getLogger().handlers:
+            handler.setFormatter(formatter)
         self.pfn_to_lfn_mapping = {}
         self.max_retry = config.publication_max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)

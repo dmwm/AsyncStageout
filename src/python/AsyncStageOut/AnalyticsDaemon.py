@@ -5,16 +5,16 @@ It populates user_monitoring_db database
 with the details of users transfers from
 files_database.
 """
+import time
+import json
+import stomp
+import socket
+import traceback
+
 from WMCore.Database.CMSCouch import CouchServer
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
 from AsyncStageOut import getHashLfn
-import time
-import traceback
-from time import strftime
-import json
-import socket
-import stomp
+from AsyncStageOut.BaseDaemon import BaseDaemon
 
 def clean_states( states ):
     """
@@ -27,23 +27,15 @@ def clean_states( states ):
             new_states[state] = states[state]
     return new_states
 
-class AnalyticsDaemon(BaseWorkerThread):
+class AnalyticsDaemon(BaseDaemon):
     """
     _AnalyticsDaemon_
     Update user_monitoring_db database on couch
     Delete old documents from user_monitoring_db.
     """
     def __init__(self, config):
-        BaseWorkerThread.__init__(self)
-        self.config = config.Analytics
+        BaseDaemon.__init__(self, config, 'Analytics')
 
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-        self.logger.debug('Configuration loaded')
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to local couchDB')
@@ -67,14 +59,14 @@ class AnalyticsDaemon(BaseWorkerThread):
             self.logger.debug('Got summaries_expiration_days %s from Couch' % self.config.summaries_expiration_days)
         except Exception, e:
             self.logger.exception('A problem occured when contacting config DB in couch: %s' % e)
-        self.logger.debug('Analytics starts at: %s' %str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
+        self.logger.debug('Analytics starts at: %s' % str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
         if self.amq_auth_file:
             self.updateDatabaseSource()
         # TODO: Evaluate if we still need for crab -status
         #self.updateWorkflowSummaries()
         self.updateFilesSummaries()
         self.cleanOldDocs()
-        self.logger.debug('Analytics ends at: %s' %str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
+        self.logger.debug('Analytics ends at: %s' % str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime())))
 
     def updateWorkflowSummaries(self):
         """

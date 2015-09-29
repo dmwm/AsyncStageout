@@ -8,23 +8,26 @@ c. delete successfully transferred files from the database
 
 There should be one worker per user transfer.
 '''
-import time
-import logging
-import subprocess, os
-import datetime
-import traceback
-import urllib
+import os
 import re
 import json
-from time import strftime
+import time
+import urllib
+import logging
+import datetime
 import StringIO
+import traceback
+import subprocess
+
 from WMCore.WMFactory import WMFactory
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.pycurl_manager import RequestHandler
+
 from AsyncStageOut import getProxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
 from AsyncStageOut import getDNFromUserName
+from AsyncStageOut import getCommonLogFormatter
 
 def execute_command(command, logger, timeout):
     """
@@ -66,6 +69,9 @@ class TransferWorker:
         self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Worker-%s' % self.user)
+        formatter = getCommonLogFormatter(self.config)
+        for handler in logging.getLogger().handlers:
+            handler.setFormatter(formatter)
         self.pfn_to_lfn_mapping = {}
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
@@ -153,7 +159,7 @@ class TransferWorker:
         fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
         command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
                                                                         'glite-delegation-init', fts_url_delegation)
-        init_time = str(strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+        init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
         self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
         stdout, rc = execute_command(command, self.logger, self.commandTimeout)
         if not rc or not self.valid_proxy:

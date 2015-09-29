@@ -8,17 +8,18 @@ different algorithms.
 """
 __all__ = []
 
+import os
+import time
+import urllib
 import logging
 import datetime
-import time
 import traceback
-import os
-import urllib
 
-from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
-from WMCore.WMFactory         import WMFactory
+from WMCore.WMFactory import WMFactory
 from WMCore.WMException import WMException
 from WMCore.Database.CMSCouch import CouchServer
+
+from AsyncStageOut.BaseDaemon import BaseDaemon
 
 def convertdatetime(t):
     """
@@ -40,7 +41,7 @@ class RetryManagerException(WMException):
     It's totally awesome, except it's not.
     """
 
-class RetryManagerDaemon(BaseWorkerThread):
+class RetryManagerDaemon(BaseDaemon):
     """
     _RetryManagerPoller_
 
@@ -51,15 +52,8 @@ class RetryManagerDaemon(BaseWorkerThread):
         """
         Initialise class members
         """
-        BaseWorkerThread.__init__(self)
-        self.config = config.RetryManager
-        try:
-            self.logger.setLevel(self.config.log_level)
-        except:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(self.config.log_level)
-        self.logger.debug('Configuration loaded')
+        BaseDaemon.__init__(self, config, 'RetryManager')
+
         try:
             server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
             self.db = server.connectDatabase(self.config.files_database)

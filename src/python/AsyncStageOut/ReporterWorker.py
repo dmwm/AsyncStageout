@@ -11,20 +11,22 @@ There should be one worker per user transfer.
 
 
 '''
-from WMCore.Database.CMSCouch import CouchServer
-
-import time
-import logging
 import os
+import re
+import json
+import time
+import urllib
+import logging
 import datetime
 import traceback
+
 from WMCore.WMFactory import WMFactory
-import urllib
-import re
 from WMCore.Credential.Proxy import Proxy
+from WMCore.Database.CMSCouch import CouchServer
+
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getDNFromUserName
-import json
+from AsyncStageOut import getCommonLogFormatter
 
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
@@ -59,6 +61,9 @@ class ReporterWorker:
         self.dropbox_dir = '%s/dropbox/inputs' % self.config.componentDir
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('AsyncTransfer-Reporter-%s' % self.user)
+        formatter = getCommonLogFormatter(self.config)
+        for handler in logging.getLogger().handlers:
+            handler.setFormatter(formatter)
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.cleanEnvironment = ''
         self.userDN = ''
