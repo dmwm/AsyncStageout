@@ -363,8 +363,7 @@ class ReporterWorker:
                              ".*mkdir\(\) fail.*",
                              ".*open/create error.*",
                              ".*mkdir\: cannot create directory.*",
-                             ".*does not have enough space.*",
-                             ".*reports could not open connection to.*"
+                             ".*does not have enough space.*"
                                     ]
         failure = str(failure).lower()
         for permanent_failure_reason in permanent_failure_reasons:
