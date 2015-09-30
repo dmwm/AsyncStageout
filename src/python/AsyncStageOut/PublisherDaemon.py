@@ -27,14 +27,14 @@ def publish(user, config):
     logging.debug("Trying to start the worker")
     try:
         worker = PublisherWorker(user, config)
-    except Exception, e:
+    except Exception as e:
         logging.debug("Worker cannot be created!:" %e)
         return user
     if worker.init:
        logging.debug("Starting %s" %worker)
        try:
            worker()
-       except Exception, e:
+       except Exception as e:
            logging.debug("Worker cannot start!:" %e)
            return user
     return user
@@ -92,7 +92,7 @@ class PublisherDaemon(BaseDaemon):
         query = {'group': True, 'group_level': 3}
         try:
             users = db.loadView('DBSPublisher', 'publish', query)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 

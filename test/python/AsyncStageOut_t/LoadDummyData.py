@@ -1,6 +1,7 @@
 """
 Insert dummy data into the AsyncTransfer CouchDB instance
 """
+from __future__ import print_function
 from AsyncStageOut import getHashLfn
 import random
 from WMCore.Database.CMSCouch import CouchServer
@@ -40,7 +41,7 @@ now = str(datetime.datetime.now())
 job_end_time =datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 last_update = int(time.time());
 
-print "Script starts at %s" %now
+print("Script starts at %s" %now)
 
 while i <= size:
     id=random.randint(1000, 1999)
@@ -84,18 +85,18 @@ while i <= size:
                 'size': random.randint(1, 9999),
                 'job_end_time': job_end_time
     }
-    print "uploading docs in %s and db %s" %(config.AsyncTransfer.couch_instance, config.AsyncTransfer.files_database)
+    print("uploading docs in %s and db %s" %(config.AsyncTransfer.couch_instance, config.AsyncTransfer.files_database))
     try:
         db.queue(file_doc)
-    except Exception, ex:
-        print "Error when queuing docs"
-        print ex
-    print "doc queued %s" %file_doc
+    except Exception as ex:
+        print("Error when queuing docs")
+        print(ex)
+    print("doc queued %s" %file_doc)
     # TODO: Bulk commit of documents
     try:
         db.commit()
-        print "commiting %s doc at %s" %( i, str(datetime.datetime.now()))
-    except Exception, ex:
-        print "Error when commiting docs"
-        print ex
+        print("commiting %s doc at %s" %( i, str(datetime.datetime.now())))
+    except Exception as ex:
+        print("Error when commiting docs")
+        print(ex)
     i += 1
