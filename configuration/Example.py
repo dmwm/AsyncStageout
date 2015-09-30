@@ -45,7 +45,9 @@ config.Agent.hostName = serverHostName
 config.Agent.teamName = teamName
 
 config.component_("AsyncTransfer")
-config.AsyncTransfer.log_level = logging.INFO
+config.AsyncTransfer.logLevel = 'INFO' # used when initializing the component (by WMCore Harness class)
+config.AsyncTransfer.log_level = logging.INFO # used when starting the daemon (by ASO); overrides logLevel
+config.AsyncTransfer.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.AsyncTransfer.namespace = "AsyncStageOut.AsyncTransfer"
 config.AsyncTransfer.componentDir  = config.General.workDir
 config.AsyncTransfer.pollInterval = 10
@@ -79,15 +81,20 @@ config.AsyncTransfer.algoName = 'FIFOPriority'
 config.AsyncTransfer.config_couch_instance = couchUrl
 config.AsyncTransfer.cache_area = cache_area
 config.component_('Reporter')
+config.Reporter.logLevel = 'INFO'
+config.Reporter.log_level = logging.INFO
+config.Reporter.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.Reporter.namespace = 'AsyncStageOut.Reporter'
 config.Reporter.componentDir = config.General.workDir
 config.component_('DBSPublisher')
+config.DBSPublisher.logLevel = 'INFO'
+config.DBSPublisher.log_level = logging.INFO
+config.DBSPublisher.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.DBSPublisher.pollInterval = 600
 config.DBSPublisher.publication_pool_size = 80
 config.DBSPublisher.componentDir = config.General.workDir
 config.DBSPublisher.UISetupScript = ui_script
 config.DBSPublisher.namespace = 'AsyncStageOut.DBSPublisher'
-config.DBSPublisher.log_level = logging.INFO
 config.DBSPublisher.files_database = files_database
 config.DBSPublisher.config_database = config_database
 config.DBSPublisher.config_couch_instance = couchUrl
@@ -106,10 +113,12 @@ config.DBSPublisher.algoName = 'FIFOPriority'
 config.DBSPublisher.block_closure_timeout = 18800
 config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DBSWriter'
 #config.component_('Analytics')
+#config.Analytics.logLevel = 'INFO'
+#config.Analytics.log_level = logging.INFO
+#config.Analytics.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 #config.Analytics.user_monitoring_db = user_monitoring_db
 #config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
 #config.Analytics.analyticsPollingInterval = 900
-#config.Analytics.log_level = logging.INFO
 #config.Analytics.componentDir = config.General.workDir
 #config.Analytics.namespace = 'AsyncStageOut.Analytics'
 #config.Analytics.files_database = files_database
@@ -120,7 +129,9 @@ config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DB
 #config.Analytics.summaries_expiration_days = 6
 #config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
 config.component_('FilesCleaner')
+config.FilesCleaner.logLevel = 'INFO'
 config.FilesCleaner.log_level = logging.INFO
+config.FilesCleaner.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.FilesCleaner.componentDir = config.General.workDir
 config.FilesCleaner.namespace = 'AsyncStageOut.FilesCleaner'
 config.FilesCleaner.files_database = files_database
@@ -133,7 +144,9 @@ config.FilesCleaner.config_couch_instance = couchUrl
 config.FilesCleaner.credentialDir = credentialDir
 config.FilesCleaner.serverDN = hostDN
 config.component_('Statistics')
+config.Statistics.logLevel = 'INFO'
 config.Statistics.log_level = logging.INFO
+config.Statistics.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.Statistics.componentDir = config.General.workDir
 config.Statistics.namespace = 'AsyncStageOut.Statistics'
 config.Statistics.files_database = files_database
@@ -147,9 +160,11 @@ config.Statistics.statitics_database = statitics_database
 config.Statistics.opsProxy = opsProxy
 config.Statistics.mon_database = files_database
 config.component_("RetryManager")
+config.RetryManager.logLevel = 'INFO'
+config.RetryManager.log_level = logging.INFO
+config.RetryManager.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.RetryManager.namespace = "AsyncStageOut.RetryManager"
 config.RetryManager.componentDir = config.General.workDir
-config.RetryManager.log_level = 10
 config.RetryManager.pollInterval = 300
 config.RetryManager.files_database = files_database
 config.RetryManager.couch_instance = couchUrl
