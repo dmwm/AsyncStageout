@@ -51,7 +51,6 @@ class PublisherWorker:
         formatter = getCommonLogFormatter(self.config)
         for handler in logging.getLogger().handlers:
             handler.setFormatter(formatter)
-        self.pfn_to_lfn_mapping = {}
         self.max_retry = config.publication_max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.proxyDir = config.credentialDir

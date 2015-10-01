@@ -72,7 +72,6 @@ class TransferWorker:
         formatter = getCommonLogFormatter(self.config)
         for handler in logging.getLogger().handlers:
             handler.setFormatter(formatter)
-        self.pfn_to_lfn_mapping = {}
         self.max_retry = config.max_retry
         self.uiSetupScript = getattr(self.config, 'UISetupScript', None)
         self.submission_command = getattr(self.config, 'submission_command', 'glite-transfer-submit')
@@ -262,7 +261,6 @@ class TransferWorker:
     def apply_tfc_to_lfn(self, file):
         """
         Take a CMS_NAME:lfn string and make a pfn.
-        Update pfn_to_lfn_mapping dictionary.
         """
         try:
             site, lfn = tuple(file.split(':'))
@@ -283,9 +281,6 @@ class TransferWorker:
             except AttributeError:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
-            # Add the pfn key into pfn-to-lfn mapping
-            if pfn not in self.pfn_to_lfn_mapping:
-                self.pfn_to_lfn_mapping[pfn] = lfn
             return pfn
         else:
             self.logger.error('Wrong site %s!' % site)
