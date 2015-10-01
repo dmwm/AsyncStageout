@@ -170,9 +170,9 @@ class PublisherWorker:
         self.logger.debug('active user wfs: %s' % active_user_workflows)
         self.logger.info('number of active user wfs: %s' % len(active_user_workflows))
         now = time.time()
-        self.lfn_map = {}
         ## Loop over the user workflows.
         for user_wf in active_user_workflows:
+            lfn_map = {}
             workflow = str(user_wf['key'][3])
             wfnamemsg = "%s: " % (workflow)
             ## This flag is to force calling the publish method (e.g. because the workflow
@@ -210,7 +210,7 @@ class PublisherWorker:
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(str(job_end_time), '%Y-%m-%d %H:%M:%S'))) - time.timezone)
                 source_lfn = active_file['value'][1]
                 dest_lfn = active_file['value'][2]
-                self.lfn_map[dest_lfn] = source_lfn
+                lfn_map[dest_lfn] = source_lfn
                 if not pnn or not input_dataset or not input_dbs_url:
                     pnn = str(active_file['value'][0])
                     input_dataset = str(active_file['value'][3])
@@ -380,9 +380,11 @@ class PublisherWorker:
             for dataset in result.keys():
                 published_files = result[dataset].get('published', [])
                 if published_files:
+                    published_files = [(lfn_map[destination_lfn], destination_lfn) for destination_lfn in published_files]
                     self.mark_good(workflow, published_files)
                 failed_files = result[dataset].get('failed', [])
                 if failed_files:
+                    failed_files = [(lfn_map[destination_lfn], destination_lfn) for destination_lfn in failed_files]
                     failure_reason = result[dataset].get('failure_reason', "")
                     force_failure = result[dataset].get('force_failure', False)
                     self.mark_failed(workflow, failed_files, failure_reason, force_failure)
@@ -390,17 +392,16 @@ class PublisherWorker:
         self.logger.info("Publications for user %s (group: %s, role: %s) completed." % (self.user, self.group, self.role))
 
 
-    def mark_good(self, workflow, files=[]):
+    def mark_good(self, workflow, files):
         """
         Mark the list of files as tranferred
         """
         wfnamemsg = "%s: " % (workflow)
         last_update = int(time.time())
-        for lfn in files:
+        for source_lfn, destination_lfn in files:
             data = {}
-            source_lfn = self.lfn_map[lfn]
             docId = getHashLfn(source_lfn)
-            msg  = "Marking file %s as published." % (lfn)
+            msg  = "Marking file %s as published." % (destination_lfn)
             msg += " Document id: %s (source LFN: %s)." % (docId, source_lfn)
             self.logger.info(wfnamemsg+msg)
             data['publication_state'] = 'published'
@@ -424,18 +425,17 @@ class PublisherWorker:
             self.logger.error(wfnamemsg+msg)
 
 
-    def mark_failed(self, workflow, files=[], failure_reason="", force_failure=False):
+    def mark_failed(self, workflow, files, failure_reason="", force_failure=False):
         """
         Something failed for these files so increment the retry count
         """
         wfnamemsg = "%s: " % (workflow)
         now = str(datetime.datetime.now())
         last_update = int(time.time())
-        for lfn in files:
+        for source_lfn, destination_lfn in files:
             data = {}
-            source_lfn = self.lfn_map[lfn]
             docId = getHashLfn(source_lfn)
-            msg  = "Marking file %s as failed." % (lfn)
+            msg  = "Marking file %s as failed." % (destination_lfn)
             msg += " Document id: %s (source LFN: %s)." % (docId, source_lfn)
             self.logger.info(wfnamemsg+msg)
             # Load document to get the retry_count
