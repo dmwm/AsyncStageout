@@ -149,6 +149,10 @@ class PublisherWorker:
             msg += str(traceback.format_exc())
             self.logger.debug(msg)
 
+        self.force_publication = False
+        self.force_failure = False
+        self.publication_failure_msg = ""
+
 
     def __call__(self):
         """
