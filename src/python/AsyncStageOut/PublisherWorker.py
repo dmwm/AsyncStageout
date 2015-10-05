@@ -815,7 +815,7 @@ class PublisherWorker:
         atDestination = False
         alreadyQueued = False
         reqid = None
-        msg = "Submiting migration request for block %s ..." % (block)
+        msg = "Submitting migration request for block %s ..." % (block)
         self.logger.info(wfnamemsg+msg)
         sourceURL = sourceApi.url
         data = {'migration_url': sourceURL, 'migration_input': block}
@@ -831,25 +831,24 @@ class PublisherWorker:
                 msg += "\nRequest detail: %s" % (data)
                 msg += "\nDBS3 exception: %s" % (he.msg)
                 self.logger.error(wfnamemsg+msg)
-        if not atDestination:
-            msg = "Result of migration request: %s" % (str(result))
-            self.logger.debug(wfnamemsg+msg)
-            reqid = result.get('migration_details', {}).get('migration_request_id')
-            report = result.get('migration_report')
-            if reqid == None:
-                msg  = "Migration request failed to submit."
-                msg += "\nMigration request results: %s" % (str(result))
+            return (reqid, atDestination, alreadyQueued)
+        msg = "Result of migration request: %s" % (str(result))
+        self.logger.debug(wfnamemsg+msg)
+        reqid = result.get('migration_details', {}).get('migration_request_id')
+        report = result.get('migration_report')
+        if reqid == None:
+            msg = "Migration request failed to submit."
+            self.logger.error(wfnamemsg+msg)
+        if "REQUEST ALREADY QUEUED" in report:
+            ## Request could be queued in another thread, then there would be
+            ## no id here, so look by block and use the id of the queued request.
+            alreadyQueued = True
+            try:
+                status = migrateApi.statusMigration(block_name = block)
+                reqid = status[0].get('migration_request_id')
+            except Exception:
+                msg = "Could not get status for already queued migration of block %s." % (block)
                 self.logger.error(wfnamemsg+msg)
-            if "REQUEST ALREADY QUEUED" in report:
-                ## Request could be queued in another thread, then there would be
-                ## no id here, so look by block and use the id of the queued request.
-                alreadyQueued = True
-                try:
-                    status = migrateApi.statusMigration(block_name = block)
-                    reqid = status[0].get('migration_request_id')
-                except Exception:
-                    msg = "Could not get status for already queued migration of block %s." % (block)
-                    self.logger.error(wfnamemsg+msg)
         return (reqid, atDestination, alreadyQueued)
 
 
