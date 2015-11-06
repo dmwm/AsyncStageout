@@ -639,26 +639,23 @@ class PublisherWorker:
         return nf
 
 
-    def migrateByBlockDBS3(self, workflow, migrateApi, destReadApi, sourceApi, inputDataset, inputBlocks = None):
+    def migrateByBlockDBS3(self, workflow, migrateApi, destReadApi, sourceApi, dataset, blocks = None):
         """
         Submit one migration request for each block that needs to be migrated.
-        If inputBlocks is missing, migrate the full dataset.
-        :return: - the output of destReadApi.listDatasets(dataset = inputDataset)
-                   if all migrations have finished ok,
-                 - an empty list otherwise.
+        If blocks argument is not specified, migrate the whole dataset.
         """
         wfnamemsg = "%s: " % (workflow)
-        if inputBlocks:
-            blocksToMigrate = set(inputBlocks)
+        if blocks:
+            blocksToMigrate = set(blocks)
         else:
             ## This is for the case to migrate the whole dataset, which we don't do
-            ## at this point Feb/2015 (we always pass inputBlocks).
+            ## at this point Feb/2015 (we always pass blocks).
             ## Make a set with the blocks that need to be migrated.
-            blocksInDestDBS = set([block['block_name'] for block in destReadApi.listBlocks(dataset = inputDataset)])
-            blocksInSourceDBS = set([block['block_name'] for block in sourceApi.listBlocks(dataset = inputDataset)])
+            blocksInDestDBS = set([block['block_name'] for block in destReadApi.listBlocks(dataset = dataset)])
+            blocksInSourceDBS = set([block['block_name'] for block in sourceApi.listBlocks(dataset = dataset)])
             blocksToMigrate = blocksInSourceDBS - blocksInDestDBS
             msg = "Dataset %s in destination DBS with %d blocks; %d blocks in source DBS."
-            msg = msg % (inputDataset, len(blocksInDestDBS), len(blocksInSourceDBS))
+            msg = msg % (dataset, len(blocksInDestDBS), len(blocksInSourceDBS))
             self.logger.info(wfnamemsg+msg)
         numBlocksToMigrate = len(blocksToMigrate)
         if numBlocksToMigrate == 0:
@@ -771,14 +768,13 @@ class PublisherWorker:
                     ## Stop waiting if there are no more migrations in progress.
                     if numMigrationsInProgress == 0:
                         break
-                ## If after the 300 seconds there are still some migrations in progress,
-                ## return an empty list (the caller function should interpret this as
-                ## "migration has failed or is not complete").
+                ## If after the 300 seconds there are still some migrations in progress, return
+                ## with status 1.
                 if numMigrationsInProgress > 0:
-                    msg = "Migration of %s has taken too long - will delay the publication." % (inputDataset)
+                    msg = "Migration of %s is taking too long - will delay the publication." % (dataset)
                     self.logger.info(wfnamemsg+msg)
-                    return []
-            msg = "Migration of %s has finished." % (inputDataset)
+                    return (1, "Migration of %s is taking too long." % (dataset))
+            msg = "Migration of %s has finished." % (dataset)
             self.logger.info(wfnamemsg+msg)
             msg  = "Migration status summary (from %d input blocks to migrate):" % (numBlocksToMigrate)
             msg += " at destination = %d," % (numBlocksAtDestination)
@@ -787,22 +783,29 @@ class PublisherWorker:
             msg += " submission failed = %d," % (numFailedSubmissions)
             msg += " queued with unknown id = %d." % (numQueuedUnkwonIds)
             self.logger.info(wfnamemsg+msg)
-            ## If there were failed migrations, return an empty list (the caller
-            ## function should interpret this as "migration has failed or is not
-            ## complete").
+            ## If there were failed migrations, return with status 2.
             if numFailedMigrations > 0 or numFailedSubmissions > 0:
                 msg = "Some blocks failed to be migrated."
                 self.logger.info(wfnamemsg+msg)
-                return []
+                return (2, "Migration of %s failed." % (dataset))
+            ## If there were no failed migrations, but we could not retrieve the request id
+            ## from some already queued requests, return with status 3.
             if numQueuedUnkwonIds > 0:
-                msg = "Some block migrations were already queued, but failed to retrieve the request id."
+                msg = "Some block migrations were already queued, but failed to retrieve their request id."
                 self.logger.info(wfnamemsg+msg)
-                return []
-            if (numBlocksAtDestination + numSuccessfulMigrations) == numBlocksToMigrate:
-                msg = "Migration was successful."
+                return (3, "Migration of %s in unknown status." % (dataset))
+            if (numBlocksAtDestination + numSuccessfulMigrations) != numBlocksToMigrate:
+                msg  = "Something unexpected has happened."
+                msg += " The numbers in the migration summary are not consistent."
+                msg += " Make sure there is no bug in the code."
                 self.logger.info(wfnamemsg+msg)
-        existingDatasets = destReadApi.listDatasets(dataset = inputDataset, detail = True, dataset_access_type = '*')
-        return existingDatasets
+                return (4, "Migration of %s in some inconsistent status." % (dataset))
+            msg = "Migration completed."
+            self.logger.info(wfnamemsg+msg)
+        migratedDataset = destReadApi.listDatasets(dataset = dataset, detail = True, dataset_access_type = '*')
+        if not migratedDataset or migratedDataset[0].get('dataset', None) != dataset:
+            return (4, "Migration of %s in some inconsistent status." % (dataset))
+        return (0, "")
 
 
     def requestBlockMigration(self, workflow, migrateApi, sourceApi, block):
@@ -1115,35 +1118,23 @@ class PublisherWorker:
             if localParentBlocks:
                 msg = "List of parent blocks that need to be migrated from %s:\n%s" % (sourceApi.url, localParentBlocks)
                 self.logger.info(wfnamemsg+msg)
-                existingDatasets = self.migrateByBlockDBS3(workflow, migrateApi, destReadApi, sourceApi, inputDataset, localParentBlocks)
-                if not existingDatasets:
-                    msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, sourceApi.url, destReadApi.url)
-                    self.logger.info(wfnamemsg+msg)
+                statusCode, failureMsg = self.migrateByBlockDBS3(workflow, migrateApi, destReadApi, sourceApi, inputDataset, localParentBlocks)
+                if statusCode:
+                    failureMsg += " Not publishing any files."
+                    self.logger.info(wfnamemsg+failureMsg)
                     failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
-                    failure_reason[dataset] = msg
-                    continue
-                if not existingDatasets[0]['dataset'] == inputDataset:
-                    msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information." % (inputDataset)
-                    self.logger.info(wfnamemsg+msg)
-                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
-                    failure_reason[dataset] = msg
+                    failure_reason[dataset] = failureMsg
                     continue
             ## Then migrate the parent blocks that are in the global DBS instance.
             if globalParentBlocks:
                 msg = "List of parent blocks that need to be migrated from %s:\n%s" % (globalApi.url, globalParentBlocks)
                 self.logger.info(wfnamemsg+msg)
-                existingDatasets = self.migrateByBlockDBS3(workflow, migrateApi, destReadApi, globalApi, inputDataset, globalParentBlocks)
-                if not existingDatasets:
-                    msg = "Failed to migrate %s from %s to %s; not publishing any files." % (inputDataset, globalApi.url, destReadApi.url)
-                    self.logger.info(wfnamemsg+msg)
+                statusCode, failureMsg = self.migrateByBlockDBS3(workflow, migrateApi, destReadApi, globalApi, inputDataset, globalParentBlocks)
+                if statusCode:
+                    failureMsg += " Not publishing any files."
+                    self.logger.info(wfnamemsg+failureMsg)
                     failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
-                    failure_reason[dataset] = msg
-                    continue
-                if not existingDatasets[0]['dataset'] == inputDataset:
-                    msg = "ERROR: Inconsistent state: %s migrated, but listDatasets didn't return any information" % (inputDataset)
-                    self.logger.info(wfnamemsg+msg)
-                    failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
-                    failure_reason[dataset] = msg
+                    failure_reason[dataset] = failureMsg
                     continue
             ## Publish the files in blocks. The blocks must have exactly max_files_per_block
             ## files, unless there are less than max_files_per_block files to publish to
