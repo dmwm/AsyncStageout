@@ -74,7 +74,7 @@ class ReporterWorker:
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
-        except Exception, ex:
+        except Exception as ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -111,7 +111,7 @@ class ReporterWorker:
 
             self.valid, proxy = getProxy(self.userDN, "", "", defaultDelegation, self.logger)
 
-        except Exception, ex:
+        except Exception as ex:
 
             msg = "Error getting the user proxy"
             msg += str(ex)
@@ -161,12 +161,12 @@ class ReporterWorker:
             if os.path.basename(input_file).startswith('Reporter'):
                 try:
                     json_data = json.loads(open(input_file).read())
-                except ValueError, e:
+                except ValueError as e:
                     self.logger.error("Error loading %s" % e)
                     self.logger.debug('Removing %s' % input_file)
                     os.unlink( input_file )
                     continue
-                except Exception, e:
+                except Exception as e:
                     self.logger.error("Error loading %s" % e)
                     self.logger.debug('Removing %s' % input_file)
                     os.unlink( input_file )
@@ -237,7 +237,7 @@ class ReporterWorker:
             self.logger.debug("Marking good %s" % lfn)
             try:
                 document = self.db.document(hash_lfn)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -259,7 +259,7 @@ class ReporterWorker:
                     self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
                     updated_lfn.append(lfn)
                     self.logger.debug("Marked good %s" % lfn)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -267,7 +267,7 @@ class ReporterWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -298,7 +298,7 @@ class ReporterWorker:
             # Load document to get the retry_count
             try:
                 document = self.db.document( docId )
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -333,7 +333,7 @@ class ReporterWorker:
                     self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
                     updated_lfn.append(docId)
                     self.logger.debug("Marked failed %s" % docId)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error in updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -341,7 +341,7 @@ class ReporterWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())

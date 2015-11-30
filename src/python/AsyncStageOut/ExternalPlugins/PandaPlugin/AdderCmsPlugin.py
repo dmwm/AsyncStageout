@@ -227,7 +227,7 @@ class AdderCmsPlugin(AdderPluginBase):
                             temp_out = {}
                             for out in report['steps']['cmsRun']['output'][OutModule]:
                                 str_report = ""
-                                if out.has_key('ouput_module_class'):
+                                if 'ouput_module_class' in out:
                                     # Retrieve info. only for the actual EDM file
                                     if lfn.find(out['pfn'].split('.root')[0]) == -1:
                                         continue
@@ -246,13 +246,13 @@ class AdderCmsPlugin(AdderPluginBase):
                                                 else:
                                                     lumis_report = lumis_report + "&outfilelumis=" + str(lumi)
                                         str_report = lumis_report + runs_report
-                                        if out.has_key('input'):
+                                        if 'input' in out:
                                             temp_out['in_parentlfns'] = out['input']
                                             for parent_lfn in temp_out['in_parentlfns']:
                                                 str_report = str_report + "&inparentlfns=" + str(parent_lfn)
                                         temp_out['events'] = out['events']
                                         str_report = str_report + "&globalTag=None&events=" + str(temp_out['events'])
-                                if out.has_key('Source'):
+                                if 'Source' in out:
                                     # Retrieve info. only for the actual TFILE
                                     tfile_out_name = out['fileName'].split('/')[(len(out['fileName'].split('/'))-1)].split('.')[0]
                                     out_name = lfn.split('/')[(len(lfn.split('/'))-1)].split('_')[0]
@@ -349,7 +349,7 @@ class AdderCmsPlugin(AdderPluginBase):
                     # append LFN to the list of transferring files,
                     # which gets the job status to change to transferring
                     self.result.transferringFiles.append(lfn)
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing document in asyncdb"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -361,7 +361,7 @@ class AdderCmsPlugin(AdderPluginBase):
                 try:
                     self.mon_db.queue(job_doc, True)
                     self.mon_db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg =  "Error queuing doc in monitoring db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())

@@ -80,7 +80,7 @@ class CleanerDaemon(BaseDaemon):
  str(datetime.datetime.now().month), str(datetime.datetime.now().year), "Ops")
         try:
             os.makedirs(self.log_dir)
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.EEXIST:
                 pass
             else:
@@ -103,7 +103,7 @@ class CleanerDaemon(BaseDaemon):
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         try:
             self.db = server.connectDatabase(self.config.files_database)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when connecting to couchDB: %s' % e)
         self.pool = Pool(processes=5)
 
@@ -130,7 +130,7 @@ class CleanerDaemon(BaseDaemon):
             except KeyError:
                 self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
                 return
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to determine last cleanning time: %s' % e)
                 return
 
@@ -138,7 +138,7 @@ class CleanerDaemon(BaseDaemon):
             query = { 'startkey': since, 'endkey': end_time, 'stale': 'ok'}
             try:
                 all_LFNs = self.db.loadView('AsyncTransfer', 'LFNSiteByLastUpdate', query)['rows']
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to retrieve LFNs: %s' % e)
                 return
 
@@ -146,7 +146,7 @@ class CleanerDaemon(BaseDaemon):
             updateUri += "?last_cleaning_time=%d" % end_time
             try:
                 self.config_db.makeRequest(uri = updateUri, type = "PUT", decode = False)
-            except Exception, e:
+            except Exception as e:
                 self.logger.exception('A problem occured when contacting couchDB to update last cleanning time: %s' % e)
                 return
 
@@ -157,12 +157,12 @@ class CleanerDaemon(BaseDaemon):
             for lfnDetails in all_LFNs:
                 lfn = lfnDetails['value']['lfn']
                 user = lfn.split('/')[4].split('.')[0]
-                if not lfn_to_proxy.has_key(user):
+                if user not in lfn_to_proxy:
                     valid_proxy = False
                     try:
                         self.defaultDelegation['userDN'] = getDNFromUserName(user, self.logger, ckey = self.config.opsProxy, cert = self.config.opsProxy)
                         valid_proxy, userProxy = getProxy(self.defaultDelegation, self.logger)
-                    except Exception, ex:
+                    except Exception as ex:
                         msg = "Error getting the user proxy"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -188,10 +188,10 @@ class CleanerDaemon(BaseDaemon):
         """
         try:
             site, lfn = tuple(file.split(':'))
-        except Exception, e:
+        except Exception as e:
             self.logger.error('It does not seem to be an lfn %s' %file.split(':'))
             return None
-        if self.site_tfc_map.has_key(site):
+        if site in self.site_tfc_map:
             pfn = self.site_tfc_map[site].matchLFN('srmv2', lfn)
             # TODO: improve fix for wrong tfc on sites
             try:
@@ -217,7 +217,7 @@ class CleanerDaemon(BaseDaemon):
         query = {'group': True, 'stale': 'ok'}
         try:
             sites = self.db.loadView('AsyncTransfer', 'sites', query)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 
@@ -236,7 +236,7 @@ class CleanerDaemon(BaseDaemon):
         self.phedex.getNodeTFC(site)
         try:
             tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when getting the TFC regexp: %s' % e)
             return None
         return readTFC(tfc_file)

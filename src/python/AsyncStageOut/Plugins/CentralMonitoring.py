@@ -58,7 +58,7 @@ class CentralMonitoring(Source):
             self.logger.debug('No records to determine end time, waiting for next iteration')
         except KeyError:
             self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured in the central_monitoring Source __call__: %s' % e)
 
         # Prepare the input to ASO
@@ -68,7 +68,7 @@ class CentralMonitoring(Source):
                 temp = {}
                 temp = job
                 workflow = job['value']['workflow']
-                if not cache.has_key(workflow):
+                if workflow not in cache:
                     user_details = self.dbSource.document( workflow )
                     cache[workflow] = {'user_dn': user_details['user_dn'], 'vo_role': user_details['vo_role'], 'vo_group': user_details['vo_group'], 'async_dest': user_details['async_dest'], 'inputdataset': user_details['inputdataset'], 'dbs_url': user_details['dbs_url'], 'publish_dbs_url': user_details['publish_dbs_url']}
                 temp['value']['dn'] = cache[workflow]['user_dn']

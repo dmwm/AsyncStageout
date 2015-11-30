@@ -41,7 +41,7 @@ class LFNSourceDuplicator(BaseDaemon):
         try:
             duplicator = self.factory.loadObject(self.config.pluginName, args = [self.config, self.logger], getFromCache = True, listFlag = True)
 
-        except ImportError,e :
+        except ImportError as e :
             msg = "plugin \'%s\' unknown" % self.config.pluginName
             self.logger.info(msg)
             self.logger.info(e)

@@ -631,7 +631,7 @@ WMTaskSpace/cmsRun1/output.root",\
         result = self.dbSource.loadView('FWJRDump', 'fwjrByJobIDTimestamp', query)['rows']
         docSource = self.dbSource.document(result[0]['id'])
 
-        assert docSource['fwjr']['steps'].has_key('asyncStageOut1') == True
+        assert ('asyncStageOut1' in docSource['fwjr']['steps']) == True
 
     def testE_FixBug1196_PoolWorkersFromAgent_FunctionTest(self):
         """
@@ -675,7 +675,7 @@ WMTaskSpace/cmsRun1/output.root",\
         log_dir = '%s/logs/%s' % (self.config.AsyncTransfer.componentDir, file_doc['user'])
         try:
             os.makedirs(log_dir)
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.EEXIST:
                 pass
             else: raise
