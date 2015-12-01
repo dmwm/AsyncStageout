@@ -7,6 +7,7 @@ To install  : python setup.py install --prefix=<some dir>
 To clean    : python setup.py clean
 To run tests: python setup.py test
 """
+from __future__ import print_function
 
 import sys
 import os
@@ -22,11 +23,12 @@ from AsyncStageOut import __version__ as aso_version
 
 required_python_version = '2.6'
 
+
 class TestCommand(Command):
     """
     Class to handle unit tests
     """
-    user_options = [ ]
+    user_options = []
 
     def initialize_options(self):
         """Init method"""
@@ -47,7 +49,7 @@ class TestCommand(Command):
         testfiles = []
         for tname in glob(pjoin(self._dir, 'test', '*_t.py')):
             if  not tname.endswith('__init__.py') and \
-                tname not in exclude:
+                    tname not in exclude:
                 testfiles.append('.'.join(
                     ['test', splitext(basename(tname))[0]])
                 )
@@ -55,21 +57,22 @@ class TestCommand(Command):
         try:
             tests = TestLoader().loadTestsFromNames(testfiles)
         except:
-            print "\nFail to load unit tests", testfiles
+            print("\nFail to load unit tests", testfiles)
             raise
-        test = TextTestRunner(verbosity = 2)
+        test = TextTestRunner(verbosity=2)
         test.run(tests)
+
 
 class CleanCommand(Command):
     """
     Class which clean-up all pyc files
     """
-    user_options = [ ]
+    user_options = []
 
     def initialize_options(self):
         """Init method"""
-        self._clean_me = [ ]
-        for root, dirs, files in os.walk('.'):
+        self._clean_me = []
+        for root, dummydirs, files in os.walk('.'):
             for fname in files:
                 if fname.endswith('.pyc'):
                     self._clean_me.append(pjoin(root, fname))
@@ -86,6 +89,7 @@ class CleanCommand(Command):
             except:
                 pass
 
+
 def dirwalk(relativedir):
     """
     Walk a directory tree and look-up for __init__.py files.
@@ -95,13 +99,14 @@ def dirwalk(relativedir):
     idir = os.path.join(os.getcwd(), relativedir)
     for fname in os.listdir(idir):
         fullpath = os.path.join(idir, fname)
-        if  os.path.isdir(fullpath) and not os.path.islink(fullpath):
+        if os.path.isdir(fullpath) and not os.path.islink(fullpath):
             for subdir in dirwalk(fullpath):  # recurse into subdir
                 yield subdir
         else:
             initdir, initfile = os.path.split(fullpath)
-            if  initfile == '__init__.py':
+            if initfile == '__init__.py':
                 yield initdir
+
 
 def find_packages(relativedir):
     "Find list of packages in a given dir"
@@ -113,6 +118,7 @@ def find_packages(relativedir):
         packages.append(package)
     return packages
 
+
 def datafiles(idir):
     """Return list of data files in provided relative dir"""
     files = []
@@ -120,28 +126,29 @@ def datafiles(idir):
         for subdirname in dirnames:
             files.append(os.path.join(dirname, subdirname))
         for filename in filenames:
-            if  filename[-1] == '~':
+            if filename[-1] == '~':
                 continue
             files.append(os.path.join(dirname, filename))
     return files
 
+
 def main():
     "Main function"
-    version      = aso_version
-    name         = "AsyncStageOut"
-    description  = "CMS AsyncStageOut System"
+    version = aso_version
+    name = "AsyncStageOut"
+    description = "CMS AsyncStageOut System"
     url          = \
         "https://svnweb.cern.ch/trac/CMSDMWM/wiki/"
-    readme       = "AsyncStageOut %s" % url
-    author       = "",
+    readme = "AsyncStageOut %s" % url
+    author = "",
     author_email = "",
-    keywords     = ["AsyncStageOut"]
+    keywords = ["AsyncStageOut"]
     package_dir  = \
         {"AsyncStageOut": "src/python/AsyncStageOut"}
-    packages     = find_packages('src/python')
-    data_files   = [] # list of tuples whose entries are (dir, [data_files])
-    cms_license  = "CMS experiment software"
-    classifiers  = [
+    packages = find_packages('src/python')
+    data_files = []  # list of tuples whose entries are (dir, [data_files])
+    cms_license = "CMS experiment software"
+    classifiers = [
         "Development Status :: 3 - Production/Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: CMS/CERN Software License",
@@ -152,9 +159,9 @@ def main():
         "Topic :: Scientific/Engineering"
     ]
 
-    if  sys.version < required_python_version:
+    if sys.version < required_python_version:
         msg = "I'm sorry, but %s %s requires Python %s or later."
-        print msg % (name, version, required_python_version)
+        print(msg % (name, version, required_python_version))
         sys.exit(1)
 
     # set default location for "data_files" to
@@ -163,22 +170,22 @@ def main():
         scheme['data'] = scheme['purelib']
 
     setup(
-        name                 = name,
-        version              = version,
-        description          = description,
-        long_description     = readme,
-        keywords             = keywords,
-        packages             = packages,
-        package_dir          = package_dir,
-        data_files           = data_files,
-        scripts              = datafiles('bin'),
-        requires             = ['python (>=2.6)'],
-        classifiers          = classifiers,
-        cmdclass             = {'test': TestCommand, 'clean': CleanCommand},
-        author               = author,
-        author_email         = author_email,
-        url                  = url,
-        license              = cms_license,
+        name=name,
+        version=version,
+        description=description,
+        long_description=readme,
+        keywords=keywords,
+        packages=packages,
+        package_dir=package_dir,
+        data_files=data_files,
+        scripts=datafiles('bin'),
+        requires=['python (>=2.6)'],
+        classifiers=classifiers,
+        cmdclass={'test': TestCommand, 'clean': CleanCommand},
+        author=author,
+        author_email=author_email,
+        url=url,
+        license=cms_license,
     )
 
 if __name__ == "__main__":

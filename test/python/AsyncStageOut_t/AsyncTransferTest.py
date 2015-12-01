@@ -9,6 +9,7 @@ from WMCore.Agent.Harness import Harness
 
 from AsyncStageOut_t.fakeDaemon import fakeDaemon
 
+
 class AsyncTransferTest(Harness):
     """
     _AsyncTransfer_
@@ -19,6 +20,7 @@ class AsyncTransferTest(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("AsyncTransfer.__init__")
 
@@ -31,14 +33,11 @@ class AsyncTransferTest(Harness):
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
 
-        logging.debug("Setting poll interval to %s seconds" \
-                      %str(self.config.AsyncTransferTest.pollInterval) )
+        logging.debug("Setting poll interval to %s seconds", self.config.AsyncTransferTest.pollInterval)
 
-
-        myThread.workerThreadManager.addWorker( \
-                              fakeDaemon(self.config), \
-                              self.config.AsyncTransferTest.pollInterval \
-                            )
-
+        myThread.workerThreadManager.addWorker(
+            fakeDaemon(self.config),
+            self.config.AsyncTransferTest.pollInterval
+        )
 
         return

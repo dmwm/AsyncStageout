@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#pylint: disable=C0103
+# pylint: disable=C0103
 """
 _CentralMonitoring_
 Duplicate docs from the centralMonitoring database
@@ -10,11 +10,13 @@ import datetime
 import time
 from AsyncStageOut import getHashLfn
 
+
 class CentralMonitoring(Source):
     """
     _CentralMonitoring_
     CentralMonitoring plugins to query central_monitoring DB.
     """
+
     def __init__(self, config, logger):
         """
         Initialise class members
@@ -39,7 +41,7 @@ class CentralMonitoring(Source):
 
         try:
             # Get the time of the last record we're going to pull in
-            query = {'limit' : 1, 'descending': True}
+            query = {'limit': 1, 'descending': True}
             endtime = self.dbSource.loadView(self.designSource, self.viewSource, query)['rows'][0]['key']
 
             # If the above throws an exception there's no files to process, so just move on
@@ -47,7 +49,7 @@ class CentralMonitoring(Source):
             # Get the files we want to process
             self.logger.debug('Querying the central_monitoring for files added between %s and %s' % (self.since, endtime + 1))
 
-            query = { 'startkey': self.since, 'endkey': endtime + 1 }
+            query = {'startkey': self.since, 'endkey': endtime + 1}
             jobs = self.dbSource.loadView(self.designSource, self.viewSource, query)['rows']
 
             # Now record where we got up to so next iteration we'll continue from there
@@ -58,7 +60,7 @@ class CentralMonitoring(Source):
             self.logger.debug('No records to determine end time, waiting for next iteration')
         except KeyError:
             self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured in the central_monitoring Source __call__: %s' % e)
 
         # Prepare the input to ASO
@@ -68,8 +70,8 @@ class CentralMonitoring(Source):
                 temp = {}
                 temp = job
                 workflow = job['value']['workflow']
-                if not cache.has_key(workflow):
-                    user_details = self.dbSource.document( workflow )
+                if workflow not in cache:
+                    user_details = self.dbSource.document(workflow)
                     cache[workflow] = {'user_dn': user_details['user_dn'], 'vo_role': user_details['vo_role'], 'vo_group': user_details['vo_group'], 'async_dest': user_details['async_dest'], 'inputdataset': user_details['inputdataset'], 'dbs_url': user_details['dbs_url'], 'publish_dbs_url': user_details['publish_dbs_url']}
                 temp['value']['dn'] = cache[workflow]['user_dn']
                 temp['value']['role'] = cache[workflow]['vo_role']
@@ -89,7 +91,7 @@ class CentralMonitoring(Source):
             value = row['value']
             value['lfn'] = value["_id"]
             value['user'] = value["_id"].split('/')[4]
-            value['_id'] = getHashLfn( value["_id"] )
+            value['_id'] = getHashLfn(value["_id"])
             value['size'] = value['size']
             value['retry_count'] = []
             value['state'] = 'new'
@@ -98,10 +100,10 @@ class CentralMonitoring(Source):
 
             # Attributes required for publication
             value['job_end_time'] = row['key']
-	    value['publication_state'] = 'not_published'
+            value['publication_state'] = 'not_published'
             value['publication_retry_count'] = []
             try:
-                value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1]+"@", "")
+                value['dbSource_url'] = self.config.data_source.replace(((self.config.data_source).split("@")[0]).split("//")[1] + "@", "")
             except:
                 value['dbSource_url'] = self.config.data_source
 

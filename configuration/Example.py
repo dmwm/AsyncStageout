@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#pylint: skip-file
 """
 Example configuration for AsyncStageOut
 """
@@ -45,11 +46,11 @@ config.Agent.hostName = serverHostName
 config.Agent.teamName = teamName
 
 config.component_("AsyncTransfer")
-config.AsyncTransfer.logLevel = 'INFO' # used when initializing the component (by WMCore Harness class)
-config.AsyncTransfer.log_level = logging.INFO # used when starting the daemon (by ASO); overrides logLevel
+config.AsyncTransfer.logLevel = 'INFO'  # used when initializing the component (by WMCore Harness class)
+config.AsyncTransfer.log_level = logging.INFO  # used when starting the daemon (by ASO); overrides logLevel
 config.AsyncTransfer.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.AsyncTransfer.namespace = "AsyncStageOut.AsyncTransfer"
-config.AsyncTransfer.componentDir  = config.General.workDir
+config.AsyncTransfer.componentDir = config.General.workDir
 config.AsyncTransfer.pollInterval = 10
 config.AsyncTransfer.pollViewsInterval = 10
 config.AsyncTransfer.couch_instance = couchUrl
@@ -112,7 +113,7 @@ config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
 config.DBSPublisher.block_closure_timeout = 18800
 config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DBSWriter'
-#config.component_('Analytics')
+# config.component_('Analytics')
 #config.Analytics.logLevel = 'INFO'
 #config.Analytics.log_level = logging.INFO
 #config.Analytics.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"

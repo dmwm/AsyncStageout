@@ -1,12 +1,18 @@
 from AsyncStageOut.TransferWrapper import TransferWrapper
 import random
 
+
 class FakeTransfers(TransferWrapper):
+
+    def __init__(self, ):
+        pass
+
     def command(self, files, userProxy, destSites):
         """
         In this transfer wrapper a random population is taken as being successfully transferred
         incomplete and the rest marked as a failure.
         """
+        del destSites, userProxy
         transferred = random.sample(files, random.randint(0, len(files)))
         for f in transferred:
             files.remove(f)

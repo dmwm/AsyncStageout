@@ -7,6 +7,7 @@ from AsyncStageOut.AnalyticsDaemon import AnalyticsDaemon
 import logging
 import threading
 
+
 class Analytics(Harness):
     """
     _Analytics_
@@ -14,6 +15,7 @@ class Analytics(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("Analytics.__init__")
 
@@ -23,11 +25,10 @@ class Analytics(Harness):
         """
         logging.debug(self.config)
         myThread = threading.currentThread()
-        logging.debug("Setting Analytics polling interval to %s seconds" \
-                       %str(self.config.Analytics.analyticsPollingInterval) )
-        myThread.workerThreadManager.addWorker( \
-                              AnalyticsDaemon(self.config), \
-                              self.config.Analytics.analyticsPollingInterval \
-                            )
+        logging.debug("Setting Analytics polling interval to %s seconds", self.config.Analytics.analyticsPollingInterval)
+        myThread.workerThreadManager.addWorker(
+            AnalyticsDaemon(self.config),
+            self.config.Analytics.analyticsPollingInterval
+        )
 
         return

@@ -4,12 +4,15 @@ Checks for files to transfer
 """
 from WMCore.Agent.Harness import Harness
 from AsyncStageOut.TransferDaemon import TransferDaemon
-#from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
+# from AsyncStageOut.LFNSourceDuplicator import LFNSourceDuplicator
 from AsyncStageOut import execute_command
-import os, errno
-import time, datetime
+import os
+import errno
+import time
+import datetime
 import logging
 import threading
+
 
 class AsyncTransfer(Harness):
     """
@@ -21,6 +24,7 @@ class AsyncTransfer(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("AsyncTransfer.__init__")
 
@@ -34,22 +38,22 @@ class AsyncTransfer(Harness):
         myThread = threading.currentThread()
 
         # Archiving logs
-        log_dir = '%s/logs' % self.config.AsyncTransfer.componentDir
-        if os.path.exists(log_dir):
+        logDir = '%s/logs' % self.config.AsyncTransfer.componentDir
+        if os.path.exists(logDir):
 
-            archive_dir = '%s/archive/%s/%s/%s' % ( self.config.AsyncTransfer.componentDir, \
-str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datetime.datetime.now().day) )
+            archiveDir = '%s/archive/%s/%s/%s' % (self.config.AsyncTransfer.componentDir, str(datetime.datetime.now().year),
+                                                  str(datetime.datetime.now().month), str(datetime.datetime.now().day))
             try:
-                os.makedirs(archive_dir)
-            except OSError, e:
+                os.makedirs(archiveDir)
+            except OSError as e:
                 if e.errno == errno.EEXIST:
                     pass
-                else: raise
-            command = 'tar -czf %s/logs_%s.tar.gz %s/* ; rm -rf %s/*' % ( archive_dir, str(time.time()), log_dir, log_dir )
-            out, error, retcode = execute_command(command)
-            if retcode != 0 :
-                msg = "Error when archiving %s : %s"\
-                       % (log_dir, error)
+                else:
+                    raise
+            command = 'tar -czf %s/logs_%s.tar.gz %s/* ; rm -rf %s/*' % (archiveDir, str(time.time()), logDir, logDir)
+            dummyout, error, retcode = execute_command(command)
+            if retcode != 0:
+                msg = "Error when archiving %s : %s" % (logDir, error)
                 raise Exception(msg)
 
 #        logging.debug("Setting DB source poll interval to %s seconds" \
@@ -60,13 +64,11 @@ str(datetime.datetime.now().year), str(datetime.datetime.now().month), str(datet
 #                              self.config.AsyncTransfer.pollViewsInterval \
 #                            )
 
-        logging.debug("Setting poll interval to %s seconds" \
-                      %str(self.config.AsyncTransfer.pollInterval) )
+        logging.debug("Setting poll interval to %s seconds", self.config.AsyncTransfer.pollInterval)
 
-
-        myThread.workerThreadManager.addWorker( \
-                              TransferDaemon(self.config), \
-                              self.config.AsyncTransfer.pollInterval \
-                            )
+        myThread.workerThreadManager.addWorker(
+            TransferDaemon(self.config),
+            self.config.AsyncTransfer.pollInterval
+        )
 
         return

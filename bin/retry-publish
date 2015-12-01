@@ -1,23 +1,23 @@
 #!/usr/bin/env python
-
+# pylint: disable-msg=W0613,C0103
 """
 Retry publish by changing the state of documents in couchDB to 'not published'.
 For a given task, it can retry all failed publishing.
 """
 
 import os
-import sys, getopt
+import sys
+import getopt
 
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Configuration import loadConfigurationFile
-import urllib
 import datetime
 import time
 import traceback
 
-if __name__ == "__main__":
+def main():
 
-    if not os.environ.has_key("WMAGENT_CONFIG"):
+    if "WMAGENT_CONFIG" not in os.environ:
         print "The WMAGENT_CONFIG environment variable needs to be set."
         sys.exit(0)
 
@@ -41,11 +41,11 @@ Examples:
         usage()
         sys.exit(1)
 
-    valid_opts = ["-h","-t:","-i:"]
+    valid_opts = ["-h", "-t:", "-i:"]
     valid_long_opts = ["--help"]
     try:
-        opts, args = getopt.getopt(argv,"".join([vo.strip("-") for vo in valid_opts]),[vo.strip("--") for vo in valid_long_opts])
-    except getopt.GetoptError, ex:
+        opts, dummyargs = getopt.getopt(argv, "".join([vo.strip("-") for vo in valid_opts]), [vo.strip("-") for vo in valid_long_opts])
+    except getopt.GetoptError as ex:
         print str(ex)
         usage()
         sys.exit(2)
@@ -55,34 +55,34 @@ Examples:
     valid_opts_no_colon = [vo.strip(":") for vo in valid_opts]
     valid_long_opts_no_equal = [vo.strip("=") for vo in valid_long_opts]
     for opt, arg in opts:
-        if opt in ("-h","--help"):
+        if opt in ("-h", "--help"):
             usage()
             sys.exit(0)
         if opt == "-t" and str(arg) not in valid_opts_no_colon + valid_long_opts_no_equal:
             taskname = str(arg)
         if opt == "-i" and str(arg) not in valid_opts_no_colon + valid_long_opts_no_equal:
-            docIDs = [id for id in str(arg).split(",") if id != '']
+            docIDs = [idVal for idVal in str(arg).split(",") if idVal != '']
     if taskname == '':
         msg = "No task name provided."
         print msg
         usage()
         sys.exit(3)
     if len(docIDs):
-        print "Will retry publication that failed for task %s, documents %s." % (taskname,str(docIDs))
+        print "Will retry publication that failed for task %s, documents %s." % (taskname, str(docIDs))
     else:
         print "Will retry all publications failed for task %s." % taskname
 
     config = loadConfigurationFile(os.environ["WMAGENT_CONFIG"])
-    server = CouchServer(config.AsyncTransfer.couch_instance,config.AsyncTransfer.opsProxy,config.AsyncTransfer.opsProxy)
+    server = CouchServer(config.AsyncTransfer.couch_instance, config.AsyncTransfer.opsProxy, config.AsyncTransfer.opsProxy)
     try:
         database = server.connectDatabase(config.AsyncTransfer.files_database)
-    except Exception, ex:
+    except Exception as ex:
         msg = "Error while connecting to %s couchDB." % config.AsyncTransfer.files_database
         print msg
         sys.exit(4)
     try:
-        docs_pubFailed = database.loadView('DBSPublisher','PublicationFailedByWorkflow',{'reduce':False,'key':taskname})['rows']
-    except Exception, ex:
+        docs_pubFailed = database.loadView('DBSPublisher', 'PublicationFailedByWorkflow', {'reduce': False, 'key': taskname})['rows']
+    except Exception as ex:
         msg = "Error while connecting to %s couchDB" % config.AsyncTransfer.files_database
         print msg
         sys.exit(4)
@@ -106,14 +106,15 @@ Examples:
         valid = True
         while valid:
             try:
-                database.updateDocument(docid,'DBSPublisher','updateFile',data)
+                database.updateDocument(docid, 'DBSPublisher', 'updateFile', data)
                 valid = False
-            except Exception, ex:
-                msg = "Error updating document %s in %s couchDB. Retrying..." % (docid,config.AsyncTransfer.files_database)
+            except Exception as ex:
+                msg = "Error updating document %s in %s couchDB. Retrying..." % (docid, config.AsyncTransfer.files_database)
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 print msg
                 continue
-    sys.exit(0) 
-    
+    sys.exit(0)
 
+if __name__ == "__main__":
+    main()

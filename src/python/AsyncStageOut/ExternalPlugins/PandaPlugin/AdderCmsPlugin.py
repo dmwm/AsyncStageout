@@ -1,4 +1,5 @@
-# pylint: disable-msg=C0103
+#pylint: skip-file
+# Not used, remove?
 """
 The CMS Component in Panda does the following:
         a. parse job and output files metadata
@@ -12,6 +13,7 @@ except:
     # The below fake class is meant for allowing reuse in non-PanDA
     # environments
     class AdderPluginBaseFake:
+
         def __init__(self, a, b):
             pass
 
@@ -22,10 +24,15 @@ try:
 except ImportError:
     # This seems to be the proper module from WMCore
     from WMCore.Database.CMSCouch import CouchServer
-import time, datetime, traceback, logging
+import time
+import datetime
+import traceback
+import logging
 import hashlib
 import simplejson as json
-import subprocess, os
+import subprocess
+import os
+
 
 def getHashLfn(lfn):
     """
@@ -35,15 +42,17 @@ def getHashLfn(lfn):
 
 config = None
 
+
 class AdderCmsPlugin(AdderPluginBase):
     """
     _AdderCmsPlugin_
     Parse jobs and files metadata for the later transfer and publication.
     """
+
     def __init__(self, job, **params):
         """
         Get the config params and define the logger attribute.
-	"""
+        """
         AdderPluginBase.__init__(self, job, params)
         # Load and parse auth file
         aso_auth_file = '/data/atlpan/srv/etc/panda/adder_secret.config'
@@ -54,7 +63,7 @@ class AdderCmsPlugin(AdderPluginBase):
         self.proxy = authParams['PROXY']
         self.aso_db_url = authParams['ASO_DB_URL']
         self.aso_cache = authParams['FWJR_CACHE']
-        server = CouchServer(dburl = self.aso_db_url, ckey = self.proxy, cert = self.proxy)
+        server = CouchServer(dburl=self.aso_db_url, ckey=self.proxy, cert=self.proxy)
         self.db = server.connectDatabase("asynctransfer")
         self.mon_db = server.connectDatabase("user_monitoring_asynctransfer")
         self.initlog()
@@ -88,7 +97,7 @@ class AdderCmsPlugin(AdderPluginBase):
             self.logger.debug("Skipping failed jobs")
             # TODO:Evaluate what we want to do with failed jobs: inject only the log file?
         elif self.job.transExitCode != '0':
-            self.logger.debug("Skipping finished jobs with EXIT CODE %s" %self.job.transExitCode)
+            self.logger.debug("Skipping finished jobs with EXIT CODE %s" % self.job.transExitCode)
         else:
             # inject the metada for data report and publication
             report = None
@@ -113,27 +122,27 @@ class AdderCmsPlugin(AdderPluginBase):
                     saveLogs = self.job.jobParameters.split("saveLogs")[1].split("=")[1].split(" ")[0]
                     if tmpFile.type == 'log':
                         if saveLogs == 'True':
-                            job_doc = { "_id": str(self.job.PandaID),
-                                        "files": len(self.job.Files)
-                                      }
+                            job_doc = {"_id": str(self.job.PandaID),
+                                       "files": len(self.job.Files)
+                                       }
                             save_logs = True
                         else:
-                            job_doc = { "_id": str(self.job.PandaID),
-                                        "files": len(self.job.Files) - 1,
-                                        "log_file": lfn
-                                      }
+                            job_doc = {"_id": str(self.job.PandaID),
+                                       "files": len(self.job.Files) - 1,
+                                       "log_file": lfn
+                                       }
                 except:
                     if tmpFile.type == 'log':
                         self.logger.debug("Cannot retrieve saveLogs option. Set to False!")
-                        job_doc = { "_id": str(self.job.PandaID),
-                                    "files": len(self.job.Files) - 1,
-                                    "log_file": lfn
-                                  }
+                        job_doc = {"_id": str(self.job.PandaID),
+                                   "files": len(self.job.Files) - 1,
+                                   "log_file": lfn
+                                   }
                 if len(lfn.split('/')) < 2:
                     self.logger.debug("Fallback to destinationDBlock to get username!")
                     user_dataset = str(self.job.destinationDBlock)
                     user = user_dataset.split('/')[2].split('-')[0]
-                    self.logger.debug("Username %s got from destinationDBlock!" %user)
+                    self.logger.debug("Username %s got from destinationDBlock!" % user)
                 else:
                     if tmpFile.lfn.split('/')[2] == 'temp':
                         user = tmpFile.lfn.split('/')[4]
@@ -147,7 +156,8 @@ class AdderCmsPlugin(AdderPluginBase):
                 dn = self.job.prodUserID
                 if dn:
                     try:
-                        if dn.split("/")[-1].split("=")[1] == 'proxy': dn = dn.replace("/CN=proxy","")
+                        if dn.split("/")[-1].split("=")[1] == 'proxy':
+                            dn = dn.replace("/CN=proxy", "")
                     except:
                         pass
                 # Get role and group
@@ -182,34 +192,34 @@ class AdderCmsPlugin(AdderPluginBase):
                     self.logger.debug("Cannot retrieve publishFiles option. Set to False!")
                     publish = 0
                 # Prepare the file document and queue it
-                doc = { "_id": getHashLfn( lfn ),
-                        "inputdataset": self.job.prodDBlock,
-                        "group": voGroup,
-                        "lfn": lfn,
-                        "checksums": {'adler32': tmpFile.checksum},
-                        "size": tmpFile.fsize,
-                        "user": user,
-                        "source": self.job.computingSite.split("ANALY_")[-1],
-                        "destination": destination,
-                        "last_update": last_update,
-                        "state": state,
-                        "role": voRole,
-                        "dbSource_url": "Panda",
-                        "publish_dbs_url": publish_dbs_url,
-                        "dbs_url": dbs_url,
-                        "dn": dn,
-                        "workflow": workflow,
-                        "start_time": now,
-                        "end_time": end_time,
-                        "job_end_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time())),
-                        "jobid": self.job.PandaID,
-                        "retry_count": [],
-                        "failure_reason": [],
-                        "publication_state": 'not_published',
-                        "publication_retry_count": [],
-                        "type" : tmpFile.type,
-                        "publish" : publish
-                     }
+                doc = {"_id": getHashLfn(lfn),
+                       "inputdataset": self.job.prodDBlock,
+                       "group": voGroup,
+                       "lfn": lfn,
+                       "checksums": {'adler32': tmpFile.checksum},
+                       "size": tmpFile.fsize,
+                       "user": user,
+                       "source": self.job.computingSite.split("ANALY_")[-1],
+                       "destination": destination,
+                       "last_update": last_update,
+                       "state": state,
+                       "role": voRole,
+                       "dbSource_url": "Panda",
+                       "publish_dbs_url": publish_dbs_url,
+                       "dbs_url": dbs_url,
+                       "dn": dn,
+                       "workflow": workflow,
+                       "start_time": now,
+                       "end_time": end_time,
+                       "job_end_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time())),
+                       "jobid": self.job.PandaID,
+                       "retry_count": [],
+                       "failure_reason": [],
+                       "publication_state": 'not_published',
+                       "publication_retry_count": [],
+                       "type": tmpFile.type,
+                       "publish": publish
+                       }
                 try:
                     user_dataset = str(self.job.destinationDBlock)
                     hash_config = user_dataset.split('/')[2].split('-', 1)[1]
@@ -227,7 +237,7 @@ class AdderCmsPlugin(AdderPluginBase):
                             temp_out = {}
                             for out in report['steps']['cmsRun']['output'][OutModule]:
                                 str_report = ""
-                                if out.has_key('ouput_module_class'):
+                                if 'ouput_module_class' in out:
                                     # Retrieve info. only for the actual EDM file
                                     if lfn.find(out['pfn'].split('.root')[0]) == -1:
                                         continue
@@ -237,25 +247,25 @@ class AdderCmsPlugin(AdderPluginBase):
                                         first = True
                                         runs_report = ''
                                         lumis_report = ''
-                                        for run, value in temp_out['runs'].iteritems() :
+                                        for run, value in temp_out['runs'].iteritems():
                                             for lumi in temp_out['runs'][run]:
                                                 runs_report = runs_report + "&outfileruns=" + str(run)
                                                 if first:
-                                                    lumis_report = "outfilelumis="  + str(lumi)
+                                                    lumis_report = "outfilelumis=" + str(lumi)
                                                     first = False
                                                 else:
                                                     lumis_report = lumis_report + "&outfilelumis=" + str(lumi)
                                         str_report = lumis_report + runs_report
-                                        if out.has_key('input'):
+                                        if 'input' in out:
                                             temp_out['in_parentlfns'] = out['input']
                                             for parent_lfn in temp_out['in_parentlfns']:
                                                 str_report = str_report + "&inparentlfns=" + str(parent_lfn)
                                         temp_out['events'] = out['events']
                                         str_report = str_report + "&globalTag=None&events=" + str(temp_out['events'])
-                                if out.has_key('Source'):
+                                if 'Source' in out:
                                     # Retrieve info. only for the actual TFILE
-                                    tfile_out_name = out['fileName'].split('/')[(len(out['fileName'].split('/'))-1)].split('.')[0]
-                                    out_name = lfn.split('/')[(len(lfn.split('/'))-1)].split('_')[0]
+                                    tfile_out_name = out['fileName'].split('/')[(len(out['fileName'].split('/')) - 1)].split('.')[0]
+                                    out_name = lfn.split('/')[(len(lfn.split('/')) - 1)].split('_')[0]
                                     if tfile_out_name != out_name:
                                         continue
                                     out_type = 'TFILE'
@@ -263,14 +273,14 @@ class AdderCmsPlugin(AdderPluginBase):
                                 if str_report:
                                     # TODO: Fix checksummd5 and checksumcksum retrieval
                                     str_report = str_report + "&pandajobid=" + str(doc['jobid']) + "&outsize=" + \
-                                                 str(doc['size']) + "&publishdataname=" + hash_config + \
-                                                 "&appver=" + cmssw_version + "&outtype=" + out_type + \
-                                                 "&checksummd5=asda&checksumcksum=3701783610&outlocation=" + \
-                                                 str(destination) + "&taskname=" + str(workflow) + "&outdatasetname=" + \
-                                                 str(self.job.destinationDBlock) + "&outlfn=" + \
-                                                 str(doc['lfn']) + "&checksumadler32=" + \
-                                                 str(doc['checksums']['adler32']).split(":")[-1] + "&acquisitionera=null" + \
-                                                 "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[-1])
+                                        str(doc['size']) + "&publishdataname=" + hash_config + \
+                                        "&appver=" + cmssw_version + "&outtype=" + out_type + \
+                                        "&checksummd5=asda&checksumcksum=3701783610&outlocation=" + \
+                                        str(destination) + "&taskname=" + str(workflow) + "&outdatasetname=" + \
+                                        str(self.job.destinationDBlock) + "&outlfn=" + \
+                                        str(doc['lfn']) + "&checksumadler32=" + \
+                                        str(doc['checksums']['adler32']).split(":")[-1] + "&acquisitionera=null" + \
+                                        "&outtmplocation=" + str(self.job.computingSite.split("ANALY_")[-1])
                                 else:
                                     # TODO: Fix checksummd5 and checksumcksum retrieval
                                     str_report = "pandajobid=" + str(doc['jobid']) + "&outsize=" + str(doc['size']) + \
@@ -295,18 +305,18 @@ class AdderCmsPlugin(AdderPluginBase):
                                                             stdout=subprocess.PIPE,
                                                             stderr=subprocess.PIPE,
                                                             stdin=subprocess.PIPE,)
-                                    for line in iter(proc.stdout.readline,''):
+                                    for line in iter(proc.stdout.readline, ''):
                                         if "Service Unavailable" in line:
-                                            self.logger.debug("Cache Service %s is temporary unavailable" %self.aso_cache)
+                                            self.logger.debug("Cache Service %s is temporary unavailable" % self.aso_cache)
                                             self.result.statusCode = 1
                                             return self.result
                                     stdout, stderr = proc.communicate()
                                     rc = proc.returncode
                                     if rc:
-                                        self.logger.debug("Cache Service %s cannot be contacted trying next time" %self.aso_cache)
+                                        self.logger.debug("Cache Service %s cannot be contacted trying next time" % self.aso_cache)
                                         self.result.statusCode = 1
                                         return self.result
-                                    self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
+                                    self.logger.debug("Upload Result %s, %s, %s" % (stdout, stderr, rc))
                     else:
                         self.logger.debug("LOG file...preparing the report")
                         out_type = 'LOG'
@@ -328,18 +338,18 @@ class AdderCmsPlugin(AdderPluginBase):
                                                 stdout=subprocess.PIPE,
                                                 stderr=subprocess.PIPE,
                                                 stdin=subprocess.PIPE,)
-                        for line in iter(proc.stdout.readline,''):
+                        for line in iter(proc.stdout.readline, ''):
                             if "Service Unavailable" in line:
-                                self.logger.debug("Cache Service %s is temporary unavailable" %self.aso_cache)
+                                self.logger.debug("Cache Service %s is temporary unavailable" % self.aso_cache)
                                 self.result.statusCode = 1
                                 return self.result
                         stdout, stderr = proc.communicate()
                         rc = proc.returncode
                         if rc:
-                            self.logger.debug("Cache Service %s cannot be contacted trying next time" %self.aso_cache)
+                            self.logger.debug("Cache Service %s cannot be contacted trying next time" % self.aso_cache)
                             self.result.statusCode = 1
                             return self.result
-                        self.logger.debug("Upload Result %s, %s, %s" %(stdout, stderr, rc))
+                        self.logger.debug("Upload Result %s, %s, %s" % (stdout, stderr, rc))
                 self.logger.debug("Trying to commit %s" % doc)
                 try:
                     if doc['type'] == 'log' and not save_logs:
@@ -349,8 +359,8 @@ class AdderCmsPlugin(AdderPluginBase):
                     # append LFN to the list of transferring files,
                     # which gets the job status to change to transferring
                     self.result.transferringFiles.append(lfn)
-                except Exception, ex:
-                    msg =  "Error queuing document in asyncdb"
+                except Exception as ex:
+                    msg = "Error queuing document in asyncdb"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
@@ -361,8 +371,8 @@ class AdderCmsPlugin(AdderPluginBase):
                 try:
                     self.mon_db.queue(job_doc, True)
                     self.mon_db.commit()
-                except Exception, ex:
-                    msg =  "Error queuing doc in monitoring db"
+                except Exception as ex:
+                    msg = "Error queuing doc in monitoring db"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)

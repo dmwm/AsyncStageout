@@ -7,6 +7,7 @@ from AsyncStageOut.RetryManagerDaemon import RetryManagerDaemon
 import logging
 import threading
 
+
 class RetryManager(Harness):
     """
     _RetryManager_
@@ -14,6 +15,7 @@ class RetryManager(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("RetryManager.__init__")
 
@@ -23,12 +25,10 @@ class RetryManager(Harness):
         """
         logging.debug(self.config)
         myThread = threading.currentThread()
-        logging.debug("Setting RetryManager polling interval to %s seconds" \
-                       %str(self.config.RetryManager.pollInterval) )
-        myThread.workerThreadManager.addWorker( \
-                              RetryManagerDaemon(self.config), \
-                              self.config.RetryManager.pollInterval \
-                            )
-
+        logging.debug("Setting RetryManager polling interval to %s seconds", self.config.RetryManager.pollInterval)
+        myThread.workerThreadManager.addWorker(
+            RetryManagerDaemon(self.config),
+            self.config.RetryManager.pollInterval
+        )
 
         return

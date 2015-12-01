@@ -1,6 +1,5 @@
-import sys, os
 
-from AsyncStageOut  import __version__ as aso_version
+from AsyncStageOut import __version__ as aso_version
 
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.doctest',
               'sphinx.ext.intersphinx', 'sphinx.ext.todo',
@@ -15,50 +14,50 @@ copyright = 'CERN, INFN and Fermilab'
 version = aso_version
 release = aso_version
 today_fmt = '%B %d, %Y'
-#unused_docs = []
-#exclude_trees = []
-#default_role = None
+# unused_docs = []
+# exclude_trees = []
+# default_role = None
 add_function_parentheses = True
 add_module_names = True
 show_authors = True
 pygments_style = 'sphinx'
-#modindex_common_prefix = []
+# modindex_common_prefix = []
 
 autoclass_content = 'both'
 
 html_theme = 'sphinxdoc'
-#html_theme_options = {}
-#html_theme_path = []
+# html_theme_options = {}
+# html_theme_path = []
 html_title = "AsyncStageOut %s" % version
-#html_short_title = None
-#html_logo = None
-#html_favicon = None
-#html_static_path = ['_static']
+# html_short_title = None
+# html_logo = None
+# html_favicon = None
+# html_static_path = ['_static']
 html_last_updated_fmt = '%b %d, %Y'
-#html_use_smartypants = True
-#html_sidebars = {}
-#html_additional_pages = {}
-#html_use_modindex = True
-#html_use_index = True
-#html_split_index = False
+# html_use_smartypants = True
+# html_sidebars = {}
+# html_additional_pages = {}
+# html_use_modindex = True
+# html_use_index = True
+# html_split_index = False
 html_show_sourcelink = False
-#html_use_opensearch = ''
-#html_file_suffix = ''
+# html_use_opensearch = ''
+# html_file_suffix = ''
 htmlhelp_basename = 'mondoc'
 
 latex_paper_size = 'a4'
-#latex_font_size = '10pt'
+# latex_font_size = '10pt'
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'AsyncStageOut.tex', u'AsyncStageOut Documentation',
-   u'CMS DM/WM Project', 'manual'),
+    ('index', 'AsyncStageOut.tex', u'AsyncStageOut Documentation',
+     u'CMS DM/WM Project', 'manual'),
 ]
 
-#latex_logo = None
-#latex_use_parts = False
-#latex_preamble = ''
-#latex_appendices = []
-#latex_use_modindex = True
+# latex_logo = None
+# latex_use_parts = False
+# latex_preamble = ''
+# latex_appendices = []
+# latex_use_modindex = True
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'http://docs.python.org/': None}

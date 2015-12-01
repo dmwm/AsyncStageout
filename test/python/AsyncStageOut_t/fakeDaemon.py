@@ -1,4 +1,4 @@
-#pylint: disable=C0103
+# pylint: disable=C0103
 
 """
 Spawn fake workers
@@ -9,15 +9,17 @@ from multiprocessing import Pool
 
 import logging
 
+
 def ftscp(user, tfc_map, config):
     """
     Fake ftscp function.
     """
-    logging.debug("Work done using %s %s %s!..." %(user, tfc_map, config))
+    logging.debug("Work done using %s %s %s!...", user, tfc_map, config)
     return True
 
 
 class fakeDaemon(BaseWorkerThread):
+
     def __init__(self, config):
         """
         Initialise class members
@@ -29,18 +31,19 @@ class fakeDaemon(BaseWorkerThread):
         self.logger.setLevel(self.config.log_level)
         self.logger.debug('Configuration loaded')
 
-    def algorithm(self, parameters = None):
+    def algorithm(self, parameters=None):
         """
         Give a list of users, sites and an empty tfc map
         to pool workers and object. The aim is to use the same
         mulprocessing call used in the AsyncStageOut
         """
+        del parameters
         users = ['user1']
         sites = [u'T2_IT_Bari', u'T2_IT_Pisa']
-        self.logger.debug('Active sites are : %s ' %sites)
+        self.logger.debug('Active sites are : %s ', sites)
         site_tfc_map = {}
 
-        self.logger.debug( 'kicking off pool with size %s' %self.config.pool_size )
+        self.logger.debug('kicking off pool with size %s', self.config.pool_size)
         pool = Pool(processes=self.config.pool_size)
         r = [pool.apply_async(ftscp, (u, site_tfc_map, self.config)) for u in users]
         pool.close()

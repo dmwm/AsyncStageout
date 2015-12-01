@@ -4,11 +4,9 @@ Checks for files to transfer
 """
 from WMCore.Agent.Harness import Harness
 from AsyncStageOut.ReporterDaemon import ReporterDaemon
-from AsyncStageOut import execute_command
-import os, errno
-import time, datetime
 import logging
 import threading
+
 
 class Reporter(Harness):
     """
@@ -20,6 +18,7 @@ AsyncTransfer main class. Call workers to do following work:
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("Reporter.__init__")
 
@@ -32,9 +31,9 @@ Add required worker modules to work threads
         # in case nothing was configured we have a fallback.
         myThread = threading.currentThread()
 
-        myThread.workerThreadManager.addWorker( \
-                              ReporterDaemon(self.config), \
-                              self.config.AsyncTransfer.pollInterval \
-                            )
+        myThread.workerThreadManager.addWorker(
+            ReporterDaemon(self.config),
+            self.config.AsyncTransfer.pollInterval
+        )
 
         return

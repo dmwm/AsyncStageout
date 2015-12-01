@@ -1,3 +1,5 @@
+#pylint: skip-file
+# Not used, remove?
 '''
 Track active users and sort on number of active files.
 
@@ -5,7 +7,9 @@ Track active users and sort on number of active files.
 from WMCore.Database.CMSCouch import CouchServer
 import random
 
+
 class UserPool(Pool):
+
     def __init__(self, config, logger):
         self.config = config.CRABAsyncTransfer
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
@@ -36,11 +40,11 @@ class UserPool(Pool):
         """
         return users[:self.size]
 
+
 class RandomUserPool(UserPool):
+
     def algorithm(self, users):
         """
         Choose pool size users at random
         """
         return random.sample(users, self.size)
-
-

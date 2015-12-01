@@ -1,5 +1,5 @@
 #!/usr/bin/env
-#pylint: disable-msg=W0613,C0103
+# pylint: disable-msg=W0613,C0103
 """
 It populates Async. statistics database
 with transfers details from old documents
@@ -15,12 +15,14 @@ from WMCore.Database.CMSCouch import CouchServer
 from AsyncStageOut import getFTServer
 from AsyncStageOut.BaseDaemon import BaseDaemon
 
+
 class StatisticDaemon(BaseDaemon):
     """
     _StatisticDeamon_
     Update Async. statistics database on couch
     Delete older finished job from files_database
     """
+
     def __init__(self, config):
         BaseDaemon.__init__(self, config, 'Statistics')
 
@@ -39,7 +41,7 @@ class StatisticDaemon(BaseDaemon):
         self.iteration_docs = []
         self.exptime = None
 
-    def algorithm(self, parameters = None):
+    def algorithm(self, parameters=None):
         """
         1. Get the list of finished jobs older than N days (N is from config)
         2. For each old job:
@@ -48,32 +50,32 @@ class StatisticDaemon(BaseDaemon):
             c. delete the document from files_database
             d. update the stat_db by adding the fts servers documents for this iteration
         """
-        query = {'stale':'ok'}
+        query = {'stale': 'ok'}
         try:
             param = self.config_db.loadView('asynctransfer_config', 'GetStatConfig', query)
             self.config.expiration_days = param['rows'][0]['key']
             self.logger.debug('Got expiration_days %s from Couch' % self.config.expiration_days)
         except IndexError:
             self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
-        except Exception, e:
-            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+        except Exception as e:
+            self.logger.exception('A problem occured when contacting couchDB: %s', e)
 
-        expdays = datetime.timedelta(days = self.config.expiration_days)
+        expdays = datetime.timedelta(days=self.config.expiration_days)
         self.exptime = datetime.datetime.now() - expdays
-        self.logger.debug('Deleting Jobs ended before %s' %str(self.exptime) )
+        self.logger.debug('Deleting Jobs ended before %s' % str(self.exptime))
 
         oldJobs = self.getOldJobs()
-        self.logger.debug('%d jobs to delete' % len(oldJobs) )
+        self.logger.debug('%d jobs to delete' % len(oldJobs))
 
         jobDoc = {}
         for doc in oldJobs:
 
             try:
-                self.logger.debug('deleting %s' %doc)
+                self.logger.debug('deleting %s' % doc)
                 jobDoc = self.db.document(doc)
                 self.updateStat(jobDoc)
-            except Exception, ex:
-                msg =  "Error retriving document in couch"
+            except Exception as ex:
+                msg = "Error retriving document in couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
@@ -81,9 +83,9 @@ class StatisticDaemon(BaseDaemon):
                 try:
                     self.db.queueDelete(jobDoc)
 
-                except Exception, ex:
+                except Exception as ex:
 
-                    msg =  "Error queuing document for delete in couch"
+                    msg = "Error queuing document for delete in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
@@ -93,24 +95,24 @@ class StatisticDaemon(BaseDaemon):
 
                 self.statdb.queue(newDoc)
 
-            except Exception, ex:
+            except Exception as ex:
 
-                msg =  "Error queuing document in statDB"
+                msg = "Error queuing document in statDB"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
 
         try:
             self.statdb.commit()
-        except Exception, ex:
-            msg =  "Error commiting documents in statdb"
+        except Exception as ex:
+            msg = "Error commiting documents in statdb"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
         try:
             self.db.commit()
-        except Exception, ex:
-            msg =  "Error commiting documents in files_db"
+        except Exception as ex:
+            msg = "Error commiting documents in files_db"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
@@ -120,12 +122,12 @@ class StatisticDaemon(BaseDaemon):
         Get the list of finished jobs older than the exptime.
         """
         query = {'reduce': False,
-                 'endkey':[self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute],
+                 'endkey': [self.exptime.year, self.exptime.month, self.exptime.day, self.exptime.hour, self.exptime.minute],
                  'stale': 'ok'}
         try:
             oldJobs = self.mon_db.loadView('MonitorStartedEnded', 'endedSizeByTime', query)['rows']
-        except Exception, e:
-            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+        except Exception as e:
+            self.logger.exception('A problem occured when contacting couchDB: %s', e)
             return []
 
         def docIdMap(row):
@@ -139,7 +141,6 @@ class StatisticDaemon(BaseDaemon):
         return oldJobs
 
     def updateStat(self, document):
-
         """
         Update the stat documents list.
         """
@@ -167,17 +168,15 @@ class StatisticDaemon(BaseDaemon):
                           'day': startTime.date().isoformat(),
                           'sites_served': {document['destination']: {'done': 0,
                                                                      'failed': 0,
-                                                                     'killed': 0}
-                                            },
-                          'users': { document['user']: [document['workflow']]},
+                                                                     'killed': 0}},
+                          'users': {document['user']: [document['workflow']]},
                           'timing': {'min_transfer_duration': jobDuration,
                                      'max_transfer_duration': jobDuration,
                                      'avg_transfer_duration': jobDuration},
                           'done': {},
-                          'failed' : {},
+                          'failed': {},
                           'killed': {},
-                          'avg_size' : document['size']
-                           }
+                          'avg_size': document['size']}
 
         serverDocument['sites_served'][document['destination']][document['state']] = 1
         serverDocument[document['state']][nretry] = 1
@@ -196,66 +195,65 @@ class StatisticDaemon(BaseDaemon):
             self.logger.debug('FTS = %s' % oldDoc['fts'])
             server_users = oldDoc['users']
 
-            if server_users.has_key(document['user']):
-                #user already in users list
+            if document['user'] in server_users:
+                # user already in users list
                 user_entry = server_users[document['user']]
                 if not document['workflow'] in user_entry:
-                #add workflow to user
+                    # add workflow to user
                     user_entry.append(document['workflow'])
                     server_users[document['user']] = user_entry
                     oldDoc['users'] = server_users
             else:
-                #add user to users list with workflow
+                # add user to users list with workflow
                 user_entry = [document['workflow']]
                 server_users[document['user']] = user_entry
                 oldDoc['users'] = server_users
 
-            #add destination site to sites_served dict if not already there
+            # add destination site to sites_served dict if not already there
             if document['destination'] in oldDoc['sites_served']:
-                if (document['state'] == 'done'):
+                if document['state'] == 'done':
                     oldDoc['sites_served'][document['destination']]['done'] += 1
-                if (document['state'] == 'killed'):
+                if document['state'] == 'killed':
                     oldDoc['sites_served'][document['destination']]['killed'] += 1
-                if (document['state'] == 'failed'):
+                if document['state'] == 'failed':
                     oldDoc['sites_served'][document['destination']]['failed'] += 1
             else:
-                if(document['state'] == 'done'):
+                if document['state'] == 'done':
                     oldDoc['sites_served'][document['destination']] = {'done': 1,
                                                                        'failed': 0,
                                                                        'killed': 0}
-                if(document['state'] == 'failed'):
+                if document['state'] == 'failed':
                     oldDoc['sites_served'][document['destination']] = {'done': 0,
                                                                        'failed': 1,
-								       'killed': 0}
-                if(document['state'] == 'killed'):
+                                                                       'killed': 0}
+                if document['state'] == 'killed':
                     oldDoc['sites_served'][document['destination']] = {'done': 0,
                                                                        'failed': 0,
                                                                        'killed': 1}
             ntransfer = sum(oldDoc['done'].values()) + sum(oldDoc['failed'].values()) + sum(oldDoc['killed'].values())
 
-            #update max, min duration time
-            if(jobDuration > int(oldDoc['timing']['max_transfer_duration']) ):
+            # update max, min duration time
+            if jobDuration > int(oldDoc['timing']['max_transfer_duration']):
                 oldDoc['timing']['max_transfer_duration'] = jobDuration
-            if(jobDuration < int(oldDoc['timing']['min_transfer_duration']) ):
+            if jobDuration < int(oldDoc['timing']['min_transfer_duration']):
                 oldDoc['timing']['min_transfer_duration'] = jobDuration
 
             avgTime = oldDoc['timing']['avg_transfer_duration']
-            avgTime = avgTime * (ntransfer / float(ntransfer+1)) + jobDuration / float(ntransfer+1)
+            avgTime = avgTime * (ntransfer / float(ntransfer + 1)) + jobDuration / float(ntransfer + 1)
             oldDoc['timing']['avg_transfer_duration'] = int(avgTime)
 
             nretry = "%s_retry" % len(document['retry_count'])
 
-            if(oldDoc[document['state']].has_key(nretry)):
+            if nretry in oldDoc[document['state']]:
                 oldDoc[document['state']][nretry] += 1
             else:
                 oldDoc[document['state']][nretry] = 1
 
-            oldDoc['avg_size'] = int(oldDoc['avg_size']*(ntransfer / float(ntransfer+1)) + document['size'] / float(ntransfer+1))
+            oldDoc['avg_size'] = int(oldDoc['avg_size'] * (ntransfer / float(ntransfer + 1)) + document['size'] / float(ntransfer + 1))
 
-        except Exception, ex:
+        except Exception as ex:
 
-            msg =  "Error when retriving document from couch"
+            msg = "Error when retriving document from couch"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-

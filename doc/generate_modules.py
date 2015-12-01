@@ -7,6 +7,7 @@ This script parses a directory tree looking for python modules and packages and
 creates ReST files appropriately to create code documentation with Sphinx.
 It also creates a modules index (named modules.<suffix>).
 """
+from __future__ import print_function
 
 # Copyright 2008 Société des arts technologiques (SAT), http://www.sat.qc.ca/
 # Copyright 2010 Thomas Waldmann <tw AT waldmann-edv DOT de>
@@ -35,9 +36,10 @@ OPTIONS = ['members',
            'undoc-members',
            # 'inherited-members', # disabled because there's a bug in sphinx
            'show-inheritance',
-          ]
+           ]
 
 INIT = '__init__.py'
+
 
 def makename(package, module):
     """Join package and module with a dot."""
@@ -50,23 +52,26 @@ def makename(package, module):
         name = module
     return name
 
+
 def write_file(name, text, opts):
     """Write the output file for module/package <name>."""
     if opts.dryrun:
         return
     fname = os.path.join(opts.destdir, "%s.%s" % (name, opts.suffix))
     if not opts.force and os.path.isfile(fname):
-        print 'File %s already exists, skipping.' % fname
+        print('File %s already exists, skipping.' % fname)
     else:
-        print 'Creating file %s.' % fname
+        print('Creating file %s.' % fname)
         f = open(fname, 'w')
         f.write(text)
         f.close()
 
+
 def format_heading(level, text):
     """Create a heading of <level> [1, 2 or 3 supported]."""
-    underlining = ['=', '-', '~', ][level-1] * len(text)
+    underlining = ['=', '-', '~', ][level - 1] * len(text)
     return '%s\n%s\n\n' % (text, underlining)
+
 
 def format_directive(module, package=None):
     """Create the automodule directive and add the options."""
@@ -75,12 +80,14 @@ def format_directive(module, package=None):
         directive += '    :%s:\n' % option
     return directive
 
+
 def create_module_file(package, module, opts):
     """Build the text of the file and write the file."""
     text = format_heading(1, '%s Module' % module)
     text += format_heading(2, ':mod:`%s` Module' % module)
     text += format_directive(module, package)
     write_file(makename(package, module), text, opts)
+
 
 def create_package_file(root, master_package, subroot, py_files, opts, subs):
     """Build the text of the file and write the file."""
@@ -113,10 +120,12 @@ def create_package_file(root, master_package, subroot, py_files, opts, subs):
 
     write_file(makename(master_package, subroot), text, opts)
 
+
 def create_modules_toc_file(master_package, modules, opts, name='modules'):
     """
     Create the module's index.
     """
+    del master_package
     text = format_heading(1, '%s Modules' % opts.header)
     text += '.. toctree::\n'
     text += '   :maxdepth: %s\n\n' % opts.maxdepth
@@ -132,12 +141,14 @@ def create_modules_toc_file(master_package, modules, opts, name='modules'):
 
     write_file(name, text, opts)
 
+
 def shall_skip(module):
     """
     Check if we want to skip this module.
     """
     # skip it, if there is nothing (or just \n or \r\n) in the file
     return os.path.getsize(module) < 3
+
 
 def recurse_tree(path, excludes, opts):
     """
@@ -157,7 +168,7 @@ def recurse_tree(path, excludes, opts):
     tree = os.walk(path, False)
     for root, subs, files in tree:
         # keep only the Python script files
-        py_files =  sorted([f for f in files if os.path.splitext(f)[1] == '.py'])
+        py_files = sorted([f for f in files if os.path.splitext(f)[1] == '.py'])
         if INIT in py_files:
             py_files.remove(INIT)
             py_files.insert(0, INIT)
@@ -166,12 +177,12 @@ def recurse_tree(path, excludes, opts):
         # check if there are valid files to process
         # TODO: could add check for windows hidden files
         if "/." in root or "/_" in root \
-        or not py_files \
-        or is_excluded(root, excludes):
+                or not py_files \
+                or is_excluded(root, excludes):
             continue
         if INIT in py_files:
             # we are in package ...
-            if (# ... with subpackage(s)
+            if (  # ... with subpackage(s)
                 subs
                 or
                 # ... with some module(s)
@@ -179,7 +190,7 @@ def recurse_tree(path, excludes, opts):
                 or
                 # ... with a not-to-be-skipped INIT file
                 not shall_skip(os.path.join(root, INIT))
-               ):
+            ):
                 subroot = root[len(path):].lstrip(os.path.sep).replace(os.path.sep, '.')
                 create_package_file(root, package_name, subroot, py_files, opts, subs)
                 toc.append(makename(package_name, subroot))
@@ -194,6 +205,7 @@ def recurse_tree(path, excludes, opts):
     # create the module's index
     if not opts.notoc:
         create_modules_toc_file(package_name, toc, opts)
+
 
 def normalize_excludes(rootpath, excludes):
     """
@@ -212,6 +224,7 @@ def normalize_excludes(rootpath, excludes):
         f_excludes.append(exclude)
     return f_excludes
 
+
 def is_excluded(root, excludes):
     """
     Check if the directory is in the exclude list.
@@ -226,6 +239,7 @@ def is_excluded(root, excludes):
         if root.startswith(exclude):
             return True
     return False
+
 
 def main():
     """
@@ -252,11 +266,10 @@ Note: By default this script will not overwrite already created files.""")
                 excludes = normalize_excludes(rootpath, excludes)
                 recurse_tree(rootpath, excludes, opts)
             else:
-                print '%s is not a valid output destination directory.' % opts.destdir
+                print('%s is not a valid output destination directory.' % opts.destdir)
         else:
-            print '%s is not a valid directory.' % rootpath
+            print('%s is not a valid directory.' % rootpath)
 
 
 if __name__ == '__main__':
     main()
-

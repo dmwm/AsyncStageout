@@ -1,4 +1,4 @@
-#pylint: disable=C0103,W0105
+# pylint: disable=C0103,W0105
 
 """
 Here's the algorithm
@@ -13,6 +13,7 @@ Here's the algorithm
     c. deletes successfully transferred files
 """
 import os
+import errno
 import logging
 from multiprocessing import Pool
 
@@ -27,6 +28,7 @@ from AsyncStageOut.TransferWorker import TransferWorker
 result_list = []
 current_running = []
 
+
 def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
@@ -34,20 +36,21 @@ def ftscp(user, tfc_map, config):
     logging.debug("Trying to start the worker")
     try:
         worker = TransferWorker(user, tfc_map, config)
-    except Exception, e:
-        logging.debug("Worker cannot be created!:" %e)
+    except Exception as e:
+        logging.debug("Worker cannot be created!: %s", e)
         return user
-    logging.debug("Worker created and init %s" % worker.init)
+    logging.debug("Worker created and init %s", worker.init)
     if worker.init:
-       logging.debug("Starting %s" %worker)
-       try:
-           worker()
-       except Exception, e:
-           logging.debug("Worker cannot start!:" %e)
-           return user
+        logging.debug("Starting %s", worker)
+        try:
+            worker()
+        except Exception as e:
+            logging.debug("Worker cannot start!: %s", e)
+            return user
     else:
-       logging.debug("Worker cannot be initialized!")
+        logging.debug("Worker cannot be initialized!")
     return user
+
 
 def log_result(result):
     """
@@ -56,27 +59,29 @@ def log_result(result):
     result_list.append(result)
     current_running.remove(result)
 
+
 class TransferDaemon(BaseDaemon):
     """
     _TransferDaemon_
     Call multiprocessing library to instantiate a TransferWorker for each user.
     """
+
     def __init__(self, config):
         """
         Initialise class members
         """
-        #Need a better way to test this without turning off this next line
+        # Need a better way to test this without turning off this next line
         BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
         self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
         if not os.path.isdir(self.dropbox_dir):
             try:
                 os.makedirs(self.dropbox_dir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == errno.EEXIST:
                     pass
                 else:
-                    self.logger.error('Unknown error in mkdir' % e.errno)
+                    self.logger.error('Unknown error in mkdir %s ', e.errno)
                     raise
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.db = server.connectDatabase(self.config.files_database)
@@ -85,37 +90,35 @@ class TransferDaemon(BaseDaemon):
         self.logger.debug('Connected to CouchDB')
         self.pool = Pool(processes=self.config.pool_size)
         try:
-            self.phedex = PhEDEx(responseType='xml', dict = {'key': self.config.opsProxy, 'cert': self.config.opsProxy})
-        except Exception, e:
-            self.logger.exception('PhEDEx exception: %s' % e)
+            self.phedex = PhEDEx(responseType='xml', dict={'key': self.config.opsProxy, 'cert': self.config.opsProxy})
+        except Exception as e:
+            self.logger.exception('PhEDEx exception: %s', e)
         # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
-
-        result_list = []
-        current_running = []
+        self.factory = WMFactory(self.config.schedAlgoDir, namespace=self.config.schedAlgoDir)
 
     # Over riding setup() is optional, and not needed here
-    def algorithm(self, parameters = None):
+    def algorithm(self, parameters=None):
         """
         1. Get a list of users with files to transfer from the couchdb instance
         2. For each user get a suitably sized input for ftscp (call to a list)
         3. Submit the ftscp to a subprocess
         """
-        query = {'stale':'ok'}
+        del parameters
+        query = {'stale': 'ok'}
         try:
             params = self.config_db.loadView('asynctransfer_config', 'GetTransferConfig', query)
             self.config.max_files_per_transfer = params['rows'][0]['key'][1]
             self.config.algoName = params['rows'][0]['key'][2]
         except IndexError:
             self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
-        except Exception, e:
-            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+        except Exception as e:
+            self.logger.exception('A problem occured when contacting couchDB: %s', e)
 
         users = self.active_users(self.db)
 
         sites = self.active_sites()
-        self.logger.info('%s active sites' % len(sites))
-        self.logger.debug('Active sites are: %s' % sites)
+        self.logger.info('%s active sites', len(sites))
+        self.logger.debug('Active sites are: %s', sites)
 
         site_tfc_map = {}
         for site in sites:
@@ -124,12 +127,12 @@ class TransferDaemon(BaseDaemon):
                 site_tfc_map[site] = self.get_tfc_rules(site)
         self.logger.debug('kicking off pool')
         for u in users:
-            self.logger.debug('current_running %s' %current_running)
+            self.logger.debug('current_running %s', current_running)
             if u not in current_running:
-                self.logger.debug('processing %s' %u)
+                self.logger.debug('processing %s', u)
                 current_running.append(u)
-                self.logger.debug('processing %s' %current_running)
-                self.pool.apply_async(ftscp,(u, site_tfc_map, self.config), callback = log_result)
+                self.logger.debug('processing %s', current_running)
+                self.pool.apply_async(ftscp, (u, site_tfc_map, self.config), callback=log_result)
 
     def active_users(self, db):
         """
@@ -137,18 +140,19 @@ class TransferDaemon(BaseDaemon):
         following view:
             ftscp?group=true&group_level=1
         """
-        #TODO: Remove stale=ok for now until tested
-        #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+        # TODO: Remove stale=ok for now until tested
+        # query = {'group': True, 'group_level': 3, 'stale': 'ok'}
         query = {'group': True, 'group_level': 3}
         try:
             users = db.loadView('AsyncTransfer', 'ftscp_all', query)
-        except Exception, e:
-            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+        except Exception as e:
+            self.logger.exception('A problem occured when contacting couchDB: %s', e)
             return []
 
         active_users = []
         if len(users['rows']) <= self.config.pool_size:
             active_users = users['rows']
+
             def keys_map(inputDict):
                 """
                 Map function.
@@ -156,11 +160,12 @@ class TransferDaemon(BaseDaemon):
                 return inputDict['key']
             active_users = map(keys_map, active_users)
         else:
-            sorted_users = self.factory.loadObject(self.config.algoName, args = [self.config, self.logger, users['rows'], self.config.pool_size], getFromCache = False, listFlag = True)
-            #active_users = random.sample(users['rows'], self.config.pool_size)
+            sorted_users = self.factory.loadObject(self.config.algoName, args=[self.config, self.logger, users['rows'],
+                                                                               self.config.pool_size], getFromCache=False, listFlag=True)
+            # active_users = random.sample(users['rows'], self.config.pool_size)
             active_users = sorted_users()[:self.config.pool_size]
-        self.logger.info('%s active users' % len(active_users))
-        self.logger.debug('Active users are: %s' % active_users)
+        self.logger.info('%s active users', len(active_users))
+        self.logger.debug('Active users are: %s', active_users)
         return active_users
 
     def active_sites(self):
@@ -170,8 +175,8 @@ class TransferDaemon(BaseDaemon):
         query = {'group': True, 'stale': 'ok'}
         try:
             sites = self.db.loadView('AsyncTransfer', 'sites', query)
-        except Exception, e:
-            self.logger.exception('A problem occured when contacting couchDB: %s' % e)
+        except Exception as e:
+            self.logger.exception('A problem occured when contacting couchDB: %s', e)
             return []
 
         def keys_map(inputDict):
@@ -189,17 +194,18 @@ class TransferDaemon(BaseDaemon):
         tfc_file = None
         try:
             self.phedex.getNodeTFC(site)
-        except Exception, e:
-            self.logger.exception('PhEDEx exception: %s' % e)
+        except Exception as e:
+            self.logger.exception('PhEDEx exception: %s', e)
         try:
             tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-        except Exception, e:
-            self.logger.exception('PhEDEx cache exception: %s' % e)
+        except Exception as e:
+            self.logger.exception('PhEDEx cache exception: %s', e)
         return readTFC(tfc_file)
 
-    def terminate(self, parameters = None):
+    def terminate(self, parameters=None):
         """
         Called when thread is being terminated.
         """
+        del parameters
         self.pool.close()
         self.pool.join()

@@ -4,12 +4,11 @@ python LoadStatDocuments.py --couchUrl=http://user:passwd@hostname:5184 --databa
 """
 import sys
 import random
-from WMCore.Configuration import loadConfigurationFile
-import datetime
 from WMQuality.TestInitCouchApp import CouchAppTestHarness
 import logging
-from WMCore.Database.CMSCouch import CouchServer, Database, Document
+from WMCore.Database.CMSCouch import CouchServer, Database
 from optparse import OptionParser, TitledHelpFormatter
+
 
 def _getDbConnection(couchUrl, dbName):
     """
@@ -18,10 +17,10 @@ def _getDbConnection(couchUrl, dbName):
     """
     couchServer = CouchServer(couchUrl)
     if not dbName in couchServer.listDatabases():
-        logging.info("Database '%s' does not exits, creating it." % dbName)
+        logging.info("Database '%s' does not exits, creating it.", dbName)
         db = couchServer.createDatabase(dbName)
     else:
-        logging.debug("Database '%s' exists." % dbName)
+        logging.debug("Database '%s' exists.", dbName)
         db = Database(dbName, couchUrl)
 
     couchapps = "../../../src/couchapp"
@@ -32,6 +31,7 @@ def _getDbConnection(couchUrl, dbName):
     harness.pushCouchapps(stat_couchapp)
 
     return couchServer, db
+
 
 def _processAndStoreFile(couchServer, dbName, number):
     """
@@ -57,61 +57,59 @@ def _processAndStoreFile(couchServer, dbName, number):
     worfklow_base = 'Analysis_%s'
     docs_done_per_server = 10
     docs_failed_per_server = 15
-    now = str(datetime.datetime.now())
 
     for server in FTSserver:
-        for i in xrange(number):
+        for dummyi in xrange(number):
             user = random.choice(users)
-            file_doc = { "users": { user: [ worfklow_base % random.randint(1000, 9999) ] },
-             	     "done": { "0_retry":  docs_done_per_server },
-    	      	     "timing": { "avg_transfer_duration": random.randint(100, 200),
-          		                 "max_transfer_duration": random.randint(200, 300),
-    	  	                 "min_transfer_duration": random.randint(1, 100)},
-    		     "sites_served": { random.choice(sites): { "failed": docs_failed_per_server,
-               	    					       "done": docs_done_per_server },
-    		    	               random.choice(sites): { "failed": docs_failed_per_server,
-               						       "done": docs_done_per_server}
-
-    				     },
-    	             "day": "201%s-%s-%s" % (random.randint(0, 5), random.randint(1, 12), random.randint(1, 31)),
-                         "fts": server,
-                         "failed": { "0_retry":  docs_failed_per_server },
-                         "avg_size": random.randint(1000000, 9999999)
-
-                       }
+            file_doc = {"users": {user: [worfklow_base % random.randint(1000, 9999)]},
+                        "done": {"0_retry": docs_done_per_server},
+                        "timing": {"avg_transfer_duration": random.randint(100, 200),
+                                   "max_transfer_duration": random.randint(200, 300),
+                                   "min_transfer_duration": random.randint(1, 100)},
+                        "sites_served": {random.choice(sites): {"failed": docs_failed_per_server,
+                                                                "done": docs_done_per_server},
+                                         random.choice(sites): {"failed": docs_failed_per_server,
+                                                                "done": docs_done_per_server}},
+                        "day": "201%s-%s-%s" % (random.randint(0, 5), random.randint(1, 12), random.randint(1, 31)),
+                        "fts": server,
+                        "failed": {"0_retry": docs_failed_per_server},
+                        "avg_size": random.randint(1000000, 9999999)}
             db.queue(file_doc, True, ['stat/transfersByFtsByDay'])
 
     db.commit()
 
+
 def _processCmdLineArgs(args):
     usage = \
-"""usage: %prog options"""
-    form = TitledHelpFormatter(width = 78)
-    parser = OptionParser(usage = usage, formatter = form)
+        """usage: %prog options"""
+    form = TitledHelpFormatter(width=78)
+    parser = OptionParser(usage=usage, formatter=form)
     _defineCmdLineOptions(parser)
 
     # opts - new processed options
     # args - remainder of the input array
-    opts, args = parser.parse_args(args = args)
+    opts, args = parser.parse_args(args=args)
 
     return opts.couchUrl, opts.database, opts.number
 
+
 def _defineCmdLineOptions(parser):
-    help = "CouchDB server URL (default: http://localhost:5984)"
-    parser.add_option("-c", "--couchUrl", help=help, default="http://localhost:5984")
-    help = "CouchDB database name (default: asyncstageout)"
-    parser.add_option("-d", "--database", help=help, default="asyncstageout")
-    help = "Number of transfers to simulate (default: 10)"
-    parser.add_option("-n", "--number", help=help, type="int", default=10)
+    helpS = "CouchDB server URL (default: http://localhost:5984)"
+    parser.add_option("-c", "--couchUrl", help=helpS, default="http://localhost:5984")
+    helpS = "CouchDB database name (default: asyncstageout)"
+    parser.add_option("-d", "--database", help=helpS, default="asyncstageout")
+    helpS = "Number of transfers to simulate (default: 10)"
+    parser.add_option("-n", "--number", help=helpS, type="int", default=10)
+
 
 def main():
     couchUrl, dbName, number = _processCmdLineArgs(sys.argv)
-    couchServer, couchDb = _getDbConnection(couchUrl, dbName)
+    couchServer, dummycouchDb = _getDbConnection(couchUrl, dbName)
 
     _processAndStoreFile(couchServer, dbName, number)
     logging.info("Finished.")
 
-    #couchServer.deleteDatabase(dbName)
+    # couchServer.deleteDatabase(dbName)
 
 if __name__ == "__main__":
     main()

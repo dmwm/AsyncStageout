@@ -1,5 +1,5 @@
 #!/usr/bin/env
-#pylint: disable-msg=C0103
+# pylint: disable-msg=C0103
 '''
 The TransferWorker does the following:
 
@@ -28,6 +28,7 @@ from AsyncStageOut import getHashLfn
 from AsyncStageOut import getDNFromUserName
 from AsyncStageOut import getCommonLogFormatter
 
+
 def getProxy(userdn, group, role, defaultDelegation, logger):
     """
     _getProxy_
@@ -39,18 +40,18 @@ def getProxy(userdn, group, role, defaultDelegation, logger):
     config['group'] = group
     config['role'] = role
     proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
+    proxyPath = proxy.getProxyFilename(True)
+    timeleft = proxy.getTimeLeft(proxyPath)
     if timeleft is not None and timeleft > 3600:
         return (True, proxyPath)
     proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
+    timeleft = proxy.getTimeLeft(proxyPath)
     if timeleft is not None and timeleft > 0:
         return (True, proxyPath)
     return (False, None)
 
 
-class ReporterWorker:
+class ReporterWorker(object):
 
     def __init__(self, user, config):
         """
@@ -74,7 +75,7 @@ class ReporterWorker:
         self.logger.debug("Trying to get DN")
         try:
             self.userDN = getDNFromUserName(self.user, self.logger)
-        except Exception, ex:
+        except Exception as ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -85,22 +86,21 @@ class ReporterWorker:
             self.init = False
             return
         defaultDelegation = {
-                                  'logger': self.logger,
-                                  'credServerPath' : \
-                                      self.config.credentialDir,
-                                  # It will be moved to be getfrom couchDB
-                                  'myProxySvr': 'myproxy.cern.ch',
-                                  'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
-                                  'serverDN' : self.config.serverDN,
-                                  'uisource' : self.uiSetupScript,
-                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
-                            }
+            'logger': self.logger,
+            'credServerPath':
+            self.config.credentialDir,
+            # It will be moved to be getfrom couchDB
+            'myProxySvr': 'myproxy.cern.ch',
+            'min_time_left': getattr(self.config, 'minTimeLeft', 36000),
+            'serverDN': self.config.serverDN,
+            'uisource': self.uiSetupScript,
+            'cleanEnvironment': getattr(self.config, 'cleanEnvironment', False)
+        }
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
             except IndexError:
-                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
-                pass
+                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s', self.config.cache_area)
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -111,7 +111,7 @@ class ReporterWorker:
 
             self.valid, proxy = getProxy(self.userDN, "", "", defaultDelegation, self.logger)
 
-        except Exception, ex:
+        except Exception as ex:
 
             msg = "Error getting the user proxy"
             msg += str(ex)
@@ -127,7 +127,7 @@ class ReporterWorker:
             self.userProxy = config.opsProxy
 
         # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
+        self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
         self.commandTimeout = 1200
         self.max_retry = config.max_retry
         # Proxy management in Couch
@@ -137,17 +137,16 @@ class ReporterWorker:
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.config_db = config_server.connectDatabase(self.config.config_database)
 
-
     def __call__(self):
         """
         a. makes the ftscp copyjob
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
-        self.logger.info("Retrieving files for %s" % self.user)
+        self.logger.info("Retrieving files for %s", self.user)
         files_to_update = self.files_for_update()
-        self.logger.info("%s files to process" % len(files_to_update))
-        self.logger.debug("%s files to process" % files_to_update)
+        self.logger.info("%s files to process", len(files_to_update))
+        self.logger.debug("%s files to process", files_to_update)
         for input_file in files_to_update:
             remove_good = True
             remove_failed = True
@@ -156,61 +155,61 @@ class ReporterWorker:
             failure_reason = []
             good_lfns = []
             updated_good_lfns = []
-            self.logger.info("Updating %s" % input_file)
+            self.logger.info("Updating %s", input_file)
             json_data = {}
             if os.path.basename(input_file).startswith('Reporter'):
                 try:
                     json_data = json.loads(open(input_file).read())
-                except ValueError, e:
-                    self.logger.error("Error loading %s" % e)
-                    self.logger.debug('Removing %s' % input_file)
-                    os.unlink( input_file )
+                except ValueError as e:
+                    self.logger.error("Error loading %s", e)
+                    self.logger.debug('Removing %s', input_file)
+                    os.unlink(input_file)
                     continue
-                except Exception, e:
-                    self.logger.error("Error loading %s" % e)
-                    self.logger.debug('Removing %s' % input_file)
-                    os.unlink( input_file )
+                except Exception as e:
+                    self.logger.error("Error loading %s", e)
+                    self.logger.debug('Removing %s', input_file)
+                    os.unlink(input_file)
                     continue
                 if json_data:
-                    self.logger.debug('Inputs: %s %s %s' % (json_data['LFNs'], json_data['transferStatus'], json_data['failure_reason']))
+                    self.logger.debug('Inputs: %s %s %s', json_data['LFNs'], json_data['transferStatus'], json_data['failure_reason'])
 
                     if 'Failed' or 'abandoned' or 'Canceled' or 'lost' in json_data['transferStatus']:
                         # Sort failed files
                         failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Failed' or x == 'Canceled']
                         abandoned_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'abandoned']
                         failed_indexes.extend(abandoned_indexes)
-                        self.logger.info('failed indexes %s' % len(failed_indexes))
-                        self.logger.debug('failed indexes %s' % failed_indexes)
+                        self.logger.info('failed indexes %s', len(failed_indexes))
+                        self.logger.debug('failed indexes %s', failed_indexes)
                         for i in failed_indexes:
                             failed_lfns.append(json_data['LFNs'][i])
                             failure_reason.append(json_data['failure_reason'][i])
-                        self.logger.debug('Marking failed %s %s' %(failed_lfns, failure_reason))
+                        self.logger.debug('Marking failed %s %s', failed_lfns, failure_reason)
                         updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
                         if len(updated_failed_lfns) != len(failed_lfns):
                             remove_failed = False
 
                     if 'Done' or 'Finished' in json_data['transferStatus']:
                         # Sort good files
-                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if (x == 'Done' or x == 'Finished' or x == 'Finishing') ]
-                        self.logger.info('good indexes %s' % len(good_indexes))
-                        self.logger.debug('good indexes %s' % good_indexes)
+                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Done' or x == 'Finished' or x == 'Finishing']
+                        self.logger.info('good indexes %s', len(good_indexes))
+                        self.logger.debug('good indexes %s', good_indexes)
                         for i in good_indexes:
                             good_lfns.append(json_data['LFNs'][i])
-                        self.logger.info('Marking good %s' %(good_lfns))
+                        self.logger.info('Marking good %s', (good_lfns))
                         updated_good_lfns = self.mark_good(good_lfns)
                         if len(updated_good_lfns) != len(good_lfns):
                             remove_good = False
 
                     if remove_good and remove_failed:
                         # Remove the json file
-                        self.logger.debug('Removing %s' % input_file)
-                        os.unlink( input_file )
+                        self.logger.debug('Removing %s', input_file)
+                        os.unlink(input_file)
 
                 else:
-                    self.logger.info('Empty file %s' % input_file)
+                    self.logger.info('Empty file %s', input_file)
                     continue
             else:
-                self.logger.info('File not for the Reporter %s' % input_file)
+                self.logger.info('File not for the Reporter %s', input_file)
                 continue
         self.logger.info('Update completed')
         return
@@ -221,7 +220,7 @@ class ReporterWorker:
         """
         files_to_update = []
         user_dir = os.path.join(self.dropbox_dir, self.user)
-        self.logger.info('Looking into %s' % user_dir)
+        self.logger.info('Looking into %s', user_dir)
         for user_file in os.listdir(user_dir):
             files_to_update.append(os.path.join(self.dropbox_dir, self.user, user_file))
         return files_to_update
@@ -233,17 +232,17 @@ class ReporterWorker:
         updated_lfn = []
         for lfn in files:
             hash_lfn = getHashLfn(lfn)
-            self.logger.info("Marking good %s" % hash_lfn)
-            self.logger.debug("Marking good %s" % lfn)
+            self.logger.info("Marking good %s", hash_lfn)
+            self.logger.debug("Marking good %s", lfn)
             try:
                 document = self.db.document(hash_lfn)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
                 continue
-            self.logger.info("Doc %s Loaded" % hash_lfn)
+            self.logger.info("Doc %s Loaded", hash_lfn)
             if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                 outputLfn = document['lfn'].replace('store/temp', 'store', 1)
                 try:
@@ -256,10 +255,10 @@ class ReporterWorker:
                     data['last_update'] = last_update
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
                     updateUri += "?" + urllib.urlencode(data)
-                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                    self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                     updated_lfn.append(lfn)
-                    self.logger.debug("Marked good %s" % lfn)
-                except Exception, ex:
+                    self.logger.debug("Marked good %s", lfn)
+                except Exception as ex:
                     msg = "Error updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -267,17 +266,18 @@ class ReporterWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-            else: updated_lfn.append(lfn)
+            else:
+                updated_lfn.append(lfn)
         self.logger.debug("transferred file updated")
         return updated_lfn
 
-    def mark_failed(self, files=[], failures_reasons = [], force_fail = False ):
+    def mark_failed(self, files=[], failures_reasons=[], force_fail=False):
         """
         Something failed for these files so increment the retry count
         """
@@ -297,8 +297,8 @@ class ReporterWorker:
             docId = getHashLfn(temp_lfn)
             # Load document to get the retry_count
             try:
-                document = self.db.document( docId )
-            except Exception, ex:
+                document = self.db.document(docId)
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -318,22 +318,22 @@ class ReporterWorker:
                         data['state'] = 'failed'
                         data['end_time'] = now
 
-                self.logger.debug("Failure list: %s" % failures_reasons)
-                self.logger.debug("Files: %s" % files)
-                self.logger.debug("LFN %s" % lfn)
+                self.logger.debug("Failure list: %s", failures_reasons)
+                self.logger.debug("Files: %s", files)
+                self.logger.debug("LFN %s", lfn)
 
                 data['failure_reason'] = failures_reasons[files.index(lfn)]
                 data['last_update'] = last_update
                 data['retry'] = now
                 # Update the document in couch
-                self.logger.debug("Marking failed %s" % docId)
+                self.logger.debug("Marking failed %s", docId)
                 try:
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + docId
                     updateUri += "?" + urllib.urlencode(data)
-                    self.db.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                    self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                     updated_lfn.append(docId)
-                    self.logger.debug("Marked failed %s" % docId)
-                except Exception, ex:
+                    self.logger.debug("Marked failed %s", docId)
+                except Exception as ex:
                     msg = "Error in updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -341,13 +341,14 @@ class ReporterWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
                     continue
-            else: updated_lfn.append(docId)
+            else:
+                updated_lfn.append(docId)
         self.logger.debug("failed file updated")
         return updated_lfn
 
@@ -356,15 +357,15 @@ class ReporterWorker:
         Determine if transfer error is fatal or not.
         """
         permanent_failure_reasons = [
-                             ".*canceled because it stayed in the queue for too long.*",
-                             ".*permission denied.*",
-                             ".*disk quota exceeded.*",
-                             ".*operation not permitted*",
-                             ".*mkdir\(\) fail.*",
-                             ".*open/create error.*",
-                             ".*mkdir\: cannot create directory.*",
-                             ".*does not have enough space.*"
-                                    ]
+            r".*canceled because it stayed in the queue for too long.*",
+            r".*permission denied.*",
+            r".*disk quota exceeded.*",
+            r".*operation not permitted*",
+            r".*mkdir\(\) fail.*",
+            r".*open/create error.*",
+            r".*mkdir\: cannot create directory.*",
+            r".*does not have enough space.*"
+        ]
         failure = str(failure).lower()
         for permanent_failure_reason in permanent_failure_reasons:
             if re.match(permanent_failure_reason, failure):
@@ -375,4 +376,5 @@ class ReporterWorker:
         """
         Mark the list of files as acquired
         """
+        del files
         self.logger('Something called mark_incomplete which should never be called')

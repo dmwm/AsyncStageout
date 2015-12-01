@@ -9,6 +9,7 @@ import time
 import datetime
 import logging
 
+
 class RetryAlgoBase(object):
     """
     A RetryAlgo plugin for jobs/files in the Create state.
@@ -43,7 +44,7 @@ class RetryAlgoBase(object):
         t = datetime.datetime.now()
         return self.convertdatetime(t)
 
-    def getAlgoParam(self, jobType, param = 'coolOffTime', defaultReturn = {}):
+    def getAlgoParam(self, jobType, param='coolOffTime', defaultReturn={}):
         """
         _getAlgoParam_
 

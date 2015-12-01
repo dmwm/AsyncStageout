@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#pylint: disable-msg=C0103
+# pylint: disable-msg=C0103
 """
 _DummySource_t_
 Duplicate view from Dummy database
@@ -10,11 +10,13 @@ from AsyncStageOut.Plugins.Source import Source
 from AsyncStageOut import getHashLfn
 import time
 
+
 class Dummy(Source):
     """
     _DummySource_
     Create dummy data to be stored in couch by the LFNDuplicatorPoller.
     """
+
     def __call__(self):
         """
         _getViewResults_
@@ -40,7 +42,7 @@ class Dummy(Source):
         users = []
         while j <= numberUsers:
 
-            users.append( 'user'+ str( random.randint(1, 1000) ) )
+            users.append('user' + str(random.randint(1, 1000)))
             j += 1
 
         size = 3
@@ -55,29 +57,28 @@ class Dummy(Source):
             last_update = int(time.time())
             user = random.choice(users)
             lfn = lfn_base % (user, random.randint(1000, 9999), i)
-            id = getHashLfn( lfn )
+            id = getHashLfn(lfn)
             workflow = 'workflow-%s-%s' % (user, random.randint(1, 100))
-            results.append( {'_id': id,
-                        'source': random.choice(sites),
-                        'destination': random.choice(sites),
-                        'task': workflow,
-                        'workflow': workflow,
-                        'lfn': lfn,
-                        'jobid': random.randint(1000, 9999),
-                        'state': 'new',
-                        'last_update':last_update,
-                        'dbSource_update': last_update,
-                        'retry_count': [],
-                        'checksums': 'checksum',
-                        'size': random.randint(1000, 9999),
-                        'dn': '/UserDN',
-                        'group': '',
-                        'role': '',
-                        'user': user}
-            )
+            results.append({'_id': id,
+                            'source': random.choice(sites),
+                            'destination': random.choice(sites),
+                            'task': workflow,
+                            'workflow': workflow,
+                            'lfn': lfn,
+                            'jobid': random.randint(1000, 9999),
+                            'state': 'new',
+                            'last_update': last_update,
+                            'dbSource_update': last_update,
+                            'retry_count': [],
+                            'checksums': 'checksum',
+                            'size': random.randint(1000, 9999),
+                            'dn': '/UserDN',
+                            'group': '',
+                            'role': '',
+                            'user': user}
+                           )
 
             i += 1
 
-        logging.debug("Dummy docs queued %s" %results)
+        logging.debug("Dummy docs queued %s" % results)
         return results
-

@@ -7,6 +7,7 @@ from AsyncStageOut.PublisherDaemon import PublisherDaemon
 import logging
 import threading
 
+
 class DBSPublisher(Harness):
     """
     _DBSPublisher_
@@ -15,6 +16,7 @@ class DBSPublisher(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("DBSPublisher.__init__")
 
@@ -24,11 +26,10 @@ class DBSPublisher(Harness):
         """
         logging.debug(self.config)
         myThread = threading.currentThread()
-        logging.debug("Setting component poll interval to %s seconds" \
-                      %str(self.config.DBSPublisher.pollInterval) )
-        myThread.workerThreadManager.addWorker( \
-                              PublisherDaemon(self.config), \
-                              self.config.DBSPublisher.pollInterval \
-                            )
+        logging.debug("Setting component poll interval to %s seconds", self.config.DBSPublisher.pollInterval)
+        myThread.workerThreadManager.addWorker(
+            PublisherDaemon(self.config),
+            self.config.DBSPublisher.pollInterval
+        )
 
         return

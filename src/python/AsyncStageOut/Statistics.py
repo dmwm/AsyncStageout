@@ -3,9 +3,10 @@
 Build stat docs.
 """
 from WMCore.Agent.Harness import Harness
-from AsyncStageOut.StatisticDaemon import StatisticDaemon 
+from AsyncStageOut.StatisticDaemon import StatisticDaemon
 import logging
 import threading
+
 
 class Statistics(Harness):
     """
@@ -14,6 +15,7 @@ class Statistics(Harness):
 
     def __init__(self, config):
         # call the base class
+        self.config = config
         Harness.__init__(self, config)
         logging.info("Statistics.__init__")
 
@@ -23,11 +25,10 @@ class Statistics(Harness):
         """
         logging.debug(self.config)
         myThread = threading.currentThread()
-        logging.debug("Setting component poll interval to %s seconds" \
-                      %str(self.config.Statistics.pollStatInterval) )
-        myThread.workerThreadManager.addWorker( \
-                              StatisticDaemon(self.config), \
-                              self.config.Statistics.pollStatInterval \
-                            )
+        logging.debug("Setting component poll interval to %s seconds", self.config.Statistics.pollStatInterval)
+        myThread.workerThreadManager.addWorker(
+            StatisticDaemon(self.config),
+            self.config.Statistics.pollStatInterval
+        )
 
         return
