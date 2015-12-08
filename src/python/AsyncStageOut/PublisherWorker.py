@@ -211,15 +211,7 @@ class PublisherWorker:
                     wf_jobs_endtime.append(int(time.mktime(time.strptime(str(job_end_time), '%Y-%m-%d %H:%M:%S'))) - time.timezone)
                 source_lfn = active_file['value'][1]
                 dest_lfn = active_file['value'][2]
-                ## TODO: The next if is needed only for backward compatibility, because old
-                ## documents were injected with source_lfn not including 'temp' when direct
-                ## stageout was done. This has been changed in CRAB 3.3.1508. So in October we
-                ## can remove the next if and just leave:
-                #self.lfn_map[dest_lfn] = source_lfn
-                if not source_lfn.startswith('/store/temp/'):
-                    self.lfn_map[dest_lfn] = source_lfn.replace('/store/', '/store/temp/', 1)
-                else:
-                    self.lfn_map[dest_lfn] = source_lfn
+                self.lfn_map[dest_lfn] = source_lfn
                 if not pnn or not input_dataset or not input_dbs_url:
                     pnn = str(active_file['value'][0])
                     input_dataset = str(active_file['value'][3])
