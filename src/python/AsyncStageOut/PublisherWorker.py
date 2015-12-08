@@ -874,6 +874,10 @@ class PublisherWorker:
         results = {}
         failure_reason = {}
 
+        # In the case of MC input (or something else which has no 'real' input dataset),
+        # we simply call the input dataset by the primary DS name (/foo/).
+        noInput = len(inputDataset.split("/")) <= 3
+
         READ_PATH = "/DBSReader"
         READ_PATH_1 = "/DBSReader/"
 
@@ -899,18 +903,8 @@ class PublisherWorker:
         self.logger.debug(wfnamemsg+"Migration API URL: %s" % self.publish_migrate_url)
         migrateApi = dbsClient.DbsApi(url=self.publish_migrate_url, proxy=proxy)
 
-        ## The 'inputdataset' field in the Couch documents may not be a real input of
-        ## the file we want to publish, given that CRAB also puts in that field primary
-        ## datasets when it runs PrivateMC workflows and Analysis workflows with users
-        ## input files. So we try to distinguish here between these two situations: is
-        ## 'inputdataset' a parent of the file we have to publish or not.
-        isRealInput = False
-        if len(inputDataset.split('/')) == 4:
+        if not noInput:
             existing_datasets = sourceApi.listDatasets(dataset=inputDataset, detail=True, dataset_access_type='*')
-            if existing_datasets:
-                isRealInput = True
-
-        if isRealInput:
             primary_ds_type = existing_datasets[0]['primary_ds_type']
             # There's little chance this is correct, but it's our best guess for now.
             # CRAB2 uses 'crab2_tag' for all cases
