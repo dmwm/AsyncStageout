@@ -3,6 +3,7 @@
 The TransferWorker does the following:
 
 a. make the ftscp copyjob
+
 b. submit ftscp and watch
 c. delete successfully transferred files from the database
 
@@ -163,10 +164,12 @@ class TransferWorker:
         self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
         stdout, rc = execute_command(command, self.logger, self.commandTimeout)
         if not rc or not self.valid_proxy:
-            jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
-            self.logger.debug("Processing files for %s " %self.user_proxy)
-            if jobs:
-                self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+            jobs = self.files_for_transfer()
+            self.logger.debug("Processing files for %s " % self.user_proxy)
+            if jobs and jobs['jobs']:
+                reuseFlag = jobs['reuse'] if 'reuse' in jobs else False
+                self.logger.debug("Processing job queue with reuse connection: %s" % reuseFlag)
+                self.command(jobs["jobs"], jobs["jobs_lfn"], jobs["jobs_pfn"], jobs["jobs_report"], reuseFlag)
         else:
             self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
         self.logger.info('Transfers completed')
@@ -193,10 +196,13 @@ class TransferWorker:
         ftscp copyjob per source:destination.
         """
         source_dests = self.source_destinations_by_user()
-        jobs = {}
-        jobs_lfn = {}
-        jobs_pfn = {}
-        jobs_report = {}
+        # Generate dictionary of new jobs.
+        # reuse flag is used for reuse connection for small files or not.
+        output = {"jobs": {},
+                  "jobs_lfn": {},
+                  "jobs_pfn": {},
+                  "jobs_report": {},
+                  "reuse": True}
         failed_files = []
         self.logger.info('%s has %s links to transfer on: %s' % (self.user, len(source_dests), str(source_dests)))
         try:
@@ -235,7 +241,7 @@ class TransferWorker:
                             pfn_list.append(source_pfn)
                             # Prepare FTS Dashboard metadata
                             dash_report.append(dashboard_report)
-                            new_job.append('%s %s' % (source_pfn, destination_pfn))
+                            new_job.append('%s %s %s %s' % (source_pfn, destination_pfn, item['value'][2], item['value'][3]['adler32']))
                             self.logger.debug('FTS job created...')
                         else:
                             pass
@@ -245,17 +251,35 @@ class TransferWorker:
                 map(tfc_map, active_files)
                 self.logger.debug('Job prepared...')
                 if new_job:
-                    jobs[(source, destination)] = new_job
-                    jobs_lfn[(source, destination)] = lfn_list
-                    jobs_pfn[(source, destination)] = pfn_list
-                    jobs_report[(source, destination)] = dash_report
+                    # Double check all files size and if it is lower than 100MB, use small files queue.
+                    # small files queue means that it will use reuse connection.
+                    # big files queue will not reuse connection in FTS.
+                    total_size = 0
+                    use_small_queue = True
+                    for item in new_job:
+                        try:
+                            total_size += int(item.split(" ")[2])
+                        except:
+                            self.logger.debug("This should not happen. it was not able to get doc size %s" % item)
+                            use_small_queue = False
+                            continue
+                    if use_small_queue and total_size < 100000000:
+                        output["reuse"] = True
+                    else:
+                        output["reuse"] = False
+
+                    output["jobs"][(source, destination)] = new_job
+                    output["jobs_lfn"][(source, destination)] = lfn_list
+                    output["jobs_pfn"][(source, destination)] = pfn_list
+                    output["jobs_report"][(source, destination)] = dash_report
+
                     self.logger.debug('FTS job ready for submission over  %s ---> %s ...going to next job' % (source, destination))
 
-            self.logger.debug('ftscp input created for %s (%s jobs)' % (self.user, len(jobs.keys())))
-            return jobs, jobs_lfn, jobs_pfn, jobs_report
+            self.logger.debug('ftscp input created for %s (%s jobs) and reuse connection %s flag' % (self.user, len(output["jobs"].keys()), output["reuse"]))
+            return output
         except:
             self.logger.exception("fail")
-            return jobs, jobs_lfn, jobs_pfn, jobs_report
+            return output
 
     def apply_tfc_to_lfn(self, file):
         """
@@ -289,7 +313,7 @@ class TransferWorker:
             self.logger.error('Wrong site %s!' % site)
             return None
 
-    def command(self, jobs, jobs_lfn, jobs_pfn, jobs_report):
+    def command(self, jobs, jobs_lfn, jobs_pfn, jobs_report, reuse=False):
         """
         For each job the worker has to complete:
         Delete files that have failed previously
@@ -307,13 +331,33 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob))
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"max_time_in_queue":20,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+            rest_copyjob = {"params":
+                                    {"bring_online": None,
+                                     "verify_checksum": False,
+                                     "reuse": reuse,
+                                     "copy_pin_lifetime": -1,
+                                     "max_time_in_queue": 20,
+                                     "job_metadata":
+                                                    {"issuer": "ASO"},
+                                     "spacetoken": None,
+                                     "source_spacetoken": None,
+                                     "fail_nearline": False,
+                                     "overwrite": True,
+                                     "gridftp": None},
+                            "files":[]
+                           }
             pairs = []
             for SrcDest in copyjob:
-                pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
-            rest_copyjob += (','.join(pairs)) +']}'
-            self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
-            post = urllib.quote(rest_copyjob)
+                tempFileInfo = SrcDest.split(" ")
+                tempDict = {"sources": [], "metadata": None, "destinations": []}
+                tempDict["sources"].append(tempFileInfo[0])
+                tempDict["destinations"].append(tempFileInfo[1])
+                tempDict["filesize"] = tempFileInfo[2]
+                tempDict["checksum"] = "adler32:%s" % tempFileInfo[3]
+                rest_copyjob.append(tempDict)
+
+            self.logger.debug("Subbmitting this REST copyjob %s" % json.dumps(rest_copyjob, indent=4))
+            post = urllib.quote(json.dumps(rest_copyjob))
             url = self.fts_server_for_transfer + '/jobs'
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
