@@ -651,8 +651,10 @@ sub notify_reporter {
 
 # Now clear the stack of working files that need to be deleted
   foreach ( shift @{$self->{UNLINK}} ) {
-    $self->Logmsg('Unlink ',$_);
-    unlink $_;
+    if ( defined($_) ){
+      $self->Logmsg('Unlink ',$_);
+      unlink $_;
+    }
   }
 
   $self->Logmsg("Notify Reporter of ",$totlen," files for all users") if $totlen;
