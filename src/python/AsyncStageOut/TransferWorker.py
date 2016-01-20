@@ -307,13 +307,33 @@ class TransferWorker:
             # Validate copyjob file before doing anything
             self.logger.debug("Valid %s" % self.validate_copyjob(copyjob))
             if not self.validate_copyjob(copyjob): continue
-            rest_copyjob = '{"params":{"bring_online":null,"verify_checksum":false,"reuse":false,"copy_pin_lifetime":-1,"max_time_in_queue":20,"job_metadata":{"issuer": "ASO"},"spacetoken":null,"source_spacetoken":null,"fail_nearline":false,"overwrite":true,"gridftp":null},"files":['
+
+            rest_copyjob = {
+                        "params":{
+                                "bring_online": None,
+                                "verify_checksum": False,
+                                "copy_pin_lifetime": -1,
+                                "max_time_in_queue": 20,
+                                "job_metadata":{"issuer": "ASO"},
+                                "spacetoken": None,
+                                "source_spacetoken": None,
+                                "fail_nearline": False,
+                                "overwrite": True,
+                                "gridftp": None
+                        },
+                        "files":[]
+                }
+
             pairs = []
             for SrcDest in copyjob:
-                pairs.append('{"sources":["' + SrcDest.split(" ")[0] + '"],"metadata":null,"destinations":["' + SrcDest.split(" ")[1] + '"]}')
-            rest_copyjob += (','.join(pairs)) +']}'
+                tempDict = {"sources": [], "metadata": None, "destinations": []}
+
+                tempDict["sources"].append(SrcDest.split(" ")[0])
+                tempDict["destinations"].append(SrcDest.split(" ")[1])
+                rest_copyjob["files"].append(tempDict)
+
+
             self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
-            post = urllib.quote(rest_copyjob)
             url = self.fts_server_for_transfer + '/jobs'
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
@@ -327,7 +347,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
             try:
-                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.user_proxy, \
+                response, datares = connection.request(url, rest_copyjob, heade, verb='POST', doseq=True, ckey=self.user_proxy, \
                                                        cert=self.user_proxy, capath='/etc/grid-security/certificates', \
                                                        cainfo=self.user_proxy, verbose=True)
                 self.logger.debug("Submission done")
