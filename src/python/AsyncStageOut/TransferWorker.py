@@ -354,7 +354,7 @@ class TransferWorker:
                 tempDict["destinations"].append(tempFileInfo[1])
                 tempDict["filesize"] = tempFileInfo[2]
                 tempDict["checksum"] = "adler32:%s" % tempFileInfo[3]
-                rest_copyjob.append(tempDict)
+                rest_copyjob["files"].append(tempDict)
 
             self.logger.debug("Subbmitting this REST copyjob %s" % json.dumps(rest_copyjob, indent=4))
             url = self.fts_server_for_transfer + '/jobs'
