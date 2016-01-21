@@ -354,10 +354,9 @@ class TransferWorker:
                 tempDict["destinations"].append(tempFileInfo[1])
                 tempDict["filesize"] = tempFileInfo[2]
                 tempDict["checksum"] = "adler32:%s" % tempFileInfo[3]
-                rest_copyjob.append(tempDict)
+                rest_copyjob["files"].append(tempDict)
 
             self.logger.debug("Subbmitting this REST copyjob %s" % json.dumps(rest_copyjob, indent=4))
-            post = urllib.quote(json.dumps(rest_copyjob))
             url = self.fts_server_for_transfer + '/jobs'
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
@@ -371,7 +370,7 @@ class TransferWorker:
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
             try:
-                response, datares = connection.request(url, post, heade, verb='POST', doseq=True, ckey=self.user_proxy, \
+                response, datares = connection.request(url, rest_copyjob, heade, verb='POST', doseq=True, ckey=self.user_proxy, \
                                                        cert=self.user_proxy, capath='/etc/grid-security/certificates', \
                                                        cainfo=self.user_proxy, verbose=True)
                 self.logger.debug("Submission done")
