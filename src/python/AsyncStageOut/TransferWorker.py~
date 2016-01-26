@@ -127,7 +127,7 @@ class TransferWorker:
         config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         self.config_db = config_server.connectDatabase(self.config.config_database)
         self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
-
+	
         if hasattr(self.config, "cache_area"):
             try:
                 defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
@@ -150,6 +150,31 @@ class TransferWorker:
                 except IndexError:
                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
                    pass
+        if getattr(self.config, 'serviceCert', None):
+            defaultDelegation['server_cert'] = self.config.serviceCert
+        if getattr(self.config, 'serviceKey', None):
+            defaultDelegation['server_key'] = self.config.serviceKey
+        self.valid_proxy = False
+        self.user_proxy = None
+        try:
+            defaultDelegation['userDN'] = self.userDN
+            defaultDelegation['group'] = self.group
+            defaultDelegation['role'] = self.role
+            self.valid_proxy, self.user_proxy = getProxy(defaultDelegation, self.logger)
+        except Exception, ex:
+            msg = "Error getting the user proxy"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
+        self.commandTimeout = 1200
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.db = server.connectDatabase(self.config.files_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
+        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
 
     def __call__(self):
         """
