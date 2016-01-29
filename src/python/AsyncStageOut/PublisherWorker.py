@@ -516,8 +516,9 @@ class PublisherWorker:
             try:
                 publDescFile = json.loads(publDescF)
                 dataset = str(publDescFile['outdataset'])
-            except Exception as ex:
-                self.logger.error(ex)
+            except Exception as ex
+                msg="Error reading publication description file. "
+                self.logger.error(ex+msg)
             publDescFiles.setdefault(dataset, []).append(publDescFile)
         msg = "Publication description files: %s" % (publDescFiles)
         self.logger.debug(wfnamemsg+msg)
