@@ -84,7 +84,7 @@ class TransferWorker:
         self.logger.debug("Trying to get DN for %s" % self.user)
         try:
             self.userDN = getDNFromUserName(self.user, self.logger, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        except Exception, ex:
+        except Exception as ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -113,7 +113,7 @@ class TransferWorker:
             defaultDelegation['group'] = self.group
             defaultDelegation['role'] = self.role
             self.valid_proxy, self.user_proxy = getProxy(defaultDelegation, self.logger)
-        except Exception, ex:
+        except Exception as ex:
             msg = "Error getting the user proxy"
             msg += str(ex)
             msg += str(traceback.format_exc())
@@ -138,7 +138,7 @@ class TransferWorker:
                 try:
                         self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
 
-                except Exception, ex:
+                except Exception as ex:
                         msg =  "Error getting user cache_area"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -268,7 +268,7 @@ class TransferWorker:
         except:
             self.logger.error('it does not seem to be an lfn %s' %file.split(':'))
             return None
-        if self.tfc_map.has_key(site):
+        if site in self.tfc_map:
             pfn = self.tfc_map[site].matchLFN('srmv2', lfn)
             # TODO: improve fix for wrong tfc on sites
             try:
@@ -283,7 +283,7 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
             # Add the pfn key into pfn-to-lfn mapping
-            if not self.pfn_to_lfn_mapping.has_key(pfn):
+            if pfn not self.pfn_to_lfn_mapping:
                 self.pfn_to_lfn_mapping[pfn] = lfn
             return pfn
         else:
@@ -355,7 +355,7 @@ class TransferWorker:
                 self.logger.debug('Submission header status: %s' % response.status)
                 self.logger.debug('Submission header reason: %s' % response.reason)
                 self.logger.debug('Submission result %s' %  datares)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error submitting to FTS: %s " % url
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -367,14 +367,14 @@ class TransferWorker:
                 res = {}
                 try:
                     res = json.loads(datares)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Couldn't load submission acknowledgment from FTS"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.debug(msg)
                     submission_error = True
                     failure_reasons.append(msg)
-                if res.has_key('job_id'):
+                if 'job_id' in res:
                     fileId_list = []
                     files_res = []
                     files_ = {}
@@ -387,7 +387,7 @@ class TransferWorker:
                                                               cert=self.user_proxy, capath='/etc/grid-security/certificates', \
                                                               cainfo=self.user_proxy, verbose=True)
                         files_res = json.loads(files_)
-                    except Exception, ex:
+                    except Exception as ex:
                         msg = "Error contacting FTS to retrieve file: %s " % file_url
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -397,7 +397,7 @@ class TransferWorker:
                     self.logger.debug("List files in job %s" % files_)
                     file_buf.close()
                     for file_in_job in files_res:
-                        if file_in_job.has_key('file_id'):
+                        if 'file_id' in file_in_job:
                             fileId_list.append(file_in_job['file_id'])
                         else:
                             msg = "Could not load submitted file %s from FTS" % file_url
@@ -465,7 +465,7 @@ class TransferWorker:
                 # Load document to get the retry_count
                 try:
                     document = self.db.document(docId)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error loading document from couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -479,7 +479,7 @@ class TransferWorker:
                     updateUri += "?" + urllib.urlencode(data)
                     try:
                         self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
-                    except Exception, ex:
+                    except Exception as ex:
                         msg = "Error updating document in couch"
                         msg += str(ex)
                         msg += str(traceback.format_exc())
@@ -502,7 +502,7 @@ class TransferWorker:
         for lfn in files:
             try:
                 document = self.db.document(getHashLfn(lfn))
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -521,7 +521,7 @@ class TransferWorker:
                     updateUri = "/" + self.db.name + "/_design/AsyncTransfer/_update/updateJobs/" + getHashLfn(lfn)
                     updateUri += "?" + urllib.urlencode(data)
                     self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -529,7 +529,7 @@ class TransferWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -560,7 +560,7 @@ class TransferWorker:
             # Load document to get the retry_count
             try:
                 document = self.db.document(docId)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error loading document from couch"
                 msg += str(ex)
                 msg += str(traceback.format_exc())
@@ -591,7 +591,7 @@ class TransferWorker:
                     self.db.makeRequest(uri=updateUri, type="PUT", decode=False)
                     updated_lfn.append(docId)
                     self.logger.debug("Marked failed %s" % docId)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error in updating document in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -599,7 +599,7 @@ class TransferWorker:
                     continue
                 try:
                     self.db.commit()
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error commiting documents in couch"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
