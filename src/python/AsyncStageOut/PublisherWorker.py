@@ -311,20 +311,20 @@ class PublisherWorker:
                 msg = "Status retrieved from cache. Loading task status."
                 self.logger.info(wfnamemsg+msg)
                 try:
-                        buf.close()
-                        res = json.loads(res_)
-                        workflow_status = res['result'][0]['status']
-                        msg = "Task status is %s." % (workflow_status)
-                        self.logger.info(wfnamemsg+msg)
+                    buf.close()
+                    res = json.loads(res_)
+                    workflow_status = res['result'][0]['status']
+                    msg = "Task status is %s." % (workflow_status)
+                    self.logger.info(wfnamemsg+msg)
                 except ValueError:
-                        msg = "Workflow removed from WM."
-                        self.logger.error(wfnamemsg+msg)
-                        workflow_status = 'REMOVED'
+                    msg = "Workflow removed from WM."
+                    self.logger.error(wfnamemsg+msg)
+                    workflow_status = 'REMOVED'
                 except Exception as ex:
-                        msg  = "Error loading task status!"
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(wfnamemsg+msg)
+                    msg  = "Error loading task status!"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(wfnamemsg+msg)
                 ## If the workflow status is terminal, go ahead and publish all the ready files
                 ## in the workflow.
                 if workflow_status in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
@@ -516,7 +516,7 @@ class PublisherWorker:
             try:
                 publDescFile = json.loads(publDescF)
                 dataset = str(publDescFile['outdataset'])
-            except Exception, ex:
+            except Exception as ex:
                 self.logger.error(ex)
             publDescFiles.setdefault(dataset, []).append(publDescFile)
         msg = "Publication description files: %s" % (publDescFiles)
