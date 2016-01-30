@@ -88,10 +88,10 @@ class PublisherWorker:
                 self.cache_area = self.config.cache_area
             except IndexError:
                 self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
-		query = {'key':self.user}
-           	try:
+                query = {'key':self.user}
+                try:
                     self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
-		except Exception as ex:
+                except Exception as ex:
                     msg = "Error getting user cache_area"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
@@ -286,28 +286,45 @@ class PublisherWorker:
                 try:
                     _, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
                 except Exception as ex:
-                    msg  = "Error retrieving status from cache."
+                    msg  = "Error retrieving status from cache. Fall back to user cache area"
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(wfnamemsg+msg)
-                else:
-                    msg = "Status retrieved from cache. Loading task status."
-                    self.logger.info(wfnamemsg+msg)
+                    query = {'key':self.user}
                     try:
-                        buf.close()
-                        res = json.loads(res_)
-                        workflow_status = res['result'][0]['status']
-                        msg = "Task status is %s." % (workflow_status)
-                        self.logger.info(wfnamemsg+msg)
-                    except ValueError:
-                        msg = "Workflow removed from WM."
-                        self.logger.error(wfnamemsg+msg)
-                        workflow_status = 'REMOVED'
+                        self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
                     except Exception as ex:
-                        msg  = "Error loading task status!"
+                        msg = "Error getting user cache_area"
+                        msg += str(ex)
+                        msg += str(traceback.format_exc())
+                        self.logger.error(msg)
+
+                    self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]+'/filemetadata'
+                    try:
+                        _, res_ = self.connection.request(url, data, header, doseq=True, ckey=self.userProxy, cert=self.userProxy)#, verbose=True)# for debug
+                    except Exception as ex:
+                        msg  = "Error retrieving status from user cache area."
                         msg += str(ex)
                         msg += str(traceback.format_exc())
                         self.logger.error(wfnamemsg+msg)
+
+                msg = "Status retrieved from cache. Loading task status."
+                self.logger.info(wfnamemsg+msg)
+                try:
+                    buf.close()
+                    res = json.loads(res_)
+                    workflow_status = res['result'][0]['status']
+                    msg = "Task status is %s." % (workflow_status)
+                    self.logger.info(wfnamemsg+msg)
+                except ValueError:
+                    msg = "Workflow removed from WM."
+                    self.logger.error(wfnamemsg+msg)
+                    workflow_status = 'REMOVED'
+                except Exception as ex:
+                    msg  = "Error loading task status!"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(wfnamemsg+msg)
                 ## If the workflow status is terminal, go ahead and publish all the ready files
                 ## in the workflow.
                 if workflow_status in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
@@ -495,8 +512,13 @@ class PublisherWorker:
         msg = "Grouping publication description files according to output dataset."
         self.logger.info(wfnamemsg+msg)
         publDescFiles = {}
-        for publDescFile in publDescFiles_list:
-            dataset = str(publDescFile['outdataset'])
+        for publDescF in publDescFiles_list:
+            try:
+                publDescFile = json.loads(publDescF)
+                dataset = str(publDescFile['outdataset'])
+            except Exception as ex
+                msg="Error reading publication description file. "
+                self.logger.error(ex+msg)
             publDescFiles.setdefault(dataset, []).append(publDescFile)
         msg = "Publication description files: %s" % (publDescFiles)
         self.logger.debug(wfnamemsg+msg)
