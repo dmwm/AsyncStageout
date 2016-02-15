@@ -1112,6 +1112,7 @@ class PublisherWorker:
                     self.logger.info(wfnamemsg+failureMsg)
                     failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
                     failure_reason[dataset] = failureMsg
+                    published[dataset] = filter(lambda x: x not in failed[dataset], published[dataset])
                     continue
             ## Then migrate the parent blocks that are in the global DBS instance.
             if globalParentBlocks:
@@ -1123,6 +1124,7 @@ class PublisherWorker:
                     self.logger.info(wfnamemsg+failureMsg)
                     failed[dataset].extend([f['logical_file_name'] for f in dbsFiles])
                     failure_reason[dataset] = failureMsg
+                    published[dataset] = filter(lambda x: x not in failed[dataset], published[dataset])
                     continue
             ## Publish the files in blocks. The blocks must have exactly max_files_per_block
             ## files, unless there are less than max_files_per_block files to publish to
