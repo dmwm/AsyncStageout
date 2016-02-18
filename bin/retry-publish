@@ -16,8 +16,7 @@ import time
 import traceback
 
 if __name__ == "__main__":
-
-    if not os.environ.has_key("WMAGENT_CONFIG"):
+    if "WMAGENT_CONFIG" not in os.environ:
         print "The WMAGENT_CONFIG environment variable needs to be set."
         sys.exit(0)
 
@@ -45,7 +44,7 @@ Examples:
     valid_long_opts = ["--help"]
     try:
         opts, args = getopt.getopt(argv,"".join([vo.strip("-") for vo in valid_opts]),[vo.strip("--") for vo in valid_long_opts])
-    except getopt.GetoptError, ex:
+    except getopt.GetoptError as ex:
         print str(ex)
         usage()
         sys.exit(2)
@@ -76,13 +75,13 @@ Examples:
     server = CouchServer(config.AsyncTransfer.couch_instance,config.AsyncTransfer.opsProxy,config.AsyncTransfer.opsProxy)
     try:
         database = server.connectDatabase(config.AsyncTransfer.files_database)
-    except Exception, ex:
+    except Exception as ex:
         msg = "Error while connecting to %s couchDB." % config.AsyncTransfer.files_database
         print msg
         sys.exit(4)
     try:
         docs_pubFailed = database.loadView('DBSPublisher','PublicationFailedByWorkflow',{'reduce':False,'startkey':[taskname,'']})['rows']
-    except Exception, ex:
+    except Exception as ex:
         msg = "Error while connecting to %s couchDB" % config.AsyncTransfer.files_database
         print msg
         sys.exit(4)
@@ -108,7 +107,7 @@ Examples:
             try:
                 database.updateDocument(docid,'DBSPublisher','updateFile',data)
                 valid = False
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error updating document %s in %s couchDB. Retrying..." % (docid,config.AsyncTransfer.files_database)
                 msg += str(ex)
                 msg += str(traceback.format_exc())
