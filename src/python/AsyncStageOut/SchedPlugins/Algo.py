@@ -19,7 +19,8 @@ class Algo:
         self.logger = logger
         self.asyncServer = CouchServer(self.config.couch_instance, ckey = self.config.opsProxy, cert = self.config.opsProxy)
         self.db = self.asyncServer.connectDatabase(self.config.files_database)
-        self.config_db = self.asyncServer.connectDatabase(self.config.config_database)
+        config_server = CouchServer(self.config.config_couch_instance)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
         self.users = users
         self.pool_size = pool_size
 
