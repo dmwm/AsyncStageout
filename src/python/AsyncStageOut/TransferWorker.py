@@ -343,7 +343,7 @@ class TransferWorker:
             buf = StringIO.StringIO()
             try:
                 connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
-            except Exception, ex:
+            except Exception as ex:
                 msg = str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
