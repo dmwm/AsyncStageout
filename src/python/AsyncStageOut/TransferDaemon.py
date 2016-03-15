@@ -141,7 +141,7 @@ class TransferDaemon(BaseDaemon):
         #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
         query = {'group': True, 'group_level': 3}
         try:
-            users = db.loadView('AsyncTransfer', 'ftscp_all', query)
+            users = db.loadView(self.config.ftscp_design, 'ftscp_all', query)
         except Exception, e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
