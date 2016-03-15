@@ -23,6 +23,7 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 
 from AsyncStageOut.BaseDaemon import BaseDaemon
 from AsyncStageOut.TransferWorker import TransferWorker
+import errno
 
 result_list = []
 current_running = []

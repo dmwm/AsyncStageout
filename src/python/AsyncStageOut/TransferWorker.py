@@ -283,7 +283,7 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
             # Add the pfn key into pfn-to-lfn mapping
-            if pfn not self.pfn_to_lfn_mapping:
+            if pfn not in self.pfn_to_lfn_mapping:
                 self.pfn_to_lfn_mapping[pfn] = lfn
             return pfn
         else:
