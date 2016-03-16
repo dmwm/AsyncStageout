@@ -120,20 +120,19 @@ class TransferWorker:
                 self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
                 query = {'key':self.user}
                 try:
-                        self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
-
+                    self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
                 except Exception as ex:
-                        msg =  "Error getting user cache_area"
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        pass
+                    msg = "Error getting user cache_area"
+                    msg += str(ex)
+                    msg += str(traceback.format_exc())
+                    self.logger.error(msg)
+                    pass
                 try:
-                   self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
-                   defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
+                    self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
+                    defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
                 except IndexError:
-                   self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
-                   pass
+                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
+                    pass
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -157,12 +156,14 @@ class TransferWorker:
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
+        stdout, stderr, rc = None, None, 99999
         fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
-        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
-                                                                        'glite-delegation-init', fts_url_delegation)
-        init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-        self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
-        stdout, rc = execute_command(command, self.logger, self.commandTimeout)
+        if self.user_proxy:
+            command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
+                                                                            'glite-delegation-init', fts_url_delegation)
+            init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+            self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
+            stdout, rc = execute_command(command, self.logger, self.commandTimeout)
         if not rc or not self.valid_proxy:
             jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
             self.logger.debug("Processing files for %s " %self.user_proxy)
@@ -283,7 +284,7 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
             # Add the pfn key into pfn-to-lfn mapping
-            if pfn not self.pfn_to_lfn_mapping:
+            if pfn not in self.pfn_to_lfn_mapping:
                 self.pfn_to_lfn_mapping[pfn] = lfn
             return pfn
         else:
