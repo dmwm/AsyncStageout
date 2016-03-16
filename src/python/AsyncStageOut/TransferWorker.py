@@ -102,22 +102,6 @@ class TransferWorker:
                              'serverDN' : self.config.serverDN,
                              'uisource' : self.uiSetupScript,
                              'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)}
-        if getattr(self.config, 'serviceCert', None):
-            defaultDelegation['server_cert'] = self.config.serviceCert
-        if getattr(self.config, 'serviceKey', None):
-            defaultDelegation['server_key'] = self.config.serviceKey
-        self.valid_proxy = False
-        self.user_proxy = None
-        try:
-            defaultDelegation['userDN'] = self.userDN
-            defaultDelegation['group'] = self.group
-            defaultDelegation['role'] = self.role
-            self.valid_proxy, self.user_proxy = getProxy(defaultDelegation, self.logger)
-        except Exception as ex:
-            msg = "Error getting the user proxy"
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            self.logger.error(msg)
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
@@ -150,6 +134,22 @@ class TransferWorker:
                 except IndexError:
                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
                    pass
+        if getattr(self.config, 'serviceCert', None):
+            defaultDelegation['server_cert'] = self.config.serviceCert
+        if getattr(self.config, 'serviceKey', None):
+            defaultDelegation['server_key'] = self.config.serviceKey
+        self.valid_proxy = False
+        self.user_proxy = None
+        try:
+            defaultDelegation['userDN'] = self.userDN
+            defaultDelegation['group'] = self.group
+            defaultDelegation['role'] = self.role
+            self.valid_proxy, self.user_proxy = getProxy(defaultDelegation, self.logger)
+        except Exception as ex:
+            msg = "Error getting the user proxy"
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
 
     def __call__(self):
         """
