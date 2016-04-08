@@ -40,14 +40,14 @@ def ftscp(user, tfc_map, config):
         return user
     logging.debug("Worker created and init %s" % worker.init)
     if worker.init:
-       logging.debug("Starting %s" %worker)
-       try:
-           worker()
-       except Exception as e:
-           logging.debug("Worker cannot start!:" %e)
-           return user
+        logging.debug("Starting %s" %worker)
+        try:
+            worker()
+        except Exception as e:
+            logging.debug("Worker cannot start!:" %e)
+            return user
     else:
-       logging.debug("Worker cannot be initialized!")
+        logging.debug("Worker cannot be initialized!")
     return user
 
 def log_result(result):
