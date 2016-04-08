@@ -179,7 +179,7 @@ class TransferWorker:
                  'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
                  #'stale': 'ok'}
         try:
-            sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+            sites = self.db.loadView(self.config.ftscp_design, 'ftscp_all', query)
         except:
             return []
         def keys_map(dict):
@@ -208,7 +208,7 @@ class TransferWorker:
                          'key':[self.user, self.group, self.role, destination, source],
                          'stale': 'ok'}
                 try:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
+                    active_files = self.db.loadView(self.config.ftscp_design, 'ftscp_all', query)['rows']
                 except:
                     continue
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files),

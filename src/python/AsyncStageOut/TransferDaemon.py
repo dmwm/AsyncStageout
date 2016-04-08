@@ -23,6 +23,7 @@ from WMCore.Storage.TrivialFileCatalog import readTFC
 
 from AsyncStageOut.BaseDaemon import BaseDaemon
 from AsyncStageOut.TransferWorker import TransferWorker
+import errno
 
 result_list = []
 current_running = []
@@ -34,19 +35,19 @@ def ftscp(user, tfc_map, config):
     logging.debug("Trying to start the worker")
     try:
         worker = TransferWorker(user, tfc_map, config)
-    except Exception, e:
+    except Exception as e:
         logging.debug("Worker cannot be created!:" %e)
         return user
     logging.debug("Worker created and init %s" % worker.init)
     if worker.init:
-       logging.debug("Starting %s" %worker)
-       try:
-           worker()
-       except Exception, e:
-           logging.debug("Worker cannot start!:" %e)
-           return user
+        logging.debug("Starting %s" %worker)
+        try:
+            worker()
+        except Exception as e:
+            logging.debug("Worker cannot start!:" %e)
+            return user
     else:
-       logging.debug("Worker cannot be initialized!")
+        logging.debug("Worker cannot be initialized!")
     return user
 
 def log_result(result):
@@ -72,7 +73,7 @@ class TransferDaemon(BaseDaemon):
         if not os.path.isdir(self.dropbox_dir):
             try:
                 os.makedirs(self.dropbox_dir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == errno.EEXIST:
                     pass
                 else:
@@ -86,7 +87,7 @@ class TransferDaemon(BaseDaemon):
         self.pool = Pool(processes=self.config.pool_size)
         try:
             self.phedex = PhEDEx(responseType='xml', dict = {'key': self.config.opsProxy, 'cert': self.config.opsProxy})
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('PhEDEx exception: %s' % e)
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.schedAlgoDir, namespace = self.config.schedAlgoDir)
@@ -108,7 +109,7 @@ class TransferDaemon(BaseDaemon):
             self.config.algoName = params['rows'][0]['key'][2]
         except IndexError:
             self.logger.exception('Config data could not be retrieved from the config database. Fallback to the config file')
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
 
         users = self.active_users(self.db)
@@ -141,8 +142,8 @@ class TransferDaemon(BaseDaemon):
         #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
         query = {'group': True, 'group_level': 3}
         try:
-            users = db.loadView('AsyncTransfer', 'ftscp_all', query)
-        except Exception, e:
+            users = db.loadView(self.config.ftscp_design, 'ftscp_all', query)
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 
@@ -170,7 +171,7 @@ class TransferDaemon(BaseDaemon):
         query = {'group': True, 'stale': 'ok'}
         try:
             sites = self.db.loadView('AsyncTransfer', 'sites', query)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured when contacting couchDB: %s' % e)
             return []
 
@@ -189,11 +190,11 @@ class TransferDaemon(BaseDaemon):
         tfc_file = None
         try:
             self.phedex.getNodeTFC(site)
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('PhEDEx exception: %s' % e)
         try:
             tfc_file = self.phedex.cacheFileName('tfc', inputdata={'node': site})
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('PhEDEx cache exception: %s' % e)
         return readTFC(tfc_file)
 
