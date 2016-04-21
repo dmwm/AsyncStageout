@@ -102,6 +102,34 @@ class TransferWorker:
                              'serverDN' : self.config.serverDN,
                              'uisource' : self.uiSetupScript,
                              'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)}
+
+        # Set up a factory for loading plugins
+        self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
+        self.commandTimeout = 1200
+        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.db = server.connectDatabase(self.config.files_database)
+        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+        self.config_db = config_server.connectDatabase(self.config.config_database)
+        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
+
+        self.cache_area=""
+        if hasattr(self.config, "cache_area"):
+            self.cache_area = self.config.cache_area
+        query = {'key':self.user}
+        try:
+            self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
+            self.cache_area = "https://"+self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]+"/filemetadata"
+        except Exception as ex:
+            msg = "Error getting user cache_area."
+            msg += str(ex)
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            pass
+        try:
+            defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
+        except IndexError:
+            self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . ' % (self.config.cache_area))
+            
         if getattr(self.config, 'serviceCert', None):
             defaultDelegation['server_cert'] = self.config.serviceCert
         if getattr(self.config, 'serviceKey', None):
@@ -119,50 +147,20 @@ class TransferWorker:
             msg += str(traceback.format_exc())
             self.logger.error(msg)
 
-        # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
-        self.commandTimeout = 1200
-        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.db = server.connectDatabase(self.config.files_database)
-        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.config_db = config_server.connectDatabase(self.config.config_database)
-        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
-
-        if hasattr(self.config, "cache_area"):
-            try:
-                defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
-                self.cache_area = self.config.cache_area
-            except IndexError:
-                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s . Fallback to user cache_area  ' % (self.config.cache_area))
-                query = {'key':self.user}
-                try:
-                        self.user_cache_area = self.db.loadView('DBSPublisher', 'cache_area', query)['rows']
-
-                except Exception as ex:
-                        msg =  "Error getting user cache_area"
-                        msg += str(ex)
-                        msg += str(traceback.format_exc())
-                        self.logger.error(msg)
-                        pass
-                try:
-                   self.cache_area = self.user_cache_area[0]['value'][0]+self.user_cache_area[0]['value'][1]
-                   defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.cache_area)[0]
-                except IndexError:
-                   self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % (self.cache_area))
-                   pass
-
     def __call__(self):
         """
         a. makes the ftscp copyjob
         b. submits ftscp
         c. deletes successfully transferred files from the DB
         """
+        stdout, stderr, rc = None, None, 99999
         fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
-        command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
-                                                                        'glite-delegation-init', fts_url_delegation)
-        init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-        self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
-        stdout, rc = execute_command(command, self.logger, self.commandTimeout)
+        if self.user_proxy:
+            command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
+                                                                            'glite-delegation-init', fts_url_delegation)
+            init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+            self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
+            stdout, rc = execute_command(command, self.logger, self.commandTimeout)
         if not rc or not self.valid_proxy:
             jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
             self.logger.debug("Processing files for %s " %self.user_proxy)
@@ -181,7 +179,7 @@ class TransferWorker:
                  'startkey':[self.user, self.group, self.role], 'endkey':[self.user, self.group, self.role, {}, {}]}
                  #'stale': 'ok'}
         try:
-            sites = self.db.loadView('AsyncTransfer', 'ftscp_all', query)
+            sites = self.db.loadView(self.config.ftscp_design, 'ftscp_all', query)
         except:
             return []
         def keys_map(dict):
@@ -210,7 +208,7 @@ class TransferWorker:
                          'key':[self.user, self.group, self.role, destination, source],
                          'stale': 'ok'}
                 try:
-                    active_files = self.db.loadView('AsyncTransfer', 'ftscp_all', query)['rows']
+                    active_files = self.db.loadView(self.config.ftscp_design, 'ftscp_all', query)['rows']
                 except:
                     continue
                 self.logger.debug('%s has %s files to transfer from %s to %s' % (self.user, len(active_files),
@@ -283,7 +281,7 @@ class TransferWorker:
                 self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
             # Add the pfn key into pfn-to-lfn mapping
-            if pfn not self.pfn_to_lfn_mapping:
+            if pfn not in self.pfn_to_lfn_mapping:
                 self.pfn_to_lfn_mapping[pfn] = lfn
             return pfn
         else:
@@ -343,7 +341,7 @@ class TransferWorker:
             buf = StringIO.StringIO()
             try:
                 connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
-            except Exception, ex:
+            except Exception as ex:
                 msg = str(ex)
                 msg += str(traceback.format_exc())
                 self.logger.debug(msg)
