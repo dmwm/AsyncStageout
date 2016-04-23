@@ -80,6 +80,7 @@ config.AsyncTransfer.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.AsyncTransfer.algoName = 'FIFOPriority'
 config.AsyncTransfer.config_couch_instance = couchUrl
 config.AsyncTransfer.cache_area = cache_area
+config.AsyncTransfer.ftscp_design = 'ftscp'
 config.component_('Reporter')
 config.Reporter.logLevel = 'INFO'
 config.Reporter.log_level = logging.INFO
