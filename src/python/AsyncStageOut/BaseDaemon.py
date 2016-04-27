@@ -17,9 +17,8 @@ class BaseDaemon(BaseWorkerThread):
         self.logger.debug("Configuration loaded")
 
     def editLogger(self):
-        #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
-        #self.logger = logging.getLogger()
-        # self.logger is set up by the BaseWorkerThread, we just set it's levelbackupCount=5
+  
+     
         try:
             self.logger.setLevel(self.config.log_level)
         except:
