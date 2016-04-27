@@ -3,6 +3,7 @@ import logging
 from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
 from AsyncStageOut import getCommonLogFormatter
+from logging.handlers import TimedRotatingFileHandler
 
 class BaseDaemon(BaseWorkerThread):
     """
@@ -18,12 +19,17 @@ class BaseDaemon(BaseWorkerThread):
     def editLogger(self):
         #logging.basicConfig(format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s',datefmt = '%m-%d %H:%M')
         #self.logger = logging.getLogger()
-        # self.logger is set up by the BaseWorkerThread, we just set it's level
+        # self.logger is set up by the BaseWorkerThread, we just set it's levelbackupCount=5
         try:
             self.logger.setLevel(self.config.log_level)
         except:
             self.logger = logging.getLogger()
             self.logger.setLevel(self.config.log_level)
         formatter = getCommonLogFormatter(self.config)
+    
+        LOG_PATH = self.config.componentDir + "/CompLog"
+        hndlr = TimedRotatingFileHandler(LOG_PATH, when = "d", interval= 4,  backupCount=7) 
+        self.logger.addHandler(hndlr)
+        
         for handler in self.logger.handlers:
             handler.setFormatter(formatter)
