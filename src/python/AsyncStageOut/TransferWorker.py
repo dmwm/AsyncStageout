@@ -312,7 +312,7 @@ class TransferWorker:
                                 "bring_online": None,
                                 "verify_checksum": False,
                                 "copy_pin_lifetime": -1,
-                                "max_time_in_queue": 20,
+                                "max_time_in_queue": self.config.max_h_in_queue,
                                 "job_metadata":{"issuer": "ASO"},
                                 "spacetoken": None,
                                 "source_spacetoken": None,
