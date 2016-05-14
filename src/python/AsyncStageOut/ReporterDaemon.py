@@ -19,6 +19,7 @@ from AsyncStageOut.ReporterWorker import ReporterWorker
 result_list = []
 current_running = []
 
+
 def reporter(user, config):
     """
     Each worker executes this function.
@@ -40,12 +41,14 @@ def reporter(user, config):
        logging.debug("Worker cannot be initialized!")
     return user
 
+
 def log_result(result):
     """
     Each worker executes this callback.
     """
     result_list.append(result)
     current_running.remove(result)
+
 
 class ReporterDaemon(BaseDaemon):
     """
@@ -56,7 +59,7 @@ class ReporterDaemon(BaseDaemon):
         """
         Initialise class members
         """
-        #Need a better way to test this without turning off this next line
+        # Need a better way to test this without turning off this next line
         BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
         self.pool = Pool(processes=self.config.pool_size)
@@ -72,8 +75,6 @@ class ReporterDaemon(BaseDaemon):
                 else:
                     self.logger.error('Unknown error in mkdir' % e.errno)
                     raise
-        result_list = []
-        current_running = []
 
     # Over riding setup() is optional, and not needed here
     def algorithm(self, parameters = None):
