@@ -34,17 +34,6 @@ logging.basicConfig(filename='/data/srv/asyncstageout/current/config/log', level
 amq_auth_file = "/data/srv/asyncstageout/current/config/asyncstageout/amq_auth_file.json"
 opened = False
 
-try:
-    conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
-    conn.start()
-    conn.connect()
-except Exception, ex:
-    msg = "Error contacting Message Broker"
-    msg += str(ex)
-    msg += str(traceback.format_exc())
-    logging.debug(msg)
-    raise
-
 while not opened:
     try:
         f = open(amq_auth_file)
@@ -57,6 +46,17 @@ while not opened:
         msg += str(traceback.format_exc())
         logging.debug(msg)
         pass
+
+try:
+    conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
+    conn.start()
+    conn.connect()
+except Exception, ex:
+    msg = "Error contacting Message Broker"
+    msg += str(ex)
+    msg += str(traceback.format_exc())
+    logging.debug(msg)
+    raise
 
 #while True:
 for dashboard_file in os.listdir("/tmp"):
