@@ -2,10 +2,11 @@ import stomp
 import json
 import traceback
 import os
-import time
 import datetime
 import logging 
 from multiprocessing import Process
+from __future__ import print_function
+from __future__ import division
 
 def produce(file_path, logging, conn):
     """
@@ -15,20 +16,20 @@ def produce(file_path, logging, conn):
     connected = False
     logging.debug("Producing...%s" % message)
     try:
-            # connect to the stompserver
-            host = [(authParams['MSG_HOST'], authParams['MSG_PORT'])]
-            logging.debug("Sending %s" % message)
-            messageDict = json.dumps(message)
-            # send the message
-            conn.send(messageDict, destination=authParams['MSG_QUEUE'] )
-            # disconnect from the stomp server
-            connected = True
-    except Exception, ex:
-            msg = "Error contacting Message Broker"
-            msg += str(ex)
-            msg += str(traceback.format_exc())
-            logging.debug(msg)
-            raise 
+        # connect to the stompserver
+        host = [(authParams['MSG_HOST'], authParams['MSG_PORT'])]
+        logging.debug("Sending %s" % message)
+        messageDict = json.dumps(message)
+        # send the message
+        conn.send(messageDict, destination=authParams['MSG_QUEUE'] )
+        # disconnect from the stomp server
+        connected = True
+    except Exception as ex:
+        msg = "Error contacting Message Broker"
+        msg += str(ex)
+        msg += str(traceback.format_exc())
+        logging.debug(msg)
+        raise 
 
 logging.basicConfig(filename='/data/srv/asyncstageout/current/config/log', level=logging.DEBUG)
 amq_auth_file = "/data/srv/asyncstageout/current/config/asyncstageout/amq_auth_file.json"
@@ -40,7 +41,7 @@ while not opened:
         authParams = json.loads(f.read())
         opened = True
         f.close()
-    except Exception, ex:
+    except Exception as ex:
         msg = "Error loading auth params"
         msg += str(ex)
         msg += str(traceback.format_exc())
@@ -51,7 +52,7 @@ try:
     conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
     conn.start()
     conn.connect()
-except Exception, ex:
+except Exception as ex:
     msg = "Error contacting Message Broker"
     msg += str(ex)
     msg += str(traceback.format_exc())
