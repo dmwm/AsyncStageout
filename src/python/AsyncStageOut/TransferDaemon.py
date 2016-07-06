@@ -150,15 +150,10 @@ class TransferDaemon(BaseDaemon):
         self.logger.info('Requested %s active users' % len(list(set(users['rows']))))
         self.logger.debug('Requested active users are: %s' % list(set(users['rows'])))
         
-        active_users = []
-        if len(users['rows']) <= self.config.pool_size:
-            active_users = list(set(users['rows']))
-            def keys_map(inputDict):
-                """
-                Map function.
-                """
-                return inputDict['key']
-            active_users = map(keys_map, active_users)
+        active_users = list( set([ x['key'] for x in users['rows'] ]))
+    
+        if len(active_users) <= self.config.pool_size:
+            continue
         else:
             active_users = active_users[:self.config.pool_size]
             
