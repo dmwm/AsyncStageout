@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from __future__ import division
 import stomp
 import json
 import traceback
@@ -5,8 +8,6 @@ import os
 import datetime
 import logging 
 from multiprocessing import Process
-from __future__ import print_function
-from __future__ import division
 
 def produce(file_path, logging, conn):
     """
