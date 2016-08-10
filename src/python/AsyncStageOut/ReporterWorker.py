@@ -350,6 +350,27 @@ class ReporterWorker:
             else: updated_lfn.append(docId)
         self.logger.debug("failed file updated")
         return updated_lfn
+        
+    def determine_fatal_error(self, failure=""):
+        """
+        Determine if transfer error is fatal or not.
+        """
+        permanent_failure_reasons = [
+                             ".*cancelled aso transfer after timeout.*",
+                             ".*permission denied.*",
+                             ".*disk quota exceeded.*",
+                             ".*operation not permitted*",
+                             ".*mkdir\(\) fail.*",
+                             ".*open/create error.*",
+                             ".*mkdir\: cannot create directory.*",
+                             ".*does not have enough space.*",
+                             ".*reports could not open connection to.*"
+                                    ]
+        failure = str(failure).lower()
+        for permanent_failure_reason in permanent_failure_reasons:
+            if re.match(permanent_failure_reason, failure):
+                return True
+        return False
 
     def determine_fatal_error(self, failure=""):
         """
