@@ -43,15 +43,14 @@ except Exception as ex:
     logging.exception("Error contacting Message Broker")
     sys.exit(1)
 
-for dashboardFile in os.listdir("/tmp"):
+for dashboardFile in os.listdir("/tmp/DashboardReport"):
     logging.debug(dashboardFile)
-    if os.path.basename(dashboardFile).endswith('json'):
-        filePath = '/tmp/' + dashboardFile
-        logging.debug(filePath)
-        p = Process(target=reportToAmq, args=(filePath, logging, conn))
-        p.start()
-        p.join()
-        logging.debug("Removing file at %s" % datetime.datetime.now())
-        os.unlink( '/tmp/' + dashboardFile )
+    filePath = '/tmp/DashboardReport/' + dashboardFile
+    logging.debug(filePath)
+    p = Process(target=reportToAmq, args=(filePath, logging, conn))
+    p.start()
+    p.join()
+    logging.debug("Removing file at %s" % datetime.datetime.now())
+    os.unlink( '/tmp/DashboardReport/' + dashboardFile )
 
 conn.disconnect()
