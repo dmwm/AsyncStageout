@@ -5,39 +5,34 @@ import stomp
 import json
 import traceback
 import os
+import sys
 import datetime
 import logging 
 from multiprocessing import Process
 
-def produce(file_path, logging, conn):
+def reportToAmq(filePath, logging, conn):
     """
     """
-    json_data=open(file_path)
-    message = json.load(json_data)
+    jsonData=open(filePath)
+    message = json.load(jsonData)
     logging.debug("Producing...%s" % message)
     try:
         messageDict = json.dumps(message)
         conn.send(messageDict, destination=authParams['MSG_QUEUE'] )
     except Exception as ex:
-        msg = "Error contacting Message Broker"
-        msg += str(ex)
-        msg += str(traceback.format_exc())
-        logging.debug(msg)
+        logging.exception("Error contacting Message Broker or reading json")
+        sys.exit(1)
 
-logging.basicConfig(filename='/data/srv/asyncstageout/current/config/log', level=logging.DEBUG)
-amq_auth_file = "/data/srv/asyncstageout/current/config/asyncstageout/amq_auth_file.json"
-opened = False
+logging.basicConfig(filename='/data/srv/asyncstageout/current/config/log.config', level=logging.DEBUG)
+amqAuthFile = "/data/srv/asyncstageout/current/config/asyncstageout/amq_auth_file.json"
 
 try:
-    f = open(amq_auth_file)
+    f = open(amqAuthFile)
     authParams = json.loads(f.read())
-    opened = True
     f.close()
 except Exception as ex:
-    msg = "Error loading auth params"
-    msg += str(ex)
-    msg += str(traceback.format_exc())
-    logging.debug(msg)
+    logging.exception("Error loading auth params")
+    sys.exit(1)
 
 try:
     host = [(authParams['MSG_HOST'], authParams['MSG_PORT'])]
@@ -45,20 +40,18 @@ try:
     conn.start()
     conn.connect()
 except Exception as ex:
-    msg = "Error contacting Message Broker"
-    msg += str(ex)
-    msg += str(traceback.format_exc())
-    logging.debug(msg)
+    logging.exception("Error contacting Message Broker")
+    sys.exit(1)
 
-for dashboard_file in os.listdir("/tmp"):
-    logging.debug(dashboard_file)
-    if os.path.basename(dashboard_file).endswith('json'):
-        file_path = '/tmp/' + dashboard_file
-        logging.debug(file_path)
-        p = Process(target=produce, args=(file_path, logging, conn))
+for dashboardFile in os.listdir("/tmp"):
+    logging.debug(dashboardFile)
+    if os.path.basename(dashboardFile).endswith('json'):
+        filePath = '/tmp/' + dashboardFile
+        logging.debug(filePath)
+        p = Process(target=reportToAmq, args=(filePath, logging, conn))
         p.start()
         p.join()
         logging.debug("Removing file at %s" % datetime.datetime.now())
-        os.unlink( '/tmp/' + dashboard_file )
+        os.unlink( '/tmp/' + dashboardFile )
 
 conn.disconnect()
