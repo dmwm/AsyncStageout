@@ -126,16 +126,24 @@ class ReporterWorker:
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
             self.userProxy = config.opsProxy
 
-        # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
-        self.commandTimeout = 1200
-        self.max_retry = config.max_retry
-        # Proxy management in Couch
-        os.environ['X509_USER_PROXY'] = self.userProxy
-        server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.db = server.connectDatabase(self.config.files_database)
-        config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-        self.config_db = config_server.connectDatabase(self.config.config_database)
+	try:
+            # Set up a factory for loading plugins
+            self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
+            self.commandTimeout = 1200
+            self.max_retry = config.max_retry
+            # Proxy management in Couch
+            os.environ['X509_USER_PROXY'] = self.userProxy
+            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.db = server.connectDatabase(self.config.files_database)
+            config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.config_db = config_server.connectDatabase(self.config.config_database)
+        except Exception, ex:
+            msg = "Error contacting couchDB. "
+            msg += str("|"+ex+"|")
+            msg += str(traceback.format_exc())
+            self.logger.error(msg)
+            self.init = False
+            return
 
 
     def __call__(self):
@@ -174,9 +182,9 @@ class ReporterWorker:
                 if json_data:
                     self.logger.debug('Inputs: %s %s %s' % (json_data['LFNs'], json_data['transferStatus'], json_data['failure_reason']))
 
-                    if 'Failed' or 'abandoned' or 'Canceled' or 'lost' in json_data['transferStatus']:
+                    if 'FAILED' or 'abandoned' or 'CANCELED' or 'lost' in json_data['transferStatus']:
                         # Sort failed files
-                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Failed' or x == 'Canceled']
+                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'FAILED' or x == 'CANCELED']
                         abandoned_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'abandoned']
                         failed_indexes.extend(abandoned_indexes)
                         self.logger.info('failed indexes %s' % len(failed_indexes))
@@ -189,9 +197,9 @@ class ReporterWorker:
                         if len(updated_failed_lfns) != len(failed_lfns):
                             remove_failed = False
 
-                    if 'Done' or 'Finished' in json_data['transferStatus']:
+                    if 'Done' or 'FINISHED' in json_data['transferStatus']:
                         # Sort good files
-                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if (x == 'Done' or x == 'Finished' or x == 'Finishing') ]
+                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if (x == 'Done' or x == 'FINISHED' or x == 'Finishing') ]
                         self.logger.info('good indexes %s' % len(good_indexes))
                         self.logger.debug('good indexes %s' % good_indexes)
                         for i in good_indexes:
