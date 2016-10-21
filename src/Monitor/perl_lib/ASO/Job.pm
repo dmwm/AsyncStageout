@@ -53,6 +53,14 @@ our %exit_states =
 	  undefined		=> 0,
 	  lost			=> 1,
 	  abandoned		=> 1,
+	  # FTS3 state machine
+	  SUBMITTED             => 0,
+	  READY                 => 0,
+	  ACTIVE                => 0,
+	  FAILED                => 1,
+          FINISHED              => 1,
+          FINISHEDDIRTY         => 1,
+	  CANCELED              => 1,
 	);
 
 sub new {
