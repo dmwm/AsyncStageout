@@ -152,9 +152,7 @@ class TransferDaemon(BaseDaemon):
         self.logger.info('Requested %s active users' % len(active_users))
         self.logger.debug('Requested active users are: %s' % active_users)
     
-        if len(active_users) <= self.config.pool_size:
-            pass
-        else:
+        if not len(active_users) <= self.config.pool_size:
             active_users = active_users[:self.config.pool_size]
             
         self.logger.info('Selecting %s active users' % len(active_users))
