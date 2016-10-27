@@ -3,24 +3,24 @@ from __future__ import print_function
 from __future__ import division
 import stomp
 import json
-import traceback
 import os
 import sys
 import datetime
 import logging 
 from multiprocessing import Process
 
-def reportToAmq(filePath, logging, conn):
+
+def reportToAmq(filePath, log, connect):
     """
     """
     jsonData=open(filePath)
     message = json.load(jsonData)
-    logging.debug("Producing...%s" % message)
+    log.debug("Producing...%s" % message)
     try:
         messageDict = json.dumps(message)
-        conn.send(messageDict, destination=authParams['MSG_QUEUE'] )
-    except Exception as ex:
-        logging.exception("Error contacting Message Broker or reading json")
+        connect.send(messageDict, destination=authParams['MSG_QUEUE'] )
+    except Exception:
+        log.exception("Error contacting Message Broker or reading json")
         sys.exit(1)
 
 logging.basicConfig(filename='/data/srv/asyncstageout/current/config/log.config', level=logging.DEBUG)
@@ -30,7 +30,7 @@ try:
     f = open(amqAuthFile)
     authParams = json.loads(f.read())
     f.close()
-except Exception as ex:
+except Exception:
     logging.exception("Error loading auth params")
     sys.exit(1)
 
@@ -39,8 +39,9 @@ try:
     conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
     conn.start()
     conn.connect()
-except Exception as ex:
+except Exception:
     logging.exception("Error contacting Message Broker")
+    conn.disconnect()
     sys.exit(1)
 
 for dashboardFile in os.listdir("/tmp/DashboardReport"):

@@ -74,20 +74,16 @@ class TransferDaemon(BaseDaemon):
             try:
                 os.makedirs(self.dropbox_dir)
             except OSError as e:
-                if e.errno == errno.EEXIST:
-                    pass
-                else:
-                    self.logger.error('Unknown error in mkdir' % e.errno)
+                if not e.errno == errno.EEXIST:
+                    self.logger.exception('Unknown error in mkdir' % e.errno)
                     raise
 
-       if not os.path.isdir("/tmp/DashboardReport"):
+        if not os.path.isdir("/tmp/DashboardReport"):
             try:
                 os.makedirs("/tmp/DashboardReport")
             except OSError as e:
-                if e.errno == errno.EEXIST:
-                    pass
-                else:
-                    self.logger.error('Unknown error in mkdir' % e.errno)
+                if not e.errno == errno.EEXIST:
+                    self.logger.exception('Unknown error in mkdir' % e.errno)
                     raise
 
         server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
