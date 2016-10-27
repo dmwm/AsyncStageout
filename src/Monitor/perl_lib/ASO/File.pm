@@ -66,6 +66,7 @@ our %exit_states =
           STAGING       => 0,
           STARTED       => 0,
           NOT_USED      => 2,
+          CANCELED      => 2
 	);
 
 sub new
@@ -84,7 +85,7 @@ sub new
   map { $self->{$_} = $args{$_} } keys %args;
   $self->{LOG} = [];
   $self->{ME} = $self->{TASKID}; # in case it's already set
-
+  
   bless $self, $class;
   return $self;
 }
