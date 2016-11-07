@@ -225,9 +225,9 @@ class ReporterWorker:
                 if json_data:
                     self.logger.debug('Inputs: %s %s %s' % (json_data['LFNs'], json_data['transferStatus'], json_data['failure_reason']))
 
-                    if 'Failed' or 'abandoned' or 'Canceled' or 'lost' in json_data['transferStatus']:
+                    if 'FAILED' or 'abandoned' or 'CANCELED' or 'lost' in json_data['transferStatus']:
                         # Sort failed files
-                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'Failed' or x == 'Canceled']
+                        failed_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'FAILED' or x == 'CANCELED']
                         abandoned_indexes = [i for i, x in enumerate(json_data['transferStatus']) if x == 'abandoned']
                         failed_indexes.extend(abandoned_indexes)
                         self.logger.info('failed indexes %s' % len(failed_indexes))
@@ -246,9 +246,9 @@ class ReporterWorker:
                         if len(updated_failed_lfns) != len(failed_lfns):
                             remove_failed = False
 
-                    if 'Done' or 'Finished' in json_data['transferStatus']:
+                    if 'Done' or 'FINISHED' in json_data['transferStatus']:
                         # Sort good files
-                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if (x == 'Done' or x == 'Finished' or x == 'Finishing') ]
+                        good_indexes = [i for i, x in enumerate(json_data['transferStatus']) if (x == 'Done' or x == 'FINISHED' or x == 'Finishing') ]
                         self.logger.info('good indexes %s' % len(good_indexes))
                         self.logger.debug('good indexes %s' % good_indexes)
                         for i in good_indexes:
