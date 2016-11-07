@@ -23,6 +23,7 @@ result_list = []
 
 current_running = []
 
+
 def publish(user, config):
     """
     Each worker executes this function.
@@ -42,12 +43,14 @@ def publish(user, config):
             return user
     return user
 
+
 def log_result(result):
     """
     Each worker executes this callback.
     """
     result_list.append(result)
     current_running.remove(result)
+
 
 class PublisherDaemon(BaseDaemon):
     """
@@ -81,10 +84,10 @@ class PublisherDaemon(BaseDaemon):
         2. For each user get a suitably sized input for publish
         3. Submit the publish to a subprocess
         """
-	if self.config.isOracle:
-	    users = self.active_users(self.oracleDB)
-	else:
-            users = self.active_users(self.db)
+    if self.config.isOracle:
+        users = self.active_users(self.oracleDB)
+    else:
+        users = self.active_users(self.db)
         self.logger.debug('kicking off pool %s' %users)
         for u in users:
             self.logger.debug('current_running %s' %current_running)
@@ -110,7 +113,7 @@ class PublisherDaemon(BaseDaemon):
 
             self.logger.debug("Retrieving publications from oracleDB")
 
-	    results = ''
+            results = ''
             try:
                 results = db.post(self.config.oracleFileTrans,
                                   data=encodeRequest(fileDoc))
@@ -118,7 +121,7 @@ class PublisherDaemon(BaseDaemon):
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
                 
-            fileDoc = {}
+            fileDoc = dict()
             fileDoc['asoworker'] = self.config.asoworker
             fileDoc['subresource'] = 'acquiredPublication'
             fileDoc['grouping'] = 0
@@ -127,7 +130,7 @@ class PublisherDaemon(BaseDaemon):
 
             try:
                 results = db.get(self.config.oracleFileTrans,
-                                  data=encodeRequest(fileDoc))
+                                 data=encodeRequest(fileDoc))
             except Exception as ex:
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
@@ -135,11 +138,11 @@ class PublisherDaemon(BaseDaemon):
             result = oracleOutputMapping(results)
             #TODO: join query for publisher (same of submitter)
             unique_users = [list(i) for i in set(tuple([x['username'], x['user_group'], x['user_role']]) for x in result 
-                                                if x['transfer_state']==3)]                               
+                                                 if x['transfer_state']==3)]
             return unique_users
         else:
-            #TODO: Remove stale=ok for now until tested
-            #query = {'group': True, 'group_level': 3, 'stale': 'ok'}
+            # TODO: Remove stale=ok for now until tested
+            # query = {'group': True, 'group_level': 3, 'stale': 'ok'}
             query = {'group': True, 'group_level': 3}
             try:
                 users = db.loadView('DBSPublisher', 'publish', query)
@@ -148,7 +151,6 @@ class PublisherDaemon(BaseDaemon):
                                       when contacting couchDB: %s' % e)
                 return []
 
-            active_users = []
             if len(users['rows']) <= self.config.publication_pool_size:
                 active_users = users['rows']
                 active_users = [x['key'] for x in active_users]
@@ -167,7 +169,7 @@ class PublisherDaemon(BaseDaemon):
 
             return active_users
 
-    def terminate(self, parameters=None):
+    def terminate(self):
         """
         Called when thread is being terminated.
         """

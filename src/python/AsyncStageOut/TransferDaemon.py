@@ -29,6 +29,7 @@ import errno
 result_list = []
 current_running = []
 
+
 def ftscp(user, tfc_map, config):
     """
     Each worker executes this function.
@@ -51,13 +52,13 @@ def ftscp(user, tfc_map, config):
         logging.debug("Worker cannot be initialized!")
     return user
 
+
 def log_result(result):
     """
     Each worker executes this callback.
     """
     result_list.append(result)
     current_running.remove(result)
-
 
 
 class TransferDaemon(BaseDaemon):
@@ -73,7 +74,9 @@ class TransferDaemon(BaseDaemon):
             3. PhEDEx connection
             4. Setup wmcore factory
         """
-        #Need a better way to test this without turning off this next line
+
+        self.doc_acq = ''
+        # Need a better way to test this without turning off this next line
         BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
         self.dropbox_dir = '%s/dropbox/outputs' % self.config.componentDir
@@ -117,7 +120,6 @@ class TransferDaemon(BaseDaemon):
         self.factory = WMFactory(self.config.schedAlgoDir,
                                  namespace=self.config.schedAlgoDir)
 
-
     # Over riding setup() is optional, and not needed here
     def algorithm(self, parameters=None):
         """
@@ -141,14 +143,14 @@ class TransferDaemon(BaseDaemon):
         for site in sites:
             if site and str(site) != 'None' and str(site) != 'unknown':
                 site_tfc_map[site] = self.get_tfc_rules(site)
-                self.logger.debug('tfc site: %s %s' %(site, self.get_tfc_rules(site)))
+                self.logger.debug('tfc site: %s %s' % (site, self.get_tfc_rules(site)))
         self.logger.debug('kicking off pool')
         for u in users:
-            self.logger.debug('current_running %s' %current_running)
+            self.logger.debug('current_running %s' % current_running)
             if u not in current_running:
-                self.logger.debug('processing %s' %u)
+                self.logger.debug('processing %s' % u)
                 current_running.append(u)
-                self.logger.debug('processing %s' %current_running)
+                self.logger.debug('processing %s' % current_running)
                 self.pool.apply_async(ftscp, (u, site_tfc_map, self.config),
                                       callback=log_result)
 
@@ -171,7 +173,7 @@ class TransferDaemon(BaseDaemon):
                               from oracleDB: %s" %ex)
             pass
 
-        self.doc_acq=str(result)
+        self.doc_acq = str(result)
 
         fileDoc = dict()
         fileDoc['asoworker'] = self.config.asoworker
@@ -183,9 +185,9 @@ class TransferDaemon(BaseDaemon):
         try:
             results = db.get(self.config.oracleFileTrans,
                              data=encodeRequest(fileDoc))
-        except Exception as ex:
-            self.logger.error("Failed to get acquired transfers \
-                              from oracleDB: %s" %ex)
+        except Exception:
+            self.logger.exception("Failed to get acquired transfers \
+                              from oracleDB.")
             results = None
             pass
 

@@ -22,11 +22,14 @@ from RESTInteractions import HTTPRequests
 from ServerUtilities import encodeRequest
 
 __all__ = []
+
+
 def convertdatetime(time_to_convert):
     """
     Convert dates into useable format.
     """
     return int(time.mktime(time_to_convert.timetuple()))
+
 
 def timestamp():
     """
@@ -35,12 +38,14 @@ def timestamp():
     time_now = datetime.datetime.now()
     return convertdatetime(time_now)
 
+
 class RetryManagerException(WMException):
     """
     _RetryManagerException_
 
     It's totally awesome, except it's not.
     """
+
 
 class RetryManagerDaemon(BaseDaemon):
     """
@@ -102,13 +107,12 @@ class RetryManagerDaemon(BaseDaemon):
             fileDoc['asoworker'] = self.config.asoworker
             fileDoc['subresource'] = 'retryTransfers'
             fileDoc['time_to'] = self.cooloffTime
-            self.logger.debug('fileDoc: %s' %fileDoc)
+            self.logger.debug('fileDoc: %s' % fileDoc)
             try:
                 results = self.oracleDB.post(self.config.oracleFileTrans,
                                              data=encodeRequest(fileDoc))
-            except Exception as ex:
-                self.logger.error("Failed to get retry transfers \
-                                  in oracleDB: %s" %ex)
+            except Exception:
+                self.logger.exception("Failed to get retry transfers in oracleDB: %s")
             logging.info("Retried files in cooloff: %s" % str(results))
         else:
             self.doRetries()
@@ -142,7 +146,7 @@ class RetryManagerDaemon(BaseDaemon):
                 self.logger.error(msg)
                 continue
             if document['state'] != 'killed':
-                data = {}
+                data = dict()
                 data['state'] = 'new'
                 data['last_update'] = time.time()
                 data['retry'] = now

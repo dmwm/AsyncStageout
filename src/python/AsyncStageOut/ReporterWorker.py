@@ -47,15 +47,15 @@ def getProxy(userdn, group, role, defaultDelegation, logger):
     config['group'] = group
     config['role'] = role
     proxy = Proxy(defaultDelegation)
-    proxyPath = proxy.getProxyFilename( True )
-    timeleft = proxy.getTimeLeft( proxyPath )
+    proxyPath = proxy.getProxyFilename(True)
+    timeleft = proxy.getTimeLeft(proxyPath)
     if timeleft is not None and timeleft > 3600:
-        return (True, proxyPath)
+        return True, proxyPath
     proxyPath = proxy.logonRenewMyProxy()
-    timeleft = proxy.getTimeLeft( proxyPath )
+    timeleft = proxy.getTimeLeft(proxyPath)
     if timeleft is not None and timeleft > 0:
-        return (True, proxyPath)
-    return (False, None)
+        return True, proxyPath
+    return False, None
 
 
 def execute_command( command, logger, timeout ):
@@ -72,7 +72,6 @@ def execute_command( command, logger, timeout ):
             stdin=subprocess.PIPE,
     )
     t_beginning = time.time()
-    seconds_passed = 0
     while True:
         if proc.poll() is not None:
             break
@@ -127,14 +126,13 @@ class ReporterWorker:
             return
         defaultDelegation = {
                                   'logger': self.logger,
-                                  'credServerPath' : \
-                                      self.config.credentialDir,
+                                  'credServerPath': self.config.credentialDir,
                                   # It will be moved to be getfrom couchDB
                                   'myProxySvr': 'myproxy.cern.ch',
                                   'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
-                                  'serverDN' : self.config.serverDN,
-                                  'uisource' : self.uiSetupScript,
-                                  'cleanEnvironment' : getattr(self.config, 'cleanEnvironment', False)
+                                  'serverDN': self.config.serverDN,
+                                  'uisource': self.uiSetupScript,
+                                  'cleanEnvironment': getattr(self.config, 'cleanEnvironment', False)
                             }
         if hasattr(self.config, "cache_area"):
             try:
@@ -203,24 +201,21 @@ class ReporterWorker:
             remove_good = True
             remove_failed = True
             failed_lfns = []
-            updated_failed_lfns = []
             failure_reason = []
             good_lfns = []
-            updated_good_lfns = []
             self.logger.info("Updating %s" % input_file)
-            json_data = {}
             if os.path.basename(input_file).startswith('Reporter'):
                 try:
                     json_data = json.loads(open(input_file).read())
                 except ValueError as e:
                     self.logger.error("Error loading %s" % e)
                     self.logger.debug('Removing %s' % input_file)
-                    os.unlink( input_file )
+                    os.unlink(input_file)
                     continue
                 except Exception as e:
                     self.logger.error("Error loading %s" % e)
                     self.logger.debug('Removing %s' % input_file)
-                    os.unlink( input_file )
+                    os.unlink(input_file)
                     continue
                 if json_data:
                     self.logger.debug('Inputs: %s %s %s' % (json_data['LFNs'], json_data['transferStatus'], json_data['failure_reason']))
@@ -319,7 +314,7 @@ class ReporterWorker:
                 else:
                     if document['state'] != 'killed' and document['state'] != 'done' and document['state'] != 'failed':
                         outputLfn = document['lfn'].replace('store/temp', 'store', 1)
-                        data = {}
+                        data = dict()
                         data['end_time'] = now
                         data['state'] = 'done'
                         data['lfn'] = outputLfn
@@ -456,7 +451,8 @@ class ReporterWorker:
             if self.config.isOracle:
                 try:
                     self.logger.debug("Document: %s" %docId)
-                    docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
+                    docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers',
+                                                                                    'fileusertransfers'),
                                                 data=encodeRequest({'subresource': 'getById', 'id': docId}))
                     document = oracleOutputMapping(docbyId)[0]
                     data = dict()

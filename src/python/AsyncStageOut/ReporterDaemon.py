@@ -38,7 +38,7 @@ def reporter(user, config):
             logging.debug("Reporter Worker cannot start!:" %e)
             return user
     else:
-       logging.debug("Worker cannot be initialized!")
+        logging.debug("Worker cannot be initialized!")
     return user
 
 
@@ -84,7 +84,8 @@ class ReporterDaemon(BaseDaemon):
         """
         users = []
         for user_dir in os.listdir(self.dropbox_dir):
-            if os.path.isdir(os.path.join(self.dropbox_dir, user_dir)) and os.listdir(os.path.join(self.dropbox_dir, user_dir)):
+            if os.path.isdir(os.path.join(self.dropbox_dir, user_dir)) \
+                    and os.listdir(os.path.join(self.dropbox_dir, user_dir)):
                 users.append(user_dir)
 
         self.logger.info('Active users %s' % len(users))
