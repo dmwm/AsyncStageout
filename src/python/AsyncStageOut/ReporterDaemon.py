@@ -19,6 +19,7 @@ from AsyncStageOut.ReporterWorker import ReporterWorker
 result_list = []
 current_running = []
 
+
 def reporter(user, config):
     """
     Each worker executes this function.
@@ -37,8 +38,9 @@ def reporter(user, config):
             logging.debug("Reporter Worker cannot start!:" %e)
             return user
     else:
-       logging.debug("Worker cannot be initialized!")
+        logging.debug("Worker cannot be initialized!")
     return user
+
 
 def log_result(result):
     """
@@ -46,6 +48,7 @@ def log_result(result):
     """
     result_list.append(result)
     current_running.remove(result)
+
 
 class ReporterDaemon(BaseDaemon):
     """
@@ -56,7 +59,7 @@ class ReporterDaemon(BaseDaemon):
         """
         Initialise class members
         """
-        #Need a better way to test this without turning off this next line
+        # Need a better way to test this without turning off this next line
         BaseDaemon.__init__(self, config, 'AsyncTransfer')
 
         self.pool = Pool(processes=self.config.pool_size)
@@ -72,8 +75,6 @@ class ReporterDaemon(BaseDaemon):
                 else:
                     self.logger.error('Unknown error in mkdir' % e.errno)
                     raise
-        result_list = []
-        current_running = []
 
     # Over riding setup() is optional, and not needed here
     def algorithm(self, parameters = None):
@@ -83,7 +84,8 @@ class ReporterDaemon(BaseDaemon):
         """
         users = []
         for user_dir in os.listdir(self.dropbox_dir):
-            if os.path.isdir(os.path.join(self.dropbox_dir, user_dir)) and os.listdir(os.path.join(self.dropbox_dir, user_dir)):
+            if os.path.isdir(os.path.join(self.dropbox_dir, user_dir)) \
+                    and os.listdir(os.path.join(self.dropbox_dir, user_dir)):
                 users.append(user_dir)
 
         self.logger.info('Active users %s' % len(users))

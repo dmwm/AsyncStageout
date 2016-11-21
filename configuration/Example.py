@@ -82,12 +82,22 @@ config.AsyncTransfer.config_couch_instance = couchUrl
 config.AsyncTransfer.cache_area = cache_area
 config.AsyncTransfer.ftscp_design = 'ftscp'
 config.AsyncTransfer.max_h_in_queue = 5
+config.AsyncTransfer.isOracle = False
+config.AsyncTransfer.oracleDB = 'cmsweb-testbed.cern.ch'
+config.AsyncTransfer.oracleFileTrans = '/crabserver/preprod/filetransfers'
+config.AsyncTransfer.asoworker = "asodciangot1"
+config.AsyncTransfer.retry_time = 12
 config.component_('Reporter')
 config.Reporter.logLevel = 'INFO'
 config.Reporter.log_level = logging.INFO
 config.Reporter.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
 config.Reporter.namespace = 'AsyncStageOut.Reporter'
 config.Reporter.componentDir = config.General.workDir
+config.Reporter.isOracle =False 
+config.Reporter.oracleDB = 'cmsweb-testbed.cern.ch'
+config.Reporter.oracleFileTrans = '/crabserver/preprod/filetransfers'
+config.Reporter.asoworker = "asodciangot1"
+config.Reporter.retry_time = 12
 config.component_('DBSPublisher')
 config.DBSPublisher.logLevel = 'INFO'
 config.DBSPublisher.log_level = logging.INFO
@@ -114,22 +124,6 @@ config.DBSPublisher.schedAlgoDir = 'AsyncStageOut.SchedPlugins'
 config.DBSPublisher.algoName = 'FIFOPriority'
 config.DBSPublisher.block_closure_timeout = 18800
 config.DBSPublisher.publish_dbs_url = 'https://cmsweb.cern.ch/dbs/prod/phys03/DBSWriter'
-#config.component_('Analytics')
-#config.Analytics.logLevel = 'INFO'
-#config.Analytics.log_level = logging.INFO
-#config.Analytics.logMsgFormat = "%(asctime)s:%(levelname)s:%(module)s:%(name)s: %(message)s"
-#config.Analytics.user_monitoring_db = user_monitoring_db
-#config.Analytics.couch_user_monitoring_instance = userMonitoringCouchUrl
-#config.Analytics.analyticsPollingInterval = 900
-#config.Analytics.componentDir = config.General.workDir
-#config.Analytics.namespace = 'AsyncStageOut.Analytics'
-#config.Analytics.files_database = files_database
-#config.Analytics.config_database = config_database
-#config.Analytics.config_couch_instance = couchUrl
-#config.Analytics.couch_instance = couchUrl
-#config.Analytics.config_couch_instance = couchUrl
-#config.Analytics.summaries_expiration_days = 6
-#config.Analytics.amq_auth_file = '/path/to/amq/auth/file'
 config.component_('FilesCleaner')
 config.FilesCleaner.logLevel = 'INFO'
 config.FilesCleaner.log_level = logging.INFO
