@@ -533,28 +533,35 @@ class TransferWorker:
         lfn_in_transfer = []
         dash_rep = ()
         if self.config.isOracle:
+            toUpdate = list()
             for lfn in files:
                 if lfn['value'][0].find('temp') == 7:
                     self.logger.debug("Marking acquired %s" % lfn)
                     docId = lfn['key'][5]
                     self.logger.debug("Marking acquired %s" % docId)
+                    toUpdate.append(docId)
                     try:
                         docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
                                                     data=encodeRequest({'subresource': 'getById', 'id': docId}))
                         document = oracleOutputMapping(docbyId, None)[0]
-                        fileDoc = dict()
-                        fileDoc['asoworker'] = self.config.asoworker
-                        fileDoc['subresource'] = 'updateTransfers'
-                        fileDoc['list_of_ids'] = docId
-                        fileDoc['list_of_transfer_state'] = "SUBMITTED"
-
-                        result = self.oracleDB.post(self.config.oracleFileTrans,
-                                                    data=encodeRequest(fileDoc))
                     except Exception as ex:
-                        self.logger.error("Error during status update: %s" %ex)
+                        self.logger.error("Error during dashboard report update: %s" %ex)
 
                     lfn_in_transfer.append(lfn)
                     dash_rep = (document['jobid'], document['job_retry_count'], document['taskname'])
+
+            try:
+                fileDoc = dict()
+                fileDoc['asoworker'] = self.config.asoworker
+                fileDoc['subresource'] = 'updateTransfers'
+                fileDoc['list_of_ids'] = toUpdate
+                fileDoc['list_of_transfer_state'] = ["SUBMITTED" for x in toUpdate]
+
+                result = self.oracleDB.post(self.config.oracleFileTrans,
+                                                    data=encodeRequest(fileDoc))
+            except Exception as ex:
+                self.logger.error("Error during status update: %s" %ex)
+
                     self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
                     # TODO: no need of mark good right? the postjob should updated the status in case of direct stageout I think
             return lfn_in_transfer, dash_rep
