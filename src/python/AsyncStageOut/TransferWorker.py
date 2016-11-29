@@ -20,11 +20,12 @@ import StringIO
 import traceback
 import subprocess
 import itertools
-
+from datetime import timedelta
 from WMCore.WMFactory import WMFactory
 from WMCore.Database.CMSCouch import CouchServer
 from WMCore.Services.pycurl_manager import RequestHandler
 
+import fts3.rest.client.easy as fts3
 from AsyncStageOut import getProxy
 from AsyncStageOut import getHashLfn
 from AsyncStageOut import getFTServer
@@ -116,14 +117,19 @@ class TransferWorker:
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
         self.commandTimeout = 1200
-        if self.config.isOracle:
-            self.oracleDB = HTTPRequests(self.config.oracleDB,
-                                         self.config.opsProxy,
-                                         self.config.opsProxy)
-        else:
-            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
-        self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
+        try:
+            if self.config.isOracle:
+                self.oracleDB = HTTPRequests(self.config.oracleDB,
+                                             self.config.opsProxy,
+                                             self.config.opsProxy)
+            else:
+                server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+                self.db = server.connectDatabase(self.config.files_database)
+            config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
+            self.config_db = config_server.connectDatabase(self.config.config_database)
+            self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
+        except Exception:
+            self.logger.exception('Failed to contact DB')
 
         self.cache_area = ""
         if hasattr(self.config, "cache_area"):
@@ -160,6 +166,7 @@ class TransferWorker:
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
+        self.context = dict()
 
     def __call__(self):
         """
@@ -168,15 +175,15 @@ class TransferWorker:
         c. update status and create dropbox json
         """
         stdout, stderr, rc = None, None, 99999
-        fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
+        #fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
         if self.user_proxy:
-            command = 'export X509_USER_PROXY=%s ; source %s ; %s -s %s' % (self.user_proxy, self.uiSetupScript,
-                                                                            'glite-delegation-init', fts_url_delegation)
-            init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-            self.logger.debug("executing command: %s at: %s for: %s" % (command, init_time, self.userDN))
-            stdout, rc = execute_command(command, self.logger, self.commandTimeout)
-        if not rc or not self.valid_proxy:
-            jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
+            try:
+                self.context = fts3.Context(self.fts_server_for_transfer, self.user_proxy, self.user_proxy, verify=True)
+                self.logger.debug(fts3.delegate(self.context, lifetime=timedelta(hours=48), force=False))
+                init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+                jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
+            except:
+                self.logger.exception('delegation failed')
             self.logger.debug("Processing files for %s " % self.user_proxy)
             if jobs:
                 self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
@@ -190,16 +197,28 @@ class TransferWorker:
         Get all the destinations for a user
         """
         if self.config.isOracle:
+            self.logger.debug('Running acquiredTransfers query... ' + self.user)
             fileDoc = dict()
             fileDoc['asoworker'] = self.config.asoworker
             fileDoc['subresource'] = 'acquiredTransfers'
             fileDoc['grouping'] = 1
             fileDoc['username'] = self.user
+            if self.group == '':
+                group = None
+            if self.role == '':
+                role = None
+            fileDoc['vogroup'] = group
+            fileDoc['vorole'] = role
+            fileDoc['limit'] =  self.config.max_files_per_transfer
             result = []
+
+            self.logger.debug('Request: ' + str(fileDoc))
+
             try:
                 results = self.oracleDB.get(self.config.oracleFileTrans,
                                             data=encodeRequest(fileDoc))
                 result = oracleOutputMapping(results)
+                self.logger.debug('toBeTransferred: ',result)
                 res = [[x['source'], x['destination']] for x in result]
                 res.sort()
                 res = list(k for k, _ in itertools.groupby(res))
@@ -265,6 +284,7 @@ class TransferWorker:
                         outDict['value'] = [inputdoc['source_lfn'], inputdoc['destination_lfn']]
                         return outDict
                     active_files = [map_active(x) for x in active_docs]
+                    #active_files = active_files[:1000]
                     self.logger.debug('%s has %s files to transfer \
                                       from %s to %s' % (self.user,
                                                         len(active_files),
@@ -395,13 +415,24 @@ class TransferWorker:
                     },
                 "files": []
                 }
+            transfers = list()
+            #for SrcDest in copyjob:
+            #    self.logger.debug("Creating FTS job...")
+            #    self.logger.debug("%s -> %s" % (SrcDest.split(" ")[0], SrcDest.split(" ")[1]))
+                #    transfers.append(fts3.new_transfer(SrcDest.split(" ")[0],
+                #                                       SrcDest.split(" ")[1])
+                #                     )
+                #except:
+                #    self.logger.exception("Failure during new_transfer")
 
             for SrcDest in copyjob:
                 tempDict = {"sources": [], "metadata": None, "destinations": []}
 
                 tempDict["sources"].append(SrcDest.split(" ")[0])
                 tempDict["destinations"].append(SrcDest.split(" ")[1])
-                rest_copyjob["files"].append(tempDict)
+                rest_copyjob["files"].append(tempDict)            
+
+            #self.logger.debug("FTS job Created with %s files..." % (transfers))
 
             self.logger.debug("Subbmitting this REST copyjob %s" % rest_copyjob)
             url = self.fts_server_for_transfer + '/jobs'
@@ -409,6 +440,32 @@ class TransferWorker:
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
             heade = {"Content-Type ": "application/json"}
+            
+            """
+            try:
+                job = fts3.new_job(transfers,
+                                   overwrite=True,
+                                   verify_checksum=False,
+                                   metadata={"issuer": "ASO"},
+                                   copy_pin_lifetime=-1,
+                                   bring_online=None,
+                                   source_spacetoken=None,
+                                   spacetoken=None
+                                   # TODO: check why not on fts3 (clone repo maybe?)
+                                   # max_time_in_queue=6
+                                   )
+
+                jobid = fts3.submit(self.context, job)
+                self.logger.info("Monitor link: https://fts3-pilot.cern.ch:8449/fts3/ftsmon/#/job/"+jobid)
+            except Exception as ex:
+                msg = "Error submitting to FTS" 
+                msg += str(ex)
+                msg += str(traceback.format_exc())
+                self.logger.debug(msg)
+                failure_reasons.append(msg)
+                submission_error = True
+
+            """
             buf = StringIO.StringIO()
             try:
                 connection = RequestHandler(config={'timeout': 300, 'connecttimeout': 300})
@@ -433,6 +490,7 @@ class TransferWorker:
                 failure_reasons.append(msg)
                 submission_error = True
             buf.close()
+            
             if not submission_error:
                 res = {}
                 try:
@@ -511,7 +569,7 @@ class TransferWorker:
                 lfn_report['JobId'] = job_id
                 lfn_report['URL'] = self.fts_server_for_transfer
                 self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
-                dash_job_file = open('/tmp/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']), 'w')
+                dash_job_file = open('/tmp/DashboardReport/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']), 'w')
                 jsondata = json.dumps(lfn_report)
                 dash_job_file.write(jsondata)
                 dash_job_file.close()
@@ -562,7 +620,7 @@ class TransferWorker:
             except Exception as ex:
                 self.logger.error("Error during status update: %s" %ex)
 
-                    self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
+            self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
                     # TODO: no need of mark good right? the postjob should updated the status in case of direct stageout I think
             return lfn_in_transfer, dash_rep
         else:

@@ -67,16 +67,18 @@ class PublisherDaemon(BaseDaemon):
         server = CouchServer(dburl=self.config.couch_instance,
                              ckey=self.config.opsProxy,
                              cert=self.config.opsProxy)
-        self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.schedAlgoDir,
                                  namespace=self.config.schedAlgoDir)
         self.pool = Pool(processes=self.config.publication_pool_size)
 
-        self.oracleDB = HTTPRequests(self.config.oracleDB,
-                                     self.config.opsProxy,
-                                     self.config.opsProxy)
+        if self.config.isOracle:
+            self.oracleDB = HTTPRequests(self.config.oracleDB,
+                                         self.config.opsProxy,
+                                         self.config.opsProxy)
+        else:
+            self.db = server.connectDatabase(self.config.files_database)
 
     def algorithm(self, parameters=None):
         """
@@ -84,10 +86,10 @@ class PublisherDaemon(BaseDaemon):
         2. For each user get a suitably sized input for publish
         3. Submit the publish to a subprocess
         """
-    if self.config.isOracle:
-        users = self.active_users(self.oracleDB)
-    else:
-        users = self.active_users(self.db)
+        if self.config.isOracle:
+	    users = self.active_users(self.oracleDB)
+        else:
+            users = self.active_users(self.db)
         self.logger.debug('kicking off pool %s' %users)
         for u in users:
             self.logger.debug('current_running %s' %current_running)
@@ -131,14 +133,15 @@ class PublisherDaemon(BaseDaemon):
             try:
                 results = db.get(self.config.oracleFileTrans,
                                  data=encodeRequest(fileDoc))
+                result = oracleOutputMapping(results)
             except Exception as ex:
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
 
-            result = oracleOutputMapping(results)
+            self.logger.debug("%s acquired puclications retrieved" % len(result))
             #TODO: join query for publisher (same of submitter)
             unique_users = [list(i) for i in set(tuple([x['username'], x['user_group'], x['user_role']]) for x in result 
-                                                 if x['transfer_state']==3)]
+                                                 if x['transfer_state'] == 3)]
             return unique_users
         else:
             # TODO: Remove stale=ok for now until tested

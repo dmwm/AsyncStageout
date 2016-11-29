@@ -16,7 +16,6 @@ server = HTTPRequests('cmsweb-testbed.cern.ch',
                       '/data/srv/asyncstageout/state/asyncstageout/creds/OpsProxy',
                       '/data/srv/asyncstageout/state/asyncstageout/creds/OpsProxy')
 
-"""
 fileDoc = {}
 fileDoc['asoworker'] = 'asodciangot1'
 fileDoc['subresource'] = 'acquireTransfers'
@@ -26,7 +25,7 @@ result = server.post('/crabserver/dev/filetransfers',
 
 
 print(result)
-
+"""
 fileDoc = {}
 fileDoc['asoworker'] = 'asodciangot1'
 fileDoc['subresource'] = 'acquiredTransfers'
@@ -45,7 +44,7 @@ fileDoc['grouping'] = 0
 
 result = server.get('/crabserver/dev/filetransfers',
                     data=encodeRequest(fileDoc))
-"""
+
 #print (oracleOutputMapping(result))
 fileDoc = {}
 fileDoc['asoworker'] = 'asodciangot1'
@@ -62,4 +61,4 @@ result = server.post('/crabserver/preprod/filetransfers',
                      data=encodeRequest(fileDoc))
 print(result)
 
-
+"""
