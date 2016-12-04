@@ -232,8 +232,6 @@ class ReporterWorker:
                         self.logger.debug('Marking failed %s %s' %(failed_lfns, failure_reason))
                         updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
 
-                        if len(updated_failed_lfns) != len(failed_lfns):
-                            remove_failed = False
 
                     if 'Done' or 'FINISHED' in json_data['transferStatus']:
                         # Sort good files
@@ -248,13 +246,9 @@ class ReporterWorker:
                         except:
                             self.logger.exception('Either no files to mark or failed to update state')
 
-                        if len(updated_good_lfns) != len(good_lfns):
-                            remove_good = False
-
-                    if remove_good and remove_failed:
-                        # Remove the json file
-                        self.logger.debug('Removing %s' % input_file)
-                        os.unlink( input_file )
+                    # Remove the json file
+                    self.logger.debug('Removing %s' % input_file)
+                    os.unlink( input_file )
 
                 else:
                     self.logger.info('Empty file %s' % input_file)
@@ -346,7 +340,8 @@ class ReporterWorker:
                 self.logger.debug("Marked good %s" % good_ids)
             except Exception:
                 self.logger.exception('Error updating document')
-                    
+                return {}
+        
         self.logger.info("Transferred file %s updated, removing now source file" %docId)
         try:
             docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
@@ -355,7 +350,8 @@ class ReporterWorker:
         except Exception:
             msg = "Error getting file from source"
             self.logger.exception(msg)
-            raise
+            return {}
+
         if document["source"] not in self.site_tfc_map:
             self.logger.debug("site not found... gathering info from phedex")
             self.site_tfc_map[document["source"]] = self.get_tfc_rules(document["source"])
@@ -461,13 +457,15 @@ class ReporterWorker:
                         fatal_error = self.determine_fatal_error(failures_reasons[files.index(lfn)])
                         if fatal_error:
                             data['list_of_transfer_state'] = 'FAILED'
+                        
                     data['list_of_failure_reason'] = failures_reasons[files.index(lfn)]
                     data['list_of_retry_value'] = 0
 
                     self.logger.debug("update: %s" % data)
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(data))
-                    updated_lfn.append(lfn)
+                    if not data['list_of_transfer_state'] == 'RETRY':  
+                        updated_lfn.append(lfn)
                     self.logger.debug("Marked failed %s" % lfn)
                 except Exception as ex:
                     self.logger.error("Error updating document status: %s" %ex)

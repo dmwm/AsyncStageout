@@ -162,6 +162,7 @@ class TransferDaemon(BaseDaemon):
                    u[i] = '' 
                     
             self.logger.debug('current_running %s' % current_running)
+            self.logger.debug('BBBBBB: %s %s %s' % (u, current_running, (u not in current_running)))
             if u not in current_running:
                 self.logger.debug('processing %s' % u)
                 current_running.append(u)

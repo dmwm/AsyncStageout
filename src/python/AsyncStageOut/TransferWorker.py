@@ -213,18 +213,17 @@ class TransferWorker:
             result = []
 
             self.logger.debug('Request: ' + str(fileDoc))
-
             try:
                 results = self.oracleDB.get(self.config.oracleFileTrans,
                                             data=encodeRequest(fileDoc))
                 result = oracleOutputMapping(results)
-                self.logger.debug('toBeTransferred: ',result)
                 res = [[x['source'], x['destination']] for x in result]
                 res.sort()
                 res = list(k for k, _ in itertools.groupby(res))
             except Exception as ex:
                 self.logger.error("Failed to get acquired transfers \
                                   from oracleDB: %s" %ex)
+                return [], {}
             return res, result
         else:
             query = {'group': True,
@@ -250,7 +249,9 @@ class TransferWorker:
         jobs_report = {}
         self.logger.info('%s has %s links to transfer on: %s' % (self.user, len(source_dests), str(source_dests)))
         try:
+            count = 0
             for (source, destination) in source_dests:
+                count += 1
                 self.logger.info('dest1: %s source: %s' % (docs[0]['destination'],source))
                 if self.config.isOracle:
                     if self.group == '':
@@ -285,8 +286,8 @@ class TransferWorker:
                         return outDict
                     active_files = [map_active(x) for x in active_docs]
                     #active_files = active_files[:1000]
-                    self.logger.debug('%s has %s files to transfer \
-                                      from %s to %s' % (self.user,
+                    self.logger.debug('%s -  %s has %s files to transfer \
+                                      from %s to %s' % (count, self.user,
                                                         len(active_files),
                                                         source,
                                                         destination))
@@ -307,6 +308,7 @@ class TransferWorker:
                 pfn_list = []
                 dash_report = []
 
+          
                 # take these active files and make a copyjob entry
                 def tfc_map(item):
                     self.logger.debug('Preparing PFNs...')
@@ -523,7 +525,7 @@ class TransferWorker:
                         self.logger.debug(msg)
                         submission_error = True
                         failure_reasons.append(msg)
-                    self.logger.debug("List files in job %s" % files_)
+                    #self.logger.debug("List files in job %s" % files_)
                     file_buf.close()
                     for file_in_job in files_res:
                         if 'file_id' in file_in_job:
@@ -612,15 +614,17 @@ class TransferWorker:
                 fileDoc = dict()
                 fileDoc['asoworker'] = self.config.asoworker
                 fileDoc['subresource'] = 'updateTransfers'
-                fileDoc['list_of_ids'] = toUpdate
-                fileDoc['list_of_transfer_state'] = ["SUBMITTED" for x in toUpdate]
+                fileDoc['list_of_ids'] = files[0]['key'][5] 
+                fileDoc['list_of_transfer_state'] = "SUBMITTED"
+
+                self.logger.debug("Marking acquired %s" % (fileDoc))
 
                 result = self.oracleDB.post(self.config.oracleFileTrans,
                                                     data=encodeRequest(fileDoc))
+                self.logger.debug("Marked acquired %s of %s" % (fileDoc, result))
             except Exception as ex:
                 self.logger.error("Error during status update: %s" %ex)
 
-            self.logger.debug("Marked acquired %s of %s" % (docId, lfn))
                     # TODO: no need of mark good right? the postjob should updated the status in case of direct stageout I think
             return lfn_in_transfer, dash_rep
         else:
@@ -726,7 +730,8 @@ class TransferWorker:
                 docId = getHashLfn(temp_lfn)
                 self.logger.debug("Marking failed %s" % docId)
                 try:
-                    docbyId = self.oracleDB.get(self.config.oracleFileTrans,
+                    docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers',
+                                                                                    'fileusertransfers'),
                                                 data=encodeRequest({'subresource': 'getById', 'id': docId}))
                 except Exception as ex:
                     self.logger.error("Error updating failed docs: %s" %ex)
