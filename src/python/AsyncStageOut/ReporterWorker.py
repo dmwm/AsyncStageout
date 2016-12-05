@@ -96,7 +96,6 @@ class ReporterWorker:
         """
         self.user = user
         self.config = config
-        self.kibana_file = open(self.config.kibana_dir+"/"+self.user+"/"+"ended.json", 'a')
         self.dropbox_dir = '%s/dropbox/inputs' % self.config.componentDir
         logging.basicConfig(level=config.log_level)
         self.site_tfc_map = {}
@@ -233,13 +232,6 @@ class ReporterWorker:
                         self.logger.debug('Marking failed %s %s' %(failed_lfns, failure_reason))
                         updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
 
-                        try:
-                            self.kibana_file.write(str(time.time())+"\tFailed:\t"+str(len(updated_failed_lfns))+"\n")
-                        except Exception as ex:
-                            self.logger.error(ex)
-
-                        if len(updated_failed_lfns) != len(failed_lfns):
-                            remove_failed = False
 
                     if 'Done' or 'FINISHED' in json_data['transferStatus']:
                         # Sort good files
@@ -249,20 +241,14 @@ class ReporterWorker:
                         for i in good_indexes:
                             good_lfns.append(json_data['LFNs'][i])
                         self.logger.info('Marking good %s' %(good_lfns))
-                        updated_good_lfns = self.mark_good(good_lfns)
-
                         try:
-                            self.kibana_file.write(str(time.time())+"\tFailed:\t"+str(len(updated_good_lfns))+"\n")
-                        except Exception as ex:
-                            self.logger.error(ex)
+                            updated_good_lfns = self.mark_good(good_lfns)
+                        except:
+                            self.logger.exception('Either no files to mark or failed to update state')
 
-                        if len(updated_good_lfns) != len(good_lfns):
-                            remove_good = False
-
-                    if remove_good and remove_failed:
-                        # Remove the json file
-                        self.logger.debug('Removing %s' % input_file)
-                        os.unlink( input_file )
+                    # Remove the json file
+                    self.logger.debug('Removing %s' % input_file)
+                    os.unlink( input_file )
 
                 else:
                     self.logger.info('Empty file %s' % input_file)
@@ -290,6 +276,8 @@ class ReporterWorker:
         """
         updated_lfn = []
         good_ids = []
+        if len(files) == 0:
+            return updated_lfn
         for it, lfn in enumerate(files):
             hash_lfn = getHashLfn(lfn)
             self.logger.info("Marking good %s" % hash_lfn)
@@ -340,35 +328,37 @@ class ReporterWorker:
                 msg += str(traceback.format_exc())
                 self.logger.error(msg)
                 continue
-            if self.config.isOracle:
-                try:
-                    data = dict()
-                    data['asoworker'] = self.config.asoworker
-                    data['subresource'] = 'updateTransfers'
-                    data['list_of_ids'] = good_ids
-                    data['list_of_transfer_state'] = ["DONE" for x in good_ids]
-                    result = self.oracleDB.post(self.config.oracleFileTrans,
-                                                data=encodeRequest(data))
-                    self.logger.debug("Marked good %s" % good_ids)
-                except Exception:
-                    self.logger.exeption('Error updating document')
-                    
-            self.logger.info("Transferred file %s updated, removing now source file" %docId)
+        if self.config.isOracle:
             try:
-                docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
-                                            data=encodeRequest({'subresource': 'getById', 'id': docId}))
-                document = oracleOutputMapping(docbyId, None)[0]
+                data = dict()
+                data['asoworker'] = self.config.asoworker
+                data['subresource'] = 'updateTransfers'
+                data['list_of_ids'] = good_ids
+                data['list_of_transfer_state'] = ["DONE" for x in good_ids]
+                result = self.oracleDB.post(self.config.oracleFileTrans,
+                                            data=encodeRequest(data))
+                self.logger.debug("Marked good %s" % good_ids)
             except Exception:
-                msg = "Error getting file from source"
-                self.logger.exception(msg)
-                raise
-            if document["source"] not in self.site_tfc_map:
-                self.logger.debug("site not found... gathering info from phedex")
-                self.site_tfc_map[document["source"]] = self.get_tfc_rules(document["source"])
-            pfn = self.apply_tfc_to_lfn( '%s:%s' %(document["source"], lfn))
-            self.logger.debug("File has to be removed now from source site: %s" %pfn)
-            self.remove_files(self.userProxy, pfn)
-            self.logger.debug("Transferred file removed from source")
+                self.logger.exception('Error updating document')
+                return {}
+        
+        self.logger.info("Transferred file %s updated, removing now source file" %docId)
+        try:
+            docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
+                                        data=encodeRequest({'subresource': 'getById', 'id': docId}))
+            document = oracleOutputMapping(docbyId, None)[0]
+        except Exception:
+            msg = "Error getting file from source"
+            self.logger.exception(msg)
+            return {}
+
+        if document["source"] not in self.site_tfc_map:
+            self.logger.debug("site not found... gathering info from phedex")
+            self.site_tfc_map[document["source"]] = self.get_tfc_rules(document["source"])
+        pfn = self.apply_tfc_to_lfn( '%s:%s' %(document["source"], lfn))
+        self.logger.debug("File has to be removed now from source site: %s" %pfn)
+        self.remove_files(self.userProxy, pfn)
+        self.logger.debug("Transferred file removed from source")
         return updated_lfn
 
     def remove_files(self, userProxy, pfn):
@@ -380,12 +370,11 @@ class ReporterWorker:
             rc, stdout, stderr = execute_command(command, self.logger, 3600)
         except Exception as ex:
             self.logger.error(ex)
-            raise
         if rc:
             logging.info("Deletion command failed with output %s and error %s" %(stdout, stderr))
         else:
             logging.info("File Deleted.")
-        return
+        return 
 
     def get_tfc_rules(self, site):
         """
@@ -468,13 +457,15 @@ class ReporterWorker:
                         fatal_error = self.determine_fatal_error(failures_reasons[files.index(lfn)])
                         if fatal_error:
                             data['list_of_transfer_state'] = 'FAILED'
+                        
                     data['list_of_failure_reason'] = failures_reasons[files.index(lfn)]
                     data['list_of_retry_value'] = 0
 
                     self.logger.debug("update: %s" % data)
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(data))
-                    updated_lfn.append(lfn)
+                    if not data['list_of_transfer_state'] == 'RETRY':  
+                        updated_lfn.append(lfn)
                     self.logger.debug("Marked failed %s" % lfn)
                 except Exception as ex:
                     self.logger.error("Error updating document status: %s" %ex)

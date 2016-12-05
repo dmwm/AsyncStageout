@@ -13,6 +13,7 @@ Here's the algorithm
 import os
 import logging
 from multiprocessing import Pool
+import json
 
 from RESTInteractions import HTTPRequests
 from ServerUtilities import encodeRequest, oracleOutputMapping
@@ -110,28 +111,43 @@ class TransferDaemon(BaseDaemon):
             self.db = server.connectDatabase(self.config.files_database)
         self.logger.debug('Connected to CouchDB')
         self.pool = Pool(processes=self.config.pool_size)
+        self.factory = WMFactory(self.config.schedAlgoDir,
+                                 namespace=self.config.schedAlgoDir)
+
+        self.site_tfc_map = {}
         try:
             self.phedex = PhEDEx(responseType='xml',
                                  dict={'key':self.config.opsProxy,
                                        'cert':self.config.opsProxy})
         except Exception as e:
             self.logger.exception('PhEDEx exception: %s' % e)
-        # Set up a factory for loading plugins
-        self.factory = WMFactory(self.config.schedAlgoDir,
-                                 namespace=self.config.schedAlgoDir)
+        # TODO: decode xml
+        try:
+            self.phedex2 = PhEDEx(responseType='json',
+                                 dict={'key':self.config.opsProxy,
+                                       'cert':self.config.opsProxy})
+        except Exception as e:
+            self.logger.exception('PhEDEx exception: %s' % e)
+
+        self.logger.debug(type((self.phedex2.getNodeMap())['phedex']['node']))
+        for site in [x['name'] for x in self.phedex2.getNodeMap()['phedex']['node']]:
+            if site and str(site) != 'None' and str(site) != 'unknown':
+                self.site_tfc_map[site] = self.get_tfc_rules(site)
+                self.logger.debug('tfc site: %s %s' % (site, self.get_tfc_rules(site)))
+
 
     # Over riding setup() is optional, and not needed here
     def algorithm(self, parameters=None):
         """
-        1  Get transfer config from couchdb config instance 
-        2. Get a list of users with files to transfer from the db instance 
+        1  Get transfer config from couchdb config instance
+        2. Get a list of users with files to transfer from the db instance
                                                     (oracle or couch, by config flag)
         3. For each user get a suitably sized input for submission (call to a list)
         4. Submit to a subprocess
         """
 
         if self.config.isOracle:
-            sites, users = self.oracleSiteUser(self.oracleDB)
+            users = self.oracleSiteUser(self.oracleDB)
         else:
             users = self.active_users(self.db)
 
@@ -139,19 +155,19 @@ class TransferDaemon(BaseDaemon):
             self.logger.info('%s active sites' % len(sites))
             self.logger.debug('Active sites are: %s' % sites)
 
-        site_tfc_map = {}
-        for site in sites:
-            if site and str(site) != 'None' and str(site) != 'unknown':
-                site_tfc_map[site] = self.get_tfc_rules(site)
-                self.logger.debug('tfc site: %s %s' % (site, self.get_tfc_rules(site)))
         self.logger.debug('kicking off pool')
         for u in users:
+            for i in range(len(u)):
+                if not u[i]:
+                   u[i] = '' 
+                    
             self.logger.debug('current_running %s' % current_running)
+            self.logger.debug('BBBBBB: %s %s %s' % (u, current_running, (u not in current_running)))
             if u not in current_running:
                 self.logger.debug('processing %s' % u)
                 current_running.append(u)
                 self.logger.debug('processing %s' % current_running)
-                self.pool.apply_async(ftscp, (u, site_tfc_map, self.config),
+                self.pool.apply_async(ftscp, (u, self.site_tfc_map, self.config),
                                       callback=log_result)
 
     def oracleSiteUser(self, db):
@@ -159,67 +175,63 @@ class TransferDaemon(BaseDaemon):
         1. Acquire transfers from DB
         2. Get acquired users and destination sites
         """
+
+        self.logger.info('Retrieving users...')
         fileDoc = dict()
+        fileDoc['subresource'] = 'activeUsers'
+        fileDoc['grouping'] = 0
         fileDoc['asoworker'] = self.config.asoworker
-        fileDoc['subresource'] = 'acquireTransfers'
 
-        self.logger.debug("Retrieving transfers from oracleDB")
-
+        result = dict()
         try:
-            result = db.post(self.config.oracleFileTrans,
+            result = db.get(self.config.oracleFileTrans,
                              data=encodeRequest(fileDoc))
         except Exception as ex:
             self.logger.error("Failed to acquire transfers \
-                              from oracleDB: %s" %ex)
-            pass
+                              from oracleDB: %s" % ex)
+        
+        self.logger.debug(oracleOutputMapping(result))
+        # TODO: translate result into list((user,group,role),...)
+        if len(oracleOutputMapping(result)) != 0:
+            self.logger.debug(type( [[x['username'].encode('ascii','ignore'), x['user_group'], x['user_role']] for x in oracleOutputMapping(result)]))
+            try:
+                docs =  oracleOutputMapping(result)
+                users = [[x['username'], x['user_group'], x['user_role']] for x in docs]
+                self.logger.info('Users to process: %s' % str(users))
+            except:
+                self.logger.exception('User data malformed. ')
+	else:
+            self.logger.info('No new user to acquire')
+            return []
 
-        self.doc_acq = str(result)
+        actives = list()
+        for user in users:
+            fileDoc = dict()
+            fileDoc['asoworker'] = self.config.asoworker
+            fileDoc['subresource'] = 'acquireTransfers'
+            fileDoc['username'] = user[0]
 
-        fileDoc = dict()
-        fileDoc['asoworker'] = self.config.asoworker
-        fileDoc['subresource'] = 'acquiredTransfers'
-        fileDoc['grouping'] = 0
+            self.logger.debug("Retrieving transfers from oracleDB for user: %s " % user[0])
 
-        self.logger.debug("Retrieving users from oracleDB")
+            try:
+                result = db.post(self.config.oracleFileTrans,
+                                 data=encodeRequest(fileDoc))
+            except Exception as ex:
+                self.logger.error("Failed to acquire transfers \
+                                  from oracleDB: %s" %ex)
+                continue
 
-        try:
-            results = db.get(self.config.oracleFileTrans,
-                             data=encodeRequest(fileDoc))
-        except Exception:
-            self.logger.exception("Failed to get acquired transfers \
-                              from oracleDB.")
-            results = None
-            pass
+            self.doc_acq = str(result)
+            for i in range(len(user)):
+                if not user[i]:
+                    user[i] = ''
+                user[i] = str(user[i])
+            actives.append(user)
 
-        documents = oracleOutputMapping(results)
-       
-        for doc in documents:
-            if doc['user_role'] is None:
-                doc['user_role'] = ""
-            if doc['user_group'] is None:
-                doc['user_group'] = ""
 
-        unique_users = []
-        try:
-            unique_users = [list(i) for i in set(tuple([x['username'],
-                                                        x['user_group'],
-                                                        x['user_role']]) for x in documents)]
-        except Exception as ex:
-            self.logger.error("Failed to map active users: %s" %ex) 
+            self.logger.debug("Transfers retrieved from oracleDB. %s " % users)
 
-        if len(unique_users) <= self.config.pool_size:
-            active_users = unique_users
-        else:  
-            active_users = unique_users[:self.config.pool_size]
-
-        self.logger.info('%s active users' % len(active_users))
-        self.logger.debug('Active users are: %s' % active_users)
-
-        active_sites_dest = [x['destination'] for x in documents]
-        active_sites = active_sites_dest + [x['source'] for x in documents]
-
-        self.logger.debug('Active sites are: %s' % list(set(active_sites)))
-        return list(set(active_sites)), active_users
+        return users
 
     def active_users(self, db):
         """
