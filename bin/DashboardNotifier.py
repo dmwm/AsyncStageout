@@ -18,7 +18,7 @@ def reportToAmq(filePath, log, connect):
     log.debug("Producing...%s" % message)
     try:
         messageDict = json.dumps(message)
-        connect.send(messageDict, destination=authParams['MSG_QUEUE'] )
+        connect.send(body=messageDict, destination=authParams['MSG_QUEUE'] )
     except Exception:
         log.exception("Error contacting Message Broker or reading json")
         sys.exit(1)
@@ -38,7 +38,7 @@ try:
     host = [(authParams['MSG_HOST'], authParams['MSG_PORT'])]
     conn = stomp.Connection(host, authParams['MSG_USER'], authParams['MSG_PWD'])
     conn.start()
-    conn.connect()
+    conn.connect(authParams['MSG_USER'], authParams['MSG_PWD'], wait=True)
 except Exception:
     logging.exception("Error contacting Message Broker")
     conn.disconnect()
