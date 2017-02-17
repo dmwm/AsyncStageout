@@ -161,17 +161,13 @@ class ReporterWorker:
             self.logger.error('Did not get valid proxy. Setting proxy to ops proxy')
             self.userProxy = config.opsProxy
 
-        if self.config.isOracle:
-            try:
-                self.oracleDB = HTTPRequests(self.config.oracleDB,
-                                             config.opsProxy,
-                                             config.opsProxy)
-            except Exception:
-                self.logger.exception()
-                raise
-        else:
-            server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
+        try:
+            self.oracleDB = HTTPRequests(self.config.oracleDB,
+                                         config.opsProxy,
+                                         config.opsProxy)
+        except Exception:
+            self.logger.exception('failed to connect to Oracle')
+            raise
 
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.pluginDir, namespace = self.config.pluginDir)
@@ -228,7 +224,10 @@ class ReporterWorker:
                         self.logger.debug('failed indexes %s' % failed_indexes)
                         for i in failed_indexes:
                             failed_lfns.append(json_data['LFNs'][i])
-                            failure_reason.append(json_data['failure_reason'][i])
+                            try:
+                                failure_reason.append(json_data['failure_reason'][i])
+                            except:
+                                failure_reason.append('Unable to find failure reason')
                         self.logger.debug('Marking failed %s %s' %(failed_lfns, failure_reason))
                         updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
 
@@ -247,8 +246,12 @@ class ReporterWorker:
                             self.logger.exception('Either no files to mark or failed to update state')
 
                     # Remove the json file
-                    self.logger.debug('Removing %s' % input_file)
-                    os.unlink( input_file )
+                    if len(updated_good_lfns) == len(good_lfns) and  len(updated_failed_lfns) == len(failed_lfns):
+                        try:
+                            self.logger.debug('Removing %s' % input_file)
+                            os.unlink( input_file )
+                        except:
+                            self.logger.exception('Failed to remove '+ input_file)
 
                 else:
                     self.logger.info('Empty file %s' % input_file)
@@ -356,9 +359,12 @@ class ReporterWorker:
             self.logger.debug("site not found... gathering info from phedex")
             self.site_tfc_map[document["source"]] = self.get_tfc_rules(document["source"])
         pfn = self.apply_tfc_to_lfn( '%s:%s' %(document["source"], lfn))
-        self.logger.debug("File has to be removed now from source site: %s" %pfn)
-        self.remove_files(self.userProxy, pfn)
-        self.logger.debug("Transferred file removed from source")
+        try:
+            self.logger.debug("File has to be removed now from source site: %s" %pfn)
+            self.remove_files(self.userProxy, pfn)
+            self.logger.debug("Transferred file removed from source")
+        except:
+            self.logger.exception('Error removing file from source')
         return updated_lfn
 
     def remove_files(self, userProxy, pfn):
@@ -452,12 +458,24 @@ class ReporterWorker:
                     if force_fail or document['transfer_retry_count'] + 1 > self.max_retry:
                         data['list_of_transfer_state'] = 'FAILED'
                         data['list_of_retry_value'] = 0
+                        try:
+                            self.logger.debug("File has to be removed now from source site: %s" %pfn)
+                            self.remove_files(self.userProxy, pfn)
+                            self.logger.debug("Transferred file removed from source")
+                        except:
+                            self.logger.exception('Error removing file from source')
                     else:
                         data['list_of_transfer_state'] = 'RETRY'
                         fatal_error = self.determine_fatal_error(failures_reasons[files.index(lfn)])
                         if fatal_error:
                             data['list_of_transfer_state'] = 'FAILED'
-                        
+                            try:
+                                self.logger.debug("File has to be removed now from source site: %s" %pfn)
+                                self.remove_files(self.userProxy, pfn)
+                                self.logger.debug("Transferred file removed from source")
+                            except:
+                                self.logger.exception('Error removing file from source')
+
                     data['list_of_failure_reason'] = failures_reasons[files.index(lfn)]
                     data['list_of_retry_value'] = 0
 
@@ -469,7 +487,7 @@ class ReporterWorker:
                     self.logger.debug("Marked failed %s" % lfn)
                 except Exception as ex:
                     self.logger.error("Error updating document status: %s" %ex)
-                    continue
+                    return {}
             else:
                 try:
                     document = self.db.document( docId )

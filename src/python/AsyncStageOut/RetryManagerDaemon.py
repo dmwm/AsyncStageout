@@ -61,9 +61,12 @@ class RetryManagerDaemon(BaseDaemon):
         BaseDaemon.__init__(self, config, 'RetryManager')
 
         if self.config.isOracle:
-            self.oracleDB = HTTPRequests(self.config.oracleDB,
-                                         self.config.opsProxy,
-                                         self.config.opsProxy)
+            try:
+                self.oracleDB = HTTPRequests(self.config.oracleDB,
+                                             self.config.opsProxy,
+                                             self.config.opsProxy)
+            except:
+                self.logger.exception('Failed to connect to Oracle')
         else:
             try:
                 server = CouchServer(dburl=self.config.couch_instance,
@@ -111,9 +114,9 @@ class RetryManagerDaemon(BaseDaemon):
             try:
                 results = self.oracleDB.post(self.config.oracleFileTrans,
                                              data=encodeRequest(fileDoc))
+                logging.info("Retried files in cooloff: %s" % str(results))
             except Exception:
                 self.logger.exception("Failed to get retry transfers in oracleDB: %s")
-            logging.info("Retried files in cooloff: %s" % str(results))
         else:
             self.doRetries()
 
