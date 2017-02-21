@@ -152,18 +152,15 @@ class PublisherWorker:
         # self.cache_area = self.config.cache_area
         if os.getenv("TEST_ASO"):
             self.db = None
-        elif not self.config.isOracle:
-            server = CouchServer(dburl=self.config.couch_instance,
-                                 ckey=self.config.opsProxy,
-                                 cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
-        else:
+        try:
             self.oracleDB = HTTPRequests(self.config.oracleDB,
                                          self.config.opsProxy,
                                          self.config.opsProxy)
             self.oracleDB_user = HTTPRequests(self.config.oracleDB,
                                          self.userProxy,
                                          self.userProxy)
+        except:
+            self.logger.exception('Failed to contact Oracle')
         self.phedexApi = PhEDEx(responseType='json')
         self.max_files_per_block = max(1, self.config.max_files_per_block)
         self.block_publication_timeout = self.config.block_closure_timeout
@@ -501,7 +498,7 @@ class PublisherWorker:
             self.logger.debug("Updating last publication type for: %s " %  workflow)
             data['workflow'] = workflow
             data['subresource'] = 'updatepublicationtime'
-            result = self.oracleDB_user.get(self.config.oracleFileTrans.replace('filetransfers','task'),
+            result = self.oracleDB_user.post(self.config.oracleFileTrans.replace('filetransfers','task'),
                                        data=encodeRequest(data))
             self.logger.debug("%s last publication type update: %s " %  (workflow,str(result)))
             self.logger.info("Publications for user %s (group: %s, role: %s) completed." % (self.user,

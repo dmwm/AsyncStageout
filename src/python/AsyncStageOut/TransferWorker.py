@@ -118,13 +118,9 @@ class TransferWorker:
         self.factory = WMFactory(self.config.pluginDir, namespace=self.config.pluginDir)
         self.commandTimeout = 1200
         try:
-            if self.config.isOracle:
-                self.oracleDB = HTTPRequests(self.config.oracleDB,
-                                             self.config.opsProxy,
-                                             self.config.opsProxy)
-            else:
-                server = CouchServer(dburl=self.config.couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
-                self.db = server.connectDatabase(self.config.files_database)
+            self.oracleDB = HTTPRequests(self.config.oracleDB,
+                                         self.config.opsProxy,
+                                         self.config.opsProxy)
             config_server = CouchServer(dburl=self.config.config_couch_instance, ckey=self.config.opsProxy, cert=self.config.opsProxy)
             self.config_db = config_server.connectDatabase(self.config.config_database)
             self.fts_server_for_transfer = getFTServer("T1_UK_RAL", 'getRunningFTSserver', self.config_db, self.logger)
@@ -604,11 +600,11 @@ class TransferWorker:
                         docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
                                                     data=encodeRequest({'subresource': 'getById', 'id': docId}))
                         document = oracleOutputMapping(docbyId, None)[0]
+                        dash_rep = (document['jobid'], document['job_retry_count'], document['taskname'])
+                        lfn_in_transfer.append(lfn)
                     except Exception as ex:
                         self.logger.error("Error during dashboard report update: %s" %ex)
-
-                    lfn_in_transfer.append(lfn)
-                    dash_rep = (document['jobid'], document['job_retry_count'], document['taskname'])
+                        return [],()
 
             try:
                 fileDoc = dict()
@@ -624,7 +620,7 @@ class TransferWorker:
                 self.logger.debug("Marked acquired %s of %s" % (fileDoc, result))
             except Exception as ex:
                 self.logger.error("Error during status update: %s" %ex)
-
+                return [],()
                     # TODO: no need of mark good right? the postjob should updated the status in case of direct stageout I think
             return lfn_in_transfer, dash_rep
         else:
@@ -734,8 +730,8 @@ class TransferWorker:
                                                                                     'fileusertransfers'),
                                                 data=encodeRequest({'subresource': 'getById', 'id': docId}))
                 except Exception as ex:
-                    self.logger.error("Error updating failed docs: %s" %ex)
-                    continue
+                    self.logger.error("Error getting failed docs: %s" %ex)
+                    return []
                 document = oracleOutputMapping(docbyId, None)[0]
                 self.logger.debug("Document: %s" % document)
 
@@ -769,7 +765,7 @@ class TransferWorker:
                     msg += str(ex)
                     msg += str(traceback.format_exc())
                     self.logger.error(msg)
-                    continue
+                    return []
 
             else:
                 docId = getHashLfn(temp_lfn)

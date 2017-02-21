@@ -64,21 +64,26 @@ class PublisherDaemon(BaseDaemon):
         #Need a better way to test this without turning off this next line
         BaseDaemon.__init__(self, config, 'DBSPublisher')
 
-        server = CouchServer(dburl=self.config.couch_instance,
-                             ckey=self.config.opsProxy,
-                             cert=self.config.opsProxy)
-        self.logger.debug('Connected to CouchDB')
+        try:
+            config_server = CouchServer(dburl=self.config.config_couch_instance)
+            self.config_db = config_server.connectDatabase(self.config.config_database)
+            self.logger.debug('Connected to config CouchDB')
+        except:
+            self.logger.exception('Failed when contacting local couch')
+            raise
         # Set up a factory for loading plugins
         self.factory = WMFactory(self.config.schedAlgoDir,
                                  namespace=self.config.schedAlgoDir)
         self.pool = Pool(processes=self.config.publication_pool_size)
 
-        if self.config.isOracle:
+        try:
             self.oracleDB = HTTPRequests(self.config.oracleDB,
                                          self.config.opsProxy,
                                          self.config.opsProxy)
-        else:
-            self.db = server.connectDatabase(self.config.files_database)
+            self.logger.debug('Contacting OracleDB:' + self.config.oracleDB)
+        except:
+            self.logger.exception('Failed when contacting Oracle')
+            raise
 
     def algorithm(self, parameters=None):
         """
@@ -122,6 +127,7 @@ class PublisherDaemon(BaseDaemon):
             except Exception as ex:
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
+                return []
                 
             fileDoc = dict()
             fileDoc['asoworker'] = self.config.asoworker
@@ -137,6 +143,7 @@ class PublisherDaemon(BaseDaemon):
             except Exception as ex:
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
+                return []
 
             self.logger.debug("%s acquired puclications retrieved" % len(result))
             #TODO: join query for publisher (same of submitter)

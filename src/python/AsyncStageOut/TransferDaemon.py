@@ -97,19 +97,20 @@ class TransferDaemon(BaseDaemon):
                 if not e.errno == errno.EEXIST:
                     self.logger.exception('Unknown error in mkdir' % e.errno)
                     raise
+        try:
+            config_server = CouchServer(dburl=self.config.config_couch_instance)
+            self.config_db = config_server.connectDatabase(self.config.config_database)
+        except:
+            self.logger.exception('Failed when contacting local couch')
+            raise
 
-        config_server = CouchServer(dburl=self.config.config_couch_instance)
-        self.config_db = config_server.connectDatabase(self.config.config_database)
-        if self.config.isOracle:    
+        try:    
             self.oracleDB = HTTPRequests(self.config.oracleDB,
                                          self.config.opsProxy,
                                          self.config.opsProxy)
-        else:
-            server = CouchServer(dburl=self.config.couch_instance,
-                                 ckey=self.config.opsProxy,
-                                 cert=self.config.opsProxy)
-            self.db = server.connectDatabase(self.config.files_database)
-        self.logger.debug('Connected to CouchDB')
+        except:
+            self.logger.exception('Failed when contacting Oracle')
+            raise
         self.pool = Pool(processes=self.config.pool_size)
         self.factory = WMFactory(self.config.schedAlgoDir,
                                  namespace=self.config.schedAlgoDir)
@@ -121,6 +122,7 @@ class TransferDaemon(BaseDaemon):
                                        'cert':self.config.opsProxy})
         except Exception as e:
             self.logger.exception('PhEDEx exception: %s' % e)
+            raise
         # TODO: decode xml
         try:
             self.phedex2 = PhEDEx(responseType='json',
@@ -128,6 +130,7 @@ class TransferDaemon(BaseDaemon):
                                        'cert':self.config.opsProxy})
         except Exception as e:
             self.logger.exception('PhEDEx exception: %s' % e)
+            raise
 
         self.logger.debug(type((self.phedex2.getNodeMap())['phedex']['node']))
         for site in [x['name'] for x in self.phedex2.getNodeMap()['phedex']['node']]:
@@ -162,7 +165,7 @@ class TransferDaemon(BaseDaemon):
                    u[i] = '' 
                     
             self.logger.debug('current_running %s' % current_running)
-            self.logger.debug('BBBBBB: %s %s %s' % (u, current_running, (u not in current_running)))
+            self.logger.debug('Testing current running: %s %s %s' % (u, current_running, (u not in current_running)))
             if u not in current_running:
                 self.logger.debug('processing %s' % u)
                 current_running.append(u)
@@ -189,6 +192,7 @@ class TransferDaemon(BaseDaemon):
         except Exception as ex:
             self.logger.error("Failed to acquire transfers \
                               from oracleDB: %s" % ex)
+            return []
         
         self.logger.debug(oracleOutputMapping(result))
         # TODO: translate result into list((user,group,role),...)
@@ -200,7 +204,7 @@ class TransferDaemon(BaseDaemon):
                 self.logger.info('Users to process: %s' % str(users))
             except:
                 self.logger.exception('User data malformed. ')
-	else:
+        else:
             self.logger.info('No new user to acquire')
             return []
 
