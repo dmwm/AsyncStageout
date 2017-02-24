@@ -182,7 +182,10 @@ class TransferWorker:
                 self.logger.exception('delegation failed')
             self.logger.debug("Processing files for %s " % self.user_proxy)
             if jobs:
-                self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+                jobReport = self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
+                updated = False
+                while not updated:
+                    updated = self.update_FTSJobID(jobReport)
         else:
             self.logger.debug("User proxy of %s could not be delagated! Trying next time." % self.user)
         self.logger.info('Transfers completed')
@@ -266,6 +269,7 @@ class TransferWorker:
                                    and x['user_role'] == role
                                   ]
                     # self.logger.info('%s' % active_docs)
+                    self.logger.debug("Taking %s files" % len(active_docs))
 
                     def map_active(inputdoc):
                         """
@@ -391,6 +395,7 @@ class TransferWorker:
         #          "FTSJobid":'id-of-fts-job', "username": 'username'}
         # Loop through all the jobs for the links we have
         failure_reasons = []
+        jobReport = []
         for link, copyjob in jobs.items():
             submission_error = False
             fts_job = {}
@@ -552,6 +557,7 @@ class TransferWorker:
             ftsjob_file.close()
             self.logger.debug("%s ready." % fts_job)
             # Prepare Dashboard report
+
             for lfn in fts_job['LFNs']:
                 lfn_report = dict()
                 lfn_report['FTSJobid'] = fts_job['FTSJobid']
@@ -572,7 +578,8 @@ class TransferWorker:
                 dash_job_file.write(jsondata)
                 dash_job_file.close()
                 self.logger.debug("%s ready for FTS Dashboard report." % lfn_report)
-        return
+            jobReport.append(fts_job)
+        return jobReport
 
     def validate_copyjob(self, copyjob):
         """
@@ -581,6 +588,29 @@ class TransferWorker:
         for task in copyjob:
             if task.split()[0] == 'None' or task.split()[1] == 'None': return False
         return True
+
+    def update_FTSJobID(self, jobReport):
+        """
+        """
+        for job in jobReport:
+            try:
+                fileDoc = dict()
+                fileDoc['asoworker'] = self.config.asoworker
+                fileDoc['subresource'] = 'updateTransfers'
+                fileDoc['list_of_ids'] = [getHashLfn(x) for x in job['LFNs']]
+                fileDoc['list_of_transfer_state'] = ["SUBMITTED" for x in  job['LFNs']]
+                fileDoc['list_of_fts_instance'] = [self.fts_server_for_transfer for x in job['LFNs']]
+                fileDoc['list_of_fts_id'] = [ job['FTSJobid'] for  x in  job['LFNs'] ]
+
+                self.logger.debug("Marking submitted %s files " % (len(fileDoc['list_of_ids'])))
+                result = self.oracleDB.post(self.config.oracleFileTrans,
+                                                        data=encodeRequest(fileDoc))
+                self.logger.debug("Marked submitted %s" % (fileDoc['list_of_ids']))
+            except Exception as ex:
+                self.logger.error("Error during status update: %s" %ex)
+                time.sleep(10)
+                return False
+        return True       
 
     def mark_acquired(self, files=[]):
         """
@@ -592,9 +622,7 @@ class TransferWorker:
             toUpdate = list()
             for lfn in files:
                 if lfn['value'][0].find('temp') == 7:
-                    self.logger.debug("Marking acquired %s" % lfn)
                     docId = lfn['key'][5]
-                    self.logger.debug("Marking acquired %s" % docId)
                     toUpdate.append(docId)
                     try:
                         docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers','fileusertransfers'),
@@ -606,22 +634,6 @@ class TransferWorker:
                         self.logger.error("Error during dashboard report update: %s" %ex)
                         return [],()
 
-            try:
-                fileDoc = dict()
-                fileDoc['asoworker'] = self.config.asoworker
-                fileDoc['subresource'] = 'updateTransfers'
-                fileDoc['list_of_ids'] = files[0]['key'][5] 
-                fileDoc['list_of_transfer_state'] = "SUBMITTED"
-
-                self.logger.debug("Marking acquired %s" % (fileDoc))
-
-                result = self.oracleDB.post(self.config.oracleFileTrans,
-                                                    data=encodeRequest(fileDoc))
-                self.logger.debug("Marked acquired %s of %s" % (fileDoc, result))
-            except Exception as ex:
-                self.logger.error("Error during status update: %s" %ex)
-                return [],()
-                    # TODO: no need of mark good right? the postjob should updated the status in case of direct stageout I think
             return lfn_in_transfer, dash_rep
         else:
             for lfn in files:
