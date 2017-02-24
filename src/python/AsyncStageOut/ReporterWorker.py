@@ -229,7 +229,10 @@ class ReporterWorker:
                             except:
                                 failure_reason.append('Unable to find failure reason')
                         self.logger.debug('Marking failed %s %s' %(failed_lfns, failure_reason))
-                        updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
+                        try:
+                            updated_failed_lfns = self.mark_failed(failed_lfns, failure_reason)
+                        except:
+                            self.logger.exception('Either no files to mark or failed to update state')
 
 
                     if 'Done' or 'FINISHED' in json_data['transferStatus']:
@@ -246,6 +249,7 @@ class ReporterWorker:
                             self.logger.exception('Either no files to mark or failed to update state')
 
                     # Remove the json file
+                    self.logger.debug("Updated %s/%s good files and %s/%s failed files." % (len(updated_good_lfns),len(good_lfns),len(updated_failed_lfns),len(failed_lfns)))
                     if len(updated_good_lfns) == len(good_lfns) and  len(updated_failed_lfns) == len(failed_lfns):
                         try:
                             self.logger.debug('Removing %s' % input_file)
@@ -482,8 +486,7 @@ class ReporterWorker:
                     self.logger.debug("update: %s" % data)
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(data))
-                    if not data['list_of_transfer_state'] == 'RETRY':  
-                        updated_lfn.append(lfn)
+                    updated_lfn.append(lfn)
                     self.logger.debug("Marked failed %s" % lfn)
                 except Exception as ex:
                     self.logger.error("Error updating document status: %s" %ex)
