@@ -95,6 +95,8 @@ class PublisherWorker:
                             }
         # If we're just testing publication, we skip the DB connection.
 
+        self.logger.debug("Getting cache_area")
+
         if hasattr(self.config, "cache_area"):
             try:
                 getCache = re.compile('https?://([^/]*)/.*')
@@ -136,7 +138,7 @@ class PublisherWorker:
                 defaultDelegation['role'] = ''
             else:
                 defaultDelegation['role'] = self.role
-                valid, proxy = getProxy(defaultDelegation, self.logger)
+            valid, proxy = getProxy(defaultDelegation, self.logger)
         except Exception as ex:
             msg = "Error getting the user proxy"
             msg += str(ex)
@@ -485,9 +487,11 @@ class PublisherWorker:
             result = self.publish(workflow, input_dataset, input_dbs_url, pnn, lfn_ready)
             for dataset in result.keys():
                 published_files = result[dataset].get('published', [])
+                self.logger.debug("Good files: %s " % published_files)
                 if published_files:
                     self.mark_good(workflow, published_files)
                 failed_files = result[dataset].get('failed', [])
+                self.logger.debug("Failed files: %s " % failed_files)
                 if failed_files:
                     failure_reason = result[dataset].get('failure_reason', "")
                     force_failure = result[dataset].get('force_failure', False)
@@ -588,20 +592,23 @@ class PublisherWorker:
                 document = oracleOutputMapping(docbyId, None)[0]
                 self.logger.debug("Document: %s" % document)
 
-                fileDoc = dict()
-                fileDoc['asoworker'] = 'asodciangot1'
-                fileDoc['subresource'] = 'updatePublication'
-                fileDoc['list_of_ids'] = docId
-
-                if force_failure or document['publish_retry_count'] > self.max_retry:
-                    fileDoc['list_of_publication_state'] = 'FAILED'
-                else:
-                    fileDoc['list_of_publication_state'] = 'RETRY'
-                # TODO: implement retry
-                fileDoc['list_of_retry_value'] = 1
-                fileDoc['list_of_failure_reason'] = failure_reason
-
                 try:
+                    fileDoc = dict()
+                    fileDoc['asoworker'] = self.config.asoworker
+                    fileDoc['subresource'] = 'updatePublication'
+                    fileDoc['list_of_ids'] = docId
+
+                    fileDoc['list_of_publication_state'] = 'FAILED'
+                    #if force_failure or document['publish_retry_count'] > self.max_retry:
+                    #    fileDoc['list_of_publication_state'] = 'FAILED'
+                    #else:
+                    #    fileDoc['list_of_publication_state'] = 'RETRY'
+                    # TODO: implement retry
+                    fileDoc['list_of_retry_value'] = 1
+                    fileDoc['list_of_failure_reason'] = failure_reason
+
+                    self.logger.debug("fileDoc: %s " % fileDoc)
+
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(fileDoc))
                     self.logger.debug("updated: %s " % docId)
@@ -748,6 +755,7 @@ class PublisherWorker:
         msg = "DBS publication results: %s" % (dbsResults)
         self.logger.debug(wfnamemsg+msg)
         for dataset in toPublish.keys():
+            self.logger.debug('failed: %s' % failed.get(dataset, []))
             retdict.update({dataset: {'failed': failed.get(dataset, []),
                                       'failure_reason': failure_reason.get(dataset, ""),
                                       'published': published.get(dataset, [])
@@ -1344,6 +1352,7 @@ class PublisherWorker:
                     destApi.insertBulkBlock(blockDump)
                     block_count += 1
                 except Exception as ex:
+                    self.logger.error("Error for files: %s" % [f['logical_file_name'] for f in files_to_publish])
                     failed[dataset].extend([f['logical_file_name'] for f in files_to_publish])
                     msg = "Error when publishing (%s) " % ", ".join(failed[dataset])
                     msg += str(ex)
