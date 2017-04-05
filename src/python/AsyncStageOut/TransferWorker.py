@@ -180,6 +180,7 @@ class TransferWorker:
                 jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
             except:
                 self.logger.exception('delegation failed')
+                return
             self.logger.debug("Processing files for %s " % self.user_proxy)
             if jobs:
                 jobReport = self.command(jobs, jobs_lfn, jobs_pfn, jobs_report)
@@ -202,6 +203,7 @@ class TransferWorker:
             fileDoc['subresource'] = 'acquiredTransfers'
             fileDoc['grouping'] = 1
             fileDoc['username'] = self.user
+            group = self.group
             if self.group == '':
                 group = None
             if self.role == '':
