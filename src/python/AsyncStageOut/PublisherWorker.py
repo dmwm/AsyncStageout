@@ -181,7 +181,7 @@ class PublisherWorker:
             self.publish_dbs_url += WRITE_PATH
 
         try:
-            self.connection = RequestHandler(config={'timeout': 300, 'connecttimeout' : 300})
+            self.connection = RequestHandler(config={'timeout': 900, 'connecttimeout' : 900})
         except Exception as ex:
             msg = "Error initializing the connection"
             msg += str(ex)
@@ -487,23 +487,29 @@ class PublisherWorker:
             result = self.publish(workflow, input_dataset, input_dbs_url, pnn, lfn_ready)
             for dataset in result.keys():
                 published_files = result[dataset].get('published', [])
+                toNew_files = result[dataset].get('new', [])
                 self.logger.debug("Good files: %s " % published_files)
                 if published_files:
                     self.mark_good(workflow, published_files)
-                failed_files = result[dataset].get('failed', [])
-                self.logger.debug("Failed files: %s " % failed_files)
+                try:
+                    failed_files = result[dataset].get('failed', [])
+                    self.logger.debug("Failed files: %s " % failed_files)
+                except:
+                    self.logger.exception("Failed to get failed files")
+                    failed_files = []
                 if failed_files:
                     failure_reason = result[dataset].get('failure_reason', "")
                     force_failure = result[dataset].get('force_failure', False)
                     self.mark_failed(workflow, failed_files, failure_reason, force_failure)
 
+        data = dict()
         try:
             # TODO: update last publication time db task updatepublicationtime,workflow,
             self.logger.debug("Updating last publication type for: %s " %  workflow)
             data['workflow'] = workflow
             data['subresource'] = 'updatepublicationtime'
             result = self.oracleDB_user.post(self.config.oracleFileTrans.replace('filetransfers','task'),
-                                       data=encodeRequest(data))
+                                             data=encodeRequest(data))
             self.logger.debug("%s last publication type update: %s " %  (workflow,str(result)))
             self.logger.info("Publications for user %s (group: %s, role: %s) completed." % (self.user,
                                                                                             self.group,
@@ -529,10 +535,13 @@ class PublisherWorker:
                 data['subresource'] = 'updatePublication'
                 data['list_of_ids'] = docId
                 data['list_of_publication_state'] = 'DONE'
+                data['list_of_retry_value'] = 1
+                data['list_of_failure_reason'] = ''
+
                 try:
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(data))
-                    self.logger.debug("updated: %s " % docId)
+                    self.logger.debug("updated: %s %s " % (docId,result))
                 except Exception as ex:
                     self.logger.error("Error during status update: %s" %ex)
 
@@ -732,6 +741,7 @@ class PublisherWorker:
                     msg += " %s" % self.publication_failure_msg
                 retdict = {'unknown_datasets': {'failed': lfn_ready_list, 'failure_reason': msg, 'force_failure': True, 'published': []}}
             return retdict
+
         # Don't publish datasets for which there are not enough ready files to make a
         # block, unless publication was forced.
         for dataset in toPublish.keys():
@@ -996,9 +1006,13 @@ class PublisherWorker:
                 return 4, "Migration of %s in some inconsistent status." % dataset
             msg = "Migration completed."
             self.logger.info(wfnamemsg+msg)
-        migratedDataset = destReadApi.listDatasets(dataset=dataset, detail=True, dataset_access_type='*')
-        if not migratedDataset or migratedDataset[0].get('dataset', None) != dataset:
-            return 4, "Migration of %s in some inconsistent status." % dataset
+        try:
+            migratedDataset = destReadApi.listDatasets(dataset=dataset, detail=True, dataset_access_type='*')
+            if not migratedDataset or migratedDataset[0].get('dataset', None) != dataset:
+                return 4, "Migration of %s in some inconsistent status." % dataset
+        except Exception as ex:
+            self.logger.exception("Migration check failed.")
+            return 4, "Migration check failed. %s" % ex
         return 0, ""
 
     def requestBlockMigration(self, workflow, migrateApi, sourceApi, block):
@@ -1378,7 +1392,7 @@ class PublisherWorker:
                     blockDump = self.createBulkBlock(output_config, processing_era_config,
                                                      primds_config, dataset_config,
                                                      acquisition_era_config, block_config, files_to_publish)
-                    # self.logger.debug(wfnamemsg+"Block to insert: %s\n" % pprint.pformat(blockDump))
+                    #self.logger.debug(wfnamemsg+"Block to insert: %s\n %s" % (blockDump, destApi.__dict__ ))
                     destApi.insertBulkBlock(blockDump)
                     block_count += 1
                 except Exception as ex:

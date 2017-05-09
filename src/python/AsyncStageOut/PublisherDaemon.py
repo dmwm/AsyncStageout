@@ -136,10 +136,12 @@ class PublisherDaemon(BaseDaemon):
 
             self.logger.debug("Retrieving acquired puclications from oracleDB")
 
+            result = []
+
             try:
                 results = db.get(self.config.oracleFileTrans,
                                  data=encodeRequest(fileDoc))
-                result = oracleOutputMapping(results)
+                result.extend(oracleOutputMapping(results))
             except Exception as ex:
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)

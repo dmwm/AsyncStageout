@@ -118,31 +118,29 @@ class ReporterWorker:
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
-            self.init = False
-            return
-        if not self.userDN:
-            self.init = False
-            return
-        defaultDelegation = {
-                                  'logger': self.logger,
-                                  'credServerPath': self.config.credentialDir,
-                                  # It will be moved to be getfrom couchDB
-                                  'myProxySvr': 'myproxy.cern.ch',
-                                  'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
-                                  'serverDN': self.config.serverDN,
-                                  'uisource': self.uiSetupScript,
-                                  'cleanEnvironment': getattr(self.config, 'cleanEnvironment', False)
-                            }
-        if hasattr(self.config, "cache_area"):
-            try:
-                defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
-            except IndexError:
-                self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
-                pass
-        if getattr(self.config, 'serviceCert', None):
-            defaultDelegation['server_cert'] = self.config.serviceCert
-        if getattr(self.config, 'serviceKey', None):
-            defaultDelegation['server_key'] = self.config.serviceKey
+        #    self.init = False
+        #    return
+        if self.userDN:
+            defaultDelegation = {
+                                      'logger': self.logger,
+                                      'credServerPath': self.config.credentialDir,
+                                      # It will be moved to be getfrom couchDB
+                                      'myProxySvr': 'myproxy.cern.ch',
+                                      'min_time_left' : getattr(self.config, 'minTimeLeft', 36000),
+                                      'serverDN': self.config.serverDN,
+                                      'uisource': self.uiSetupScript,
+                                      'cleanEnvironment': getattr(self.config, 'cleanEnvironment', False)
+                                }
+            if hasattr(self.config, "cache_area"):
+                try:
+                    defaultDelegation['myproxyAccount'] = re.compile('https?://([^/]*)/.*').findall(self.config.cache_area)[0]
+                except IndexError:
+                    self.logger.error('MyproxyAccount parameter cannot be retrieved from %s' % self.config.cache_area)
+                    pass
+            if getattr(self.config, 'serviceCert', None):
+                defaultDelegation['server_cert'] = self.config.serviceCert
+            if getattr(self.config, 'serviceKey', None):
+                defaultDelegation['server_key'] = self.config.serviceKey
 
         self.valid = False
         try:
@@ -372,14 +370,14 @@ class ReporterWorker:
         return updated_lfn
 
     def remove_files(self, userProxy, pfn):
-
-        command = 'env -i X509_USER_PROXY=%s gfal-rm -v -t 180 %s'  % \
-                  (userProxy, pfn)
-        logging.debug("Running remove command %s" % command)
         try:
+            command = 'env -i X509_USER_PROXY=%s gfal-rm -v -t 180 %s'  % \
+                      (userProxy, pfn)
+            logging.debug("Running remove command %s" % command)
             rc, stdout, stderr = execute_command(command, self.logger, 3600)
         except Exception as ex:
             self.logger.error(ex)
+            return
         if rc:
             logging.info("Deletion command failed with output %s and error %s" %(stdout, stderr))
         else:
@@ -458,7 +456,10 @@ class ReporterWorker:
                     data['asoworker'] = self.config.asoworker
                     data['subresource'] = 'updateTransfers'
                     data['list_of_ids'] = docId
-
+                    if document["source"] not in self.site_tfc_map:
+                        self.logger.debug("site not found... gathering info from phedex")
+                        self.site_tfc_map[document["source"]] = self.get_tfc_rules(document["source"])
+                    pfn = self.apply_tfc_to_lfn( '%s:%s' %(document["source"], lfn))
                     if force_fail or document['transfer_retry_count'] + 1 > self.max_retry:
                         data['list_of_transfer_state'] = 'FAILED'
                         data['list_of_retry_value'] = 0
@@ -480,17 +481,17 @@ class ReporterWorker:
                             except:
                                 self.logger.exception('Error removing file from source')
 
-                    data['list_of_failure_reason'] = failures_reasons[files.index(lfn)]
+                    data['list_of_failure_reason'] = failures_reasons[files.index(lfn)][:100]
                     data['list_of_retry_value'] = 0
 
                     self.logger.debug("update: %s" % data)
                     result = self.oracleDB.post(self.config.oracleFileTrans,
                                                 data=encodeRequest(data))
-                    updated_lfn.append(lfn)
-                    self.logger.debug("Marked failed %s" % lfn)
                 except Exception as ex:
                     self.logger.error("Error updating document status: %s" %ex)
                     return {}
+                updated_lfn.append(lfn)
+                self.logger.debug("Marked failed %s" % lfn)
             else:
                 try:
                     document = self.db.document( docId )
