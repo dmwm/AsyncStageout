@@ -174,12 +174,15 @@ class TransferWorker:
         #fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
         if self.user_proxy:
             try:
+                jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
                 self.context = fts3.Context(self.fts_server_for_transfer, self.user_proxy, self.user_proxy, verify=True)
                 self.logger.debug(fts3.delegate(self.context, lifetime=timedelta(hours=48), force=False))
                 init_time = str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-                jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
             except:
-                self.logger.exception('delegation failed')
+                self.logger.exception('delegation failed. Marking failed all documents.')
+                for link, lfns in jobs_lfn.iteritems(): 
+                    self.logger.exception('Marking failed: %s' % lfns)
+                    self.mark_failed(lfns, force_fail=True, submission_error=True)
                 return
             self.logger.debug("Processing files for %s " % self.user_proxy)
             if jobs:
@@ -411,7 +414,7 @@ class TransferWorker:
                     "verify_checksum": False,
                     "copy_pin_lifetime": -1,
                     "max_time_in_queue": self.config.max_h_in_queue,
-                    "job_metadata": {"issuer": "ASO"},
+                    "job_metadata": {"issuer": "ASO","user": self.user },
                     "spacetoken": None,
                     "source_spacetoken": None,
                     "fail_nearline": False,
@@ -743,37 +746,38 @@ class TransferWorker:
                     docbyId = self.oracleDB.get(self.config.oracleFileTrans.replace('filetransfers',
                                                                                     'fileusertransfers'),
                                                 data=encodeRequest({'subresource': 'getById', 'id': docId}))
+                    document = oracleOutputMapping(docbyId, None)[0]
                 except Exception as ex:
                     self.logger.error("Error getting failed docs: %s" %ex)
                     return []
-                document = oracleOutputMapping(docbyId, None)[0]
-                self.logger.debug("Document: %s" % document)
 
-                fileDoc = dict()
-                fileDoc['asoworker'] = self.config.asoworker
-                fileDoc['subresource'] = 'updateTransfers'
-                fileDoc['list_of_ids'] = docId 
-
-                if force_fail or document['transfer_retry_count'] + 1 > self.max_retry:
-                    fileDoc['list_of_transfer_state'] = 'FAILED'
-                    fileDoc['list_of_retry_value'] = 1
-                else:
-                    fileDoc['list_of_transfer_state'] = 'RETRY'
-                if submission_error:
-                    fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: temporary problem of FTS"
-                    fileDoc['list_of_retry_value'] = 1
-                elif not self.valid_proxy:
-                    fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: user's proxy expired"
-                    fileDoc['list_of_retry_value'] = 1
-                else:
-                    fileDoc['list_of_failure_reason'] = "Site config problem."
-                    fileDoc['list_of_retry_value'] = 1
-
-                self.logger.debug("update: %s" % fileDoc)
                 try:
+                    self.logger.debug("Document: %s" % document)
+
+                    fileDoc = dict()
+                    fileDoc['asoworker'] = self.config.asoworker
+                    fileDoc['subresource'] = 'updateTransfers'
+                    fileDoc['list_of_ids'] = docId 
+
+                    if force_fail or document['transfer_retry_count'] + 1 > self.max_retry:
+                        fileDoc['list_of_transfer_state'] = 'FAILED'
+                        fileDoc['list_of_retry_value'] = 1
+                    else:
+                        fileDoc['list_of_transfer_state'] = 'RETRY'
+                    if submission_error:
+                        fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: temporary problem of FTS"
+                        fileDoc['list_of_retry_value'] = 1
+                    elif not self.valid_proxy:
+                        fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: user's proxy expired"
+                        fileDoc['list_of_retry_value'] = 1
+                    else:
+                        fileDoc['list_of_failure_reason'] = "Site config problem."
+                        fileDoc['list_of_retry_value'] = 1
+
+                    self.logger.debug("update: %s" % fileDoc)
                     updated_lfn.append(docId)
                     result = self.oracleDB.post(self.config.oracleFileTrans,
-                                         data=encodeRequest(fileDoc))
+                                                data=encodeRequest(fileDoc))
                 except Exception as ex:
                     msg = "Error updating document"
                     msg += str(ex)
@@ -830,8 +834,8 @@ class TransferWorker:
                         msg += str(traceback.format_exc())
                         self.logger.error(msg)
                         continue
-            self.logger.debug("failed file updated")
-            return updated_lfn
+        self.logger.debug("failed file updated")
+        return updated_lfn
 
     def mark_incomplete(self):
         """
