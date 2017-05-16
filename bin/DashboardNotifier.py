@@ -15,6 +15,8 @@ def reportToAmq(filePath, log, connect):
     """
     jsonData=open(filePath)
     message = json.load(jsonData)
+    # point to new (as of 2017) FTS monitor
+    message[u'URL']=u'https://fts3.cern.ch:8449/fts3/ftsmon/#/job/'
     log.debug("Producing...%s" % message)
     try:
         messageDict = json.dumps(message)
