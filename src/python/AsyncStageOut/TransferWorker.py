@@ -761,18 +761,18 @@ class TransferWorker:
 
                     if force_fail or document['transfer_retry_count'] + 1 > self.max_retry:
                         fileDoc['list_of_transfer_state'] = 'FAILED'
-                        fileDoc['list_of_retry_value'] = 1
+                        fileDoc['list_of_retry_value'] = 0
                     else:
                         fileDoc['list_of_transfer_state'] = 'RETRY'
                     if submission_error:
                         fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: temporary problem of FTS"
-                        fileDoc['list_of_retry_value'] = 1
+                        fileDoc['list_of_retry_value'] = 0
                     elif not self.valid_proxy:
                         fileDoc['list_of_failure_reason'] = "Job could not be submitted to FTS: user's proxy expired"
-                        fileDoc['list_of_retry_value'] = 1
+                        fileDoc['list_of_retry_value'] = 0
                     else:
                         fileDoc['list_of_failure_reason'] = "Site config problem."
-                        fileDoc['list_of_retry_value'] = 1
+                        fileDoc['list_of_retry_value'] = 0
 
                     self.logger.debug("update: %s" % fileDoc)
                     updated_lfn.append(docId)
