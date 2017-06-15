@@ -447,7 +447,7 @@ class TransferWorker:
             self.logger.debug("Running FTS submission command")
             self.logger.debug("FTS server: %s" % self.fts_server_for_transfer)
             self.logger.debug("link: %s -> %s" % link)
-            heade = {"Content-Type ": "application/json"}
+            heade = {"Content-Type": "application/json"}
             
             """
             try:

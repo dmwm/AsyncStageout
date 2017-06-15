@@ -120,6 +120,7 @@ class ReporterWorker:
             self.logger.error(msg)
         #    self.init = False
         #    return
+        defaultDelegation = dict()
         if self.userDN:
             defaultDelegation = {
                                       'logger': self.logger,
