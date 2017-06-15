@@ -227,7 +227,7 @@ class TransferDaemon(BaseDaemon):
 
             self.doc_acq = str(result)
             for i in range(len(user)):
-                if not user[i]:
+                if not user[i] or user[i] in [None, 'NULL']:
                     user[i] = ''
                 user[i] = str(user[i])
             actives.append(user)
