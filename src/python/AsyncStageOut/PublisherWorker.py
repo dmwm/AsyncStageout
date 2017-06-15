@@ -206,6 +206,7 @@ class PublisherWorker:
             fileDoc['subresource'] = 'acquiredPublication'
             fileDoc['grouping'] = 1
             fileDoc['username'] = self.user
+            fileDoc['limit'] = 100000
             try:
                 results = self.oracleDB.get(self.config.oracleFileTrans,
                                             data=encodeRequest(fileDoc))
@@ -419,6 +420,8 @@ class PublisherWorker:
                 # in the workflow.
                 if workflow_status in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
                     self.force_publication = True
+                    if workflow_status in ['KILLED', 'REMOVED']:
+                        self.force_failure = True
                     msg = "Considering task status as terminal. Will force publication."
                     self.logger.info(wfnamemsg+msg)
                 # Otherwise...
@@ -817,7 +820,6 @@ class PublisherWorker:
         for dataset, outfiles_metadata in publDescFiles.iteritems():
             for outfile_metadata in outfiles_metadata:
                 dest_lfn = outfile_metadata['lfn']
-                self.logger.debug("Checking: %s "  % (dest_lfn))
                 if dest_lfn in lfn_ready_list:
                     publDescFiles_filtered.setdefault(dataset, []).append(outfile_metadata)
         return publDescFiles_filtered
