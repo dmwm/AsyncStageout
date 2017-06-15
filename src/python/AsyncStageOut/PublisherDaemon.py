@@ -92,7 +92,7 @@ class PublisherDaemon(BaseDaemon):
         3. Submit the publish to a subprocess
         """
         if self.config.isOracle:
-	    users = self.active_users(self.oracleDB)
+            users = self.active_users(self.oracleDB)
         else:
             users = self.active_users(self.db)
         self.logger.debug('kicking off pool %s' %users)
@@ -133,8 +133,9 @@ class PublisherDaemon(BaseDaemon):
             fileDoc['asoworker'] = self.config.asoworker
             fileDoc['subresource'] = 'acquiredPublication'
             fileDoc['grouping'] = 0
+            fileDoc['limit'] = 100000
 
-            self.logger.debug("Retrieving acquired puclications from oracleDB")
+            self.logger.debug("Retrieving max.100000 acquired puclications from oracleDB")
 
             result = []
 
@@ -146,6 +147,8 @@ class PublisherDaemon(BaseDaemon):
                 self.logger.error("Failed to acquire publications \
                                   from oracleDB: %s" %ex)
                 return []
+
+            self.logger.debug("publen: %s" % len(result))
 
             self.logger.debug("%s acquired puclications retrieved" % len(result))
             #TODO: join query for publisher (same of submitter)
