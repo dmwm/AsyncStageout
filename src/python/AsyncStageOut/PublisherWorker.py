@@ -817,7 +817,6 @@ class PublisherWorker:
         for dataset, outfiles_metadata in publDescFiles.iteritems():
             for outfile_metadata in outfiles_metadata:
                 dest_lfn = outfile_metadata['lfn']
-                self.logger.debug("Checking: %s "  % (dest_lfn))
                 if dest_lfn in lfn_ready_list:
                     publDescFiles_filtered.setdefault(dataset, []).append(outfile_metadata)
         return publDescFiles_filtered
@@ -836,8 +835,12 @@ class PublisherWorker:
              }
         file_lumi_list = []
         for run, lumis in file['runlumi'].items():
-            for lumi in lumis:
-                file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
+            for lumi, evts in lumis.items():
+                self.logger.debug("lumi: %s, evts: %s" % (lumi,evts))
+                if not evts in ['None']:
+                    file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run), 'event_count': int(evts)})
+                else:
+                    file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
         nf['file_lumi_list'] = file_lumi_list
         if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
             nf['md5'] = file['md5']
