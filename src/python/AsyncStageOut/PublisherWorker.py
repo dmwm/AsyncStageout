@@ -63,6 +63,8 @@ class PublisherWorker:
         self.force_failure = False
         self.publication_failure_msg = ""
 
+        self.evtLumi = True
+
         logging.basicConfig(level=config.log_level)
         self.logger = logging.getLogger('DBSPublisher-Worker-%s' % self.user)
         formatter = getCommonLogFormatter(self.config)
@@ -834,13 +836,23 @@ class PublisherWorker:
               'file_parent_list': [{'file_parent_lfn': i} for i in set(file['parents'])],
              }
         file_lumi_list = []
-        for run, lumis in file['runlumi'].items():
-            for lumi, evts in lumis.items():
-                self.logger.debug("lumi: %s, evts: %s" % (lumi,evts))
-                if not evts in ['None']:
+
+        # check if block contains mixed evt/noevt
+        if self.evtLumi:
+            for _, lumis in file['runlumi'].iteritems():
+                for _, evt in lumis.iteritems():
+                   if evt == 'None':
+                       self.evtLumi = False
+                       break
+	    self.logger.debug("Check on the presence of evts/lumi: %s" % self.evtLumi)
+
+        for run, lumis in file['runlumi'].iteritems():
+            for lumi, evts in lumis.iteritems():
+                if self.evtLumi:
                     file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run), 'event_count': int(evts)})
                 else:
                     file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
+
         nf['file_lumi_list'] = file_lumi_list
         if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
             nf['md5'] = file['md5']
@@ -1284,6 +1296,7 @@ class PublisherWorker:
             # to the destination DBS instance.
             globalParentBlocks = set()
 
+            self.evtLumi = True
             # Loop over all files to publish.
             for file in files:
                 # Check if this file was already published and if it is valid.
@@ -1389,9 +1402,16 @@ class PublisherWorker:
                 files_to_publish = dbsFiles[count:count+self.max_files_per_block]
                 try:
                     block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                    msg = "Inserting files %s into block %s." % ([f['logical_file_name']
-                                                                  for f in files_to_publish], block_name)
+                    msg = "Inserting files %s into block %s." % (len(files_to_publish), block_name)
                     self.logger.debug(wfnamemsg+msg)
+
+                    files_to_pub_tmp = []
+                    if not self.evtLumi:
+                        for _file in files_to_publish:
+                            if 'event_count' in _file:
+                                 del _file['event_count']
+                            files_to_pub_tmp.append(_file)
+
                     blockDump = self.createBulkBlock(output_config, processing_era_config,
                                                      primds_config, dataset_config,
                                                      acquisition_era_config, block_config, files_to_publish)
