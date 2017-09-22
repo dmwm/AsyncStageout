@@ -10,6 +10,7 @@ The Publisherworker does the following:
 There should be one worker per user transfer.
 '''
 import os
+import gc
 import re
 import json
 import time
@@ -36,7 +37,7 @@ from AsyncStageOut import getDNFromUserName
 from AsyncStageOut import getCommonLogFormatter
 
 from RESTInteractions import HTTPRequests
-from ServerUtilities import getColumn, getHashLfn, PUBLICATIONDB_STATUSES, encodeRequest, oracleOutputMapping
+from ServerUtilities import executeCommand, getColumn, getHashLfn, PUBLICATIONDB_STATUSES, encodeRequest, oracleOutputMapping
 
 class PublisherWorker:
     """
@@ -51,7 +52,7 @@ class PublisherWorker:
         self.group = user[1]
         self.role = user[2]
         self.config = config
-        
+
         # This flag is to force calling the publish method (e.g. because the workflow
         # status is terminal) even if regular criteria would say not to call it (e.g.
         # because there was already a publication done recently for this workflow and
@@ -77,16 +78,17 @@ class PublisherWorker:
         self.myproxyServer = 'myproxy.cern.ch'
         self.init = True
         self.userDN = ''
-        self.logger.debug("Trying to get DN")
+        self.cleanEnvironment = 'unset LD_LIBRARY_PATH; unset X509_USER_CERT; unset X509_USER_KEY;'
+        self.logger.debug("Trying to get DN %s" % self.user)
         try:
-            self.userDN = getDNFromUserName(self.user, self.logger)
+            self.userDN = getDNFromUserName(self.user, self.logger, ckey=self.config.opsProxy, cert=self.config.opsProxy)
         except Exception as ex:
             msg = "Error retrieving the user DN"
             msg += str(ex)
             msg += str(traceback.format_exc())
             self.logger.error(msg)
             self.init = False
-            return
+            #return
         defaultDelegation = {'logger': self.logger,
                              'credServerPath': self.config.credentialDir,
                              # It will be moved to be getfrom couchDB
@@ -202,6 +204,12 @@ class PublisherWorker:
         active_user_workflows = []
         unique_user_workflows = []
         now = int(time.time()) - time.timezone
+        
+        try:
+            self.logger.info("RSS start %s: %s" % (os.getpid(), executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
+        except:
+            self.exception("Error logging")
+
         if self.config.isOracle:
             fileDoc = dict()
             fileDoc['asoworker'] = self.config.asoworker
@@ -341,7 +349,7 @@ class PublisherWorker:
             enough_lfn_ready_in_all_datasets = not False in enough_lfn_ready
             # If for any of the datasets there are less than max_files_per_block to publish,
             # check for other conditions to decide whether to publish that dataset or not.
-            data = {'workflow': workflow}
+            data = {'workflow': workflow, 'subresource': 'taskads'}
             if enough_lfn_ready_in_all_datasets:
                 # TODO: Check how often we are on this situation. I suspect it is not so often,
                 # in which case I would remove the 'if enough_lfn_ready_in_all_datasets' and
@@ -372,7 +380,7 @@ class PublisherWorker:
                 except Exception as ex:
                     if self.config.isOracle:
                         self.logger.exception('Error retrieving status from cache.')
-                        return 
+                        continue 
                     else:
                         msg = "Error retrieving status from cache. Fall back to user cache area"
                         msg += str(ex)
@@ -521,6 +529,12 @@ class PublisherWorker:
                                                                                             self.role))
         except Exception as ex:
             self.logger.error("Error during task doc retrieving: %s" %ex)
+
+        gc.collect()
+        try:
+            self.logger.info("RSS stop %s: %s" % (os.getpid(), executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
+        except:
+            self.exception("Error logging")
 
     def mark_good(self, workflow, files):
         """
@@ -843,22 +857,35 @@ class PublisherWorker:
         # check if block contains mixed evt/noevt
         if self.evtLumi:
             for _, lumis in file['runlumi'].iteritems():
-                for _, evt in lumis.iteritems():
-                   if evt == 'None':
-                       self.evtLumi = False
-                       break
+                self.logger.debug("lumis: %s" % lumis)
+                if isinstance(lumis, dict): 
+                    for _, evt in lumis.iteritems():
+                        if evt == 'None':
+                            self.evtLumi = False
+                            break
+                else:
+                    self.evtLumi = False
+                    break
+
 	    self.logger.debug("Check on the presence of evts/lumi: %s" % self.evtLumi)
 
         for run, lumis in file['runlumi'].iteritems():
-            for lumi, evts in lumis.iteritems():
-                if self.evtLumi:
-                    file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run), 'event_count': int(evts)})
-                else:
+            if isinstance(lumis, dict): 
+                for lumi, evts in lumis.iteritems():
+                    if self.evtLumi:
+                        file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run), 'event_count': int(evts)})
+                    else:
+                        file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
+            else:
+                for lumi in lumis:
                     file_lumi_list.append({'lumi_section_num': int(lumi), 'run_num': int(run)})
+                    
 
         nf['file_lumi_list'] = file_lumi_list
         if file.get("md5") != "asda" and file.get("md5") != "NOTSET": # asda is the silly value that MD5 defaults to
             nf['md5'] = file['md5']
+
+        del file_lumi_list
         return nf
 
     def migrateByBlockDBS3(self, workflow, migrateApi, destReadApi, sourceApi, dataset, blocks = None):
@@ -1138,6 +1165,7 @@ class PublisherWorker:
         globalURL = globalURL.replace('caf', 'global')
 
         proxy = os.environ.get("SOCKS5_PROXY")
+        self.logger.debug(wfnamemsg+"SOCKS5: %s" % proxy)
         self.logger.debug(wfnamemsg+"Source API URL: %s" % sourceURL)
         sourceApi = dbsClient.DbsApi(url=sourceURL, proxy=proxy)
         self.logger.debug(wfnamemsg+"Global API URL: %s" % globalURL)
@@ -1226,11 +1254,14 @@ class PublisherWorker:
             empty, primName, procName, tier = dataset.split('/')
 
             primds_config = {'primary_ds_name': primName, 'primary_ds_type': primary_ds_type}
-            msg = "About to insert primary dataset: %s" % (str(primds_config))
-            self.logger.debug(wfnamemsg+msg)
-            destApi.insertPrimaryDataset(primds_config)
-            msg = "Successfully inserted primary dataset %s." % (primName)
-            self.logger.debug(wfnamemsg+msg)
+            try:
+                msg = "About to insert primary dataset: %s" % (str(primds_config))
+                self.logger.debug(wfnamemsg+msg)
+                destApi.insertPrimaryDataset(primds_config)
+                msg = "Successfully inserted primary dataset %s." % (primName)
+                self.logger.debug(wfnamemsg+msg)
+            except:
+                self.logger.exception("We shouldn't be here!!")
 
             # Find all (valid) files already published in this dataset.
             try:
@@ -1299,57 +1330,60 @@ class PublisherWorker:
             # to the destination DBS instance.
             globalParentBlocks = set()
 
-            self.evtLumi = True
-            # Loop over all files to publish.
-            for file in files:
-                # Check if this file was already published and if it is valid.
-                if file['lfn'] not in existingFilesValid:
-                    # We have a file to publish.
-                    # Get the parent files and for each parent file do the following:
-                    # 1) Add it to the list of parent files.
-                    # 2) Find the block to which it belongs and insert that block name in
-                    #    (one of) the set of blocks to be migrated to the destination DBS.
-                    for parentFile in list(file['parents']):
-                        if parentFile not in parentFiles:
-                            parentFiles.add(parentFile)
-                            # Is this parent file already in the destination DBS instance?
-                            # (If yes, then we don't have to migrate this block.)
-                            blocksDict = destReadApi.listBlocks(logical_file_name=parentFile)
-                            if not blocksDict:
-                                # No, this parent file is not in the destination DBS instance.
-                                # Maybe it is in the same DBS instance as the input dataset?
-                                blocksDict = sourceApi.listBlocks(logical_file_name=parentFile)
-                                if blocksDict:
-                                    # Yes, this parent file is in the same DBS instance as the input dataset.
-                                    # Add the corresponding block to the set of blocks from the source DBS
-                                    # instance that have to be migrated to the destination DBS.
-                                    localParentBlocks.add(blocksDict[0]['block_name'])
-                                else:
-                                    # No, this parent file is not in the same DBS instance as input dataset.
-                                    # Maybe it is in global DBS instance?
-                                    blocksDict = globalApi.listBlocks(logical_file_name=parentFile)
+            try:
+                self.evtLumi = True
+                # Loop over all files to publish.
+                for file in files:
+                    # Check if this file was already published and if it is valid.
+                    if file['lfn'] not in existingFilesValid:
+                        # We have a file to publish.
+                        # Get the parent files and for each parent file do the following:
+                        # 1) Add it to the list of parent files.
+                        # 2) Find the block to which it belongs and insert that block name in
+                        #    (one of) the set of blocks to be migrated to the destination DBS.
+                        for parentFile in list(file['parents']):
+                            if parentFile not in parentFiles:
+                                parentFiles.add(parentFile)
+                                # Is this parent file already in the destination DBS instance?
+                                # (If yes, then we don't have to migrate this block.)
+                                blocksDict = destReadApi.listBlocks(logical_file_name=parentFile)
+                                if not blocksDict:
+                                    # No, this parent file is not in the destination DBS instance.
+                                    # Maybe it is in the same DBS instance as the input dataset?
+                                    blocksDict = sourceApi.listBlocks(logical_file_name=parentFile)
                                     if blocksDict:
-                                        # Yes, this parent file is in global DBS instance.
-                                        # Add the corresponding block to the set of blocks from global DBS
+                                        # Yes, this parent file is in the same DBS instance as the input dataset.
+                                        # Add the corresponding block to the set of blocks from the source DBS
                                         # instance that have to be migrated to the destination DBS.
-                                        globalParentBlocks.add(blocksDict[0]['block_name'])
-                            # If this parent file is not in the destination DBS instance, is not
-                            # the source DBS instance, and is not in global DBS instance, then it
-                            # means it is not known to DBS and therefore we can not migrate it.
-                            # Put it in the set of parent files for which migration should be skipped.
-                            if not blocksDict:
-                                parentsToSkip.add(parentFile)
-                        # If this parent file should not be migrated because it is not known to DBS,
-                        # we remove it from the list of parents in the file-to-publish info dictionary
-                        # (so that when publishing, this "parent" file will not appear as a parent).
-                        if parentFile in parentsToSkip:
-                            msg = "Skipping parent file %s, as it doesn't seem to be known to DBS." % (parentFile)
-                            self.logger.info(wfnamemsg+msg)
-                            if parentFile in file['parents']:
-                                file['parents'].remove(parentFile)
-                    # Add this file to the list of files to be published.
-                    dbsFiles.append(self.format_file_3(file))
-                published[dataset].append(file['lfn'])
+                                        localParentBlocks.add(blocksDict[0]['block_name'])
+                                    else:
+                                        # No, this parent file is not in the same DBS instance as input dataset.
+                                        # Maybe it is in global DBS instance?
+                                        blocksDict = globalApi.listBlocks(logical_file_name=parentFile)
+                                        if blocksDict:
+                                            # Yes, this parent file is in global DBS instance.
+                                            # Add the corresponding block to the set of blocks from global DBS
+                                            # instance that have to be migrated to the destination DBS.
+                                            globalParentBlocks.add(blocksDict[0]['block_name'])
+                                # If this parent file is not in the destination DBS instance, is not
+                                # the source DBS instance, and is not in global DBS instance, then it
+                                # means it is not known to DBS and therefore we can not migrate it.
+                                # Put it in the set of parent files for which migration should be skipped.
+                                if not blocksDict:
+                                    parentsToSkip.add(parentFile)
+                            # If this parent file should not be migrated because it is not known to DBS,
+                            # we remove it from the list of parents in the file-to-publish info dictionary
+                            # (so that when publishing, this "parent" file will not appear as a parent).
+                            if parentFile in parentsToSkip:
+                                msg = "Skipping parent file %s, as it doesn't seem to be known to DBS." % (parentFile)
+                                self.logger.info(wfnamemsg+msg)
+                                if parentFile in file['parents']:
+                                    file['parents'].remove(parentFile)
+                        # Add this file to the list of files to be published.
+                        dbsFiles.append(self.format_file_3(file))
+                    published[dataset].append(file['lfn'])
+            except:
+                self.logger.exception("Why here??")
 
             # Print a message with the number of files to publish.
             msg = "Found %d files not already present in DBS which will be published." % (len(dbsFiles))
@@ -1405,23 +1439,28 @@ class PublisherWorker:
                 files_to_publish = dbsFiles[count:count+self.max_files_per_block]
                 try:
                     block_config = {'block_name': block_name, 'origin_site_name': pnn, 'open_for_writing': 0}
-                    msg = "Inserting files %s into block %s." % (len(files_to_publish), block_name)
+                    #msg = "Inserting files %s into block %s." % (len(files_to_publish), block_name)
+                    #self.logger.debug(wfnamemsg+msg)
+
+                    if not self.evtLumi:
+                        for i, files_ in enumerate(files_to_publish):
+                            for j, _ in enumerate(files_['file_lumi_list']):
+                                if 'event_count' in  files_to_publish[i]['file_lumi_list'][j]:
+                                    del files_to_publish[i]['file_lumi_list'][j]['event_count']
+
+                    msg = "Inserting files %s into block %s. With evtLumi=%s" % (len(files_to_publish), block_name, self.evtLumi)
                     self.logger.debug(wfnamemsg+msg)
 
-                    files_to_pub_tmp = []
-                    if not self.evtLumi:
-                        for _file in files_to_publish:
-                            if 'event_count' in _file:
-                                 del _file['event_count']
-                            files_to_pub_tmp.append(_file)
 
                     blockDump = self.createBulkBlock(output_config, processing_era_config,
                                                      primds_config, dataset_config,
                                                      acquisition_era_config, block_config, files_to_publish)
                     #self.logger.debug(wfnamemsg+"Block to insert: %s\n %s" % (blockDump, destApi.__dict__ ))
                     destApi.insertBulkBlock(blockDump)
+                    del files_to_publish
                     block_count += 1
                 except Exception as ex:
+                    self.logger.debug(wfnamemsg+"Block to insert: %s\n %s" % (blockDump, destApi.__dict__ ))
                     self.logger.error("Error for files: %s" % [f['logical_file_name'] for f in files_to_publish])
                     failed[dataset].extend([f['logical_file_name'] for f in files_to_publish])
                     msg = "Error when publishing (%s) " % ", ".join(failed[dataset])
