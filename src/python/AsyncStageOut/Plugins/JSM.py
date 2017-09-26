@@ -59,7 +59,7 @@ class JSM(Source):
             self.logger.debug('No records to determine end time, waiting for next iteration')
         except KeyError:
             self.logger.debug('Could not get results from CouchDB, waiting for next iteration')
-        except Exception, e:
+        except Exception as e:
             self.logger.exception('A problem occured in the JSM Source __call__: %s' % e)
 
         # Little map function to pull out the data we need

@@ -85,7 +85,7 @@ def generate_xml(input):
             f.write(tostring(root))
             os.system('mv %s %s' % (temp_xmllocation, xmllocation))
             break
-        except Exception, e:
+        except Exception as e:
           logger.debug(str(e))
           continue
 
@@ -96,7 +96,7 @@ def generate_xml(input):
         try:
             pu = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             break
-        except Exception, e:
+        except Exception as e:
             logger.debug(str(e))
             maxi = maxi + 1
             continue

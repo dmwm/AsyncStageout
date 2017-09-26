@@ -27,14 +27,14 @@ def reporter(user, config):
     logging.debug("Trying to start the reporter worker")
     try:
         worker = ReporterWorker(user, config)
-    except Exception, e:
+    except Exception as e:
         logging.debug("Reporter Worker cannot be created!:" %e)
         return user
     if worker.init:
         logging.debug("Starting %s" % worker)
         try:
             worker()
-        except Exception, e:
+        except Exception as e:
             logging.debug("Reporter Worker cannot start!:" %e)
             return user
     else:
@@ -69,7 +69,7 @@ class ReporterDaemon(BaseDaemon):
         if not os.path.isdir(self.dropbox_dir):
             try:
                 os.makedirs(self.dropbox_dir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == errno.EEXIST:
                     pass
                 else:

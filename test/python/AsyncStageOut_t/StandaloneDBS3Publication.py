@@ -84,7 +84,7 @@ class TestDBS3Publication(unittest.TestCase):
             outdataset_info = outdataset.split("-")
             outdataset_info[1] += "_%d" % int(time.time())
             outdataset = "-".join(outdataset_info)
-            if toPublish.has_key(outdataset):
+            if outdataset in toPublish:
                 toPublish[outdataset].append(files)
             else:
                 toPublish[outdataset] = []
