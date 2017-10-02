@@ -205,10 +205,6 @@ class PublisherWorker:
         unique_user_workflows = []
         now = int(time.time()) - time.timezone
         
-        try:
-            self.logger.info("RSS start %s: %s" % (os.getpid(), executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
-        except:
-            self.exception("Error logging")
 
         if self.config.isOracle:
             fileDoc = dict()
@@ -531,10 +527,6 @@ class PublisherWorker:
             self.logger.error("Error during task doc retrieving: %s" %ex)
 
         gc.collect()
-        try:
-            self.logger.info("RSS stop %s: %s" % (os.getpid(), executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
-        except:
-            self.exception("Error logging")
 
     def mark_good(self, workflow, files):
         """
@@ -714,8 +706,14 @@ class PublisherWorker:
         lfn_ready_list = []
         for v in lfn_ready.values():
             lfn_ready_list.extend(v)
+
         try:
-            publDescFiles_list = self.getPublDescFiles(workflow)
+            self.logger.info("RSS start %s: %s" % (os.getpid(), executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
+        except:
+            self.exception("Error logging RSS")
+
+        try:
+            publDescFiles_list = self.getPublDescFiles(workflow, lfn_ready_list)
         except (tarfile.ReadError, RuntimeError):
             msg = "Error retrieving publication description files."
             self.logger.error(wfnamemsg+msg)
@@ -726,6 +724,12 @@ class PublisherWorker:
                                            }
                       }
             return retdict
+        
+        try:
+            self.logger.info("RSS stop %s: %s" % (os.getpid(), 
+                                                  executeCommand("ps u -p %s | awk '{sum=sum+$6}; END {print sum/1024}'" % os.getpid())))
+        except:
+            self.exception("Error logging RSS")
         msg = "Number of publication description files: %s" % (len(publDescFiles_list))
         self.logger.info(wfnamemsg+msg)
         # Group the filemetadata according to the output dataset.
@@ -793,7 +797,7 @@ class PublisherWorker:
                            )
         return retdict
 
-    def getPublDescFiles(self, workflow):
+    def getPublDescFiles(self, workflow, lfns):
         """
         Download and read the files describing
         what needs to be published
@@ -802,7 +806,7 @@ class PublisherWorker:
         buf = cStringIO.StringIO()
         # TODO: input sanitization
         header = {"Content-Type ": "application/json"}
-        data = {'taskname': workflow, 'filetype': 'EDM'}
+        data = {'taskname': workflow, 'filetype': 'EDM', 'lfn': lfns}
         url = self.cache_area
         msg = "Retrieving data from %s" % (url)
         self.logger.info(wfnamemsg+msg)

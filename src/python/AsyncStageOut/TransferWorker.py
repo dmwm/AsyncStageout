@@ -562,28 +562,30 @@ class TransferWorker:
             ftsjob_file.close()
             self.logger.debug("%s ready." % fts_job)
             # Prepare Dashboard report
-
-            for lfn in fts_job['LFNs']:
-                lfn_report = dict()
-                lfn_report['FTSJobid'] = fts_job['FTSJobid']
-                index = fts_job['LFNs'].index(lfn)
-                lfn_report['PFN'] = fts_job['PFNs'][index]
-                lfn_report['FTSFileid'] = fts_job['files_id'][index]
-                lfn_report['Workflow'] = jobs_report[link][index][2]
-                lfn_report['JobVersion'] = jobs_report[link][index][1]
-                job_id = '%d_https://glidein.cern.ch/%d/%s_%s' % (int(jobs_report[link][index][0]),
-                                                                  int(jobs_report[link][index][0]),
-                                                                  lfn_report['Workflow'].replace("_", ":"),
-                                                                  lfn_report['JobVersion'])
-                lfn_report['JobId'] = job_id
-                lfn_report['URL'] = self.fts_server_for_transfer
-                self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
-                dash_job_file = open('/tmp/DashboardReport/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']), 'w')
-                jsondata = json.dumps(lfn_report)
-                dash_job_file.write(jsondata)
-                dash_job_file.close()
-                self.logger.debug("%s ready for FTS Dashboard report." % lfn_report)
-            jobReport.append(fts_job)
+            try:
+		    for lfn in fts_job['LFNs']:
+			lfn_report = dict()
+			lfn_report['FTSJobid'] = fts_job['FTSJobid']
+			index = fts_job['LFNs'].index(lfn)
+			lfn_report['PFN'] = fts_job['PFNs'][index]
+			lfn_report['FTSFileid'] = fts_job['files_id'][index]
+			lfn_report['Workflow'] = jobs_report[link][index][2]
+			lfn_report['JobVersion'] = jobs_report[link][index][1]
+			job_id = '%s_https://glidein.cern.ch/%s/%s_%s' % ((jobs_report[link][index][0]),
+									  (jobs_report[link][index][0]),
+									  lfn_report['Workflow'].replace("_", ":"),
+									  lfn_report['JobVersion'])
+			lfn_report['JobId'] = job_id
+			lfn_report['URL'] = self.fts_server_for_transfer
+			self.logger.debug("Creating json file %s in %s for FTS3 Dashboard" % (lfn_report, self.dropbox_dir))
+			dash_job_file = open('/tmp/DashboardReport/Dashboard.%s.json' % getHashLfn(lfn_report['PFN']), 'w')
+			jsondata = json.dumps(lfn_report)
+			dash_job_file.write(jsondata)
+			dash_job_file.close()
+			self.logger.debug("%s ready for FTS Dashboard report." % lfn_report)
+		    jobReport.append(fts_job)
+	    except:
+                self.logger.exception("Wrong lfn lists")
         return jobReport
 
     def validate_copyjob(self, copyjob):
