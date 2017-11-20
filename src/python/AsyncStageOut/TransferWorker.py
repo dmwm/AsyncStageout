@@ -173,6 +173,7 @@ class TransferWorker:
         stdout, stderr, rc = None, None, 99999
         #fts_url_delegation = self.fts_server_for_transfer.replace('8446', '8443')
         if self.user_proxy:
+            jobs_lfn = {}
             try:
                 jobs, jobs_lfn, jobs_pfn, jobs_report = self.files_for_transfer()
                 self.context = fts3.Context(self.fts_server_for_transfer, self.user_proxy, self.user_proxy, verify=True)
@@ -206,11 +207,15 @@ class TransferWorker:
             fileDoc['subresource'] = 'acquiredTransfers'
             fileDoc['grouping'] = 1
             fileDoc['username'] = self.user
+            
             group = self.group
             if self.group == '':
                 group = None
+            
+            role = self.role
             if self.role == '':
                 role = None
+
             fileDoc['vogroup'] = group
             fileDoc['vorole'] = role
             fileDoc['limit'] =  self.config.max_files_per_transfer
