@@ -571,8 +571,8 @@ class TransferWorker:
                 lfn_report['FTSFileid'] = fts_job['files_id'][index]
                 lfn_report['Workflow'] = jobs_report[link][index][2]
                 lfn_report['JobVersion'] = jobs_report[link][index][1]
-                job_id = '%d_https://glidein.cern.ch/%d/%s_%s' % (int(jobs_report[link][index][0]),
-                                                                  int(jobs_report[link][index][0]),
+                job_id = '%s_https://glidein.cern.ch/%s/%s_%s' % (jobs_report[link][index][0],
+                                                                  jobs_report[link][index][0],
                                                                   lfn_report['Workflow'].replace("_", ":"),
                                                                   lfn_report['JobVersion'])
                 lfn_report['JobId'] = job_id
