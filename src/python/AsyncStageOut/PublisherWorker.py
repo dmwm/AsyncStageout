@@ -361,6 +361,7 @@ class PublisherWorker:
                 self.logger.info(wfnamemsg+msg)
                 buf = cStringIO.StringIO()
                 header = {"Content-Type ":"application/json"}
+		failed_status = False
                 try:
                     _, res_ = self.connection.request(url,
                                                       data,
@@ -372,7 +373,7 @@ class PublisherWorker:
                 except Exception as ex:
                     if self.config.isOracle:
                         self.logger.exception('Error retrieving status from cache.')
-                        return 
+                        failed_status = True
                     else:
                         msg = "Error retrieving status from cache. Fall back to user cache area"
                         msg += str(ex)
@@ -401,23 +402,26 @@ class PublisherWorker:
                             msg += str(ex)
                             msg += str(traceback.format_exc())
                             self.logger.error(wfnamemsg+msg)
-                msg = "Status retrieved from cache. Loading task status."
-                self.logger.info(wfnamemsg+msg)
-                try:
-                    buf.close()
-                    res = json.loads(res_)
-                    workflow_status = res['result'][0]['status']
-                    msg = "Task status is %s." % workflow_status
-                    self.logger.info(wfnamemsg+msg)
-                except ValueError:
-                    msg = "Workflow removed from WM."
-                    self.logger.error(wfnamemsg+msg)
-                    workflow_status = 'REMOVED'
-                except Exception as ex:
-                    msg = "Error loading task status!"
-                    msg += str(ex)
-                    msg += str(traceback.format_exc())
-                    self.logger.error(wfnamemsg+msg)
+		if not failed_status:
+		    msg = "Status retrieved from cache. Loading task status."
+		    self.logger.info(wfnamemsg+msg)
+		    try:
+		        buf.close()
+		        res = json.loads(res_)
+		        workflow_status = res['result'][0]['status']
+		        msg = "Task status is %s." % workflow_status
+		        self.logger.info(wfnamemsg+msg)
+		    except ValueError:
+		        msg = "Workflow removed from WM."
+		        self.logger.error(wfnamemsg+msg)
+		        workflow_status = 'REMOVED'
+		    except Exception as ex:
+		        msg = "Error loading task status!"
+		        msg += str(ex)
+		        msg += str(traceback.format_exc())
+		        self.logger.error(wfnamemsg+msg)
+		else:
+		    workflow_status = 'UNKNOWN'
                 # If the workflow status is terminal, go ahead and publish all the ready files
                 # in the workflow.
                 if workflow_status in ['COMPLETED', 'FAILED', 'KILLED', 'REMOVED']:
