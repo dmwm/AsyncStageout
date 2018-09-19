@@ -9,13 +9,14 @@ import os
 import sys
 import json
 import time
-import pycurl 
+import pycurl
 import urllib
 import urllib2
 import httplib
 import logging
 import datetime
 import subprocess
+import requests
 from urlparse import urljoin
 from socket import gethostname
 from optparse import OptionParser
@@ -24,123 +25,49 @@ from RESTInteractions import HTTPRequests
 from ServerUtilities import encodeRequest, oracleOutputMapping
 from ServerUtilities import TRANSFERDB_STATES, PUBLICATIONDB_STATES
 
+def send(document):
+    return requests.post('http://monit-metrics:10012/', data=json.dumps(document), headers={ "Content-Type": "application/json; charset=UTF-8"})
 
-def check_availability():
-    """put here your availability logic, """
-    return 1
+def send_and_check(document, should_fail=False):
+    response = send(document)
+    assert( (response.status_code in [200]) != should_fail), 'With document: {0}. Status code: {1}. Message: {2}'.format(document, response.status_code, response.text)
 
-def generate_xml(input):
-    from xml.etree.ElementTree import Element, SubElement, tostring
-    from pprint import pprint
-    xmllocation = './ASO_XML_Report.xml'
-    logger = logging.getLogger()
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(module)s %(message)s",
-                                  datefmt="%a, %d %b %Y %H:%M:%S %Z(%z)")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-
-    root = Element('serviceupdate')
-    root.set( "xmlns",  "http://sls.cern.ch/SLS/XML/update")
-    child = SubElement(root, "id")  
-
-    # change this to a name which you will use in kibana queries(for example vocms031 or any other name)
-    # or just uncomment next line to use the hostname of the machine which is running this script
-    # child.text = gethostname().split('.')[0]
-    child.text = "oramon-testbed" 
-
-    fmt = "%Y-%m-%dT%H:%M:%S%z"
-    now_utc = datetime.datetime.now().strftime(fmt)
-    child_timestamp = SubElement(root, "timestamp")
-    child_timestamp.text = str(now_utc)
-
-    child_status = SubElement(root,"status")
-    
-    # when you have a way to calculate the availability for your service
-    # change the function check_availability, for now it will
-    # always return 1(available)
-    if check_availability() == 1:
-        # This means that everything is fine
-        child_status.text = "available"
-    else:
-        child_status.text = "degraded"
-
-    # now put all numeric values her
-    data = SubElement(root, "data")
-
-    for key in input.keys():
-      if isinstance(input[key],dict):
-         for skey in input[key]:
-           nName="%s_%s"%(key,skey)
-           nValue=input[key][skey]
-           numericval = SubElement(data, "numericvalue")
-           numericval.set("name",nName)
-           numericval.text = str(nValue)
-
-    temp_xmllocation = xmllocation + ".temp"
-    while True:
-        try:
-          with open(temp_xmllocation, 'w') as f:
-            f.write(tostring(root))
-            os.system('mv %s %s' % (temp_xmllocation, xmllocation))
-            break
-        except Exception, e:
-          logger.debug(str(e))
-          continue
-
-    # push the XML to elasticSearch
-    maxi = 0
-    while maxi < 3:
-        cmd = "curl -i -F file=@%s xsls.cern.ch"%xmllocation
-        try:
-            pu = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            break
-        except Exception, e:
-            logger.debug(str(e))
-            maxi = maxi + 1
-            continue
 
 if __name__ == "__main__":
-    server = HTTPRequests('cmsweb-testbed.cern.ch',
+    server = HTTPRequests('cmsweb.cern.ch',
                           '/data/srv/asyncstageout/state/asyncstageout/creds/OpsProxy',
                           '/data/srv/asyncstageout/state/asyncstageout/creds/OpsProxy')
 
-    result = server.get('/crabserver/preprod/filetransfers', 
+    result = server.get('/crabserver/prod/filetransfers', 
                         data=encodeRequest({'subresource': 'groupedTransferStatistics', 'grouping': 0}))
 
     results = oracleOutputMapping(result)
 
+    tmp = {
+        'producer': 'crab',
+        'type': 'aso_total',
+        'hostname': gethostname(),
+        'transfers':{ 'DONE':{'count':0,'size':0}, 'ACQUIRED':{'count':0,'size':0}, 'SUBMITTED':{'count':0,'size':0}, 'FAILED':{'count':0,'size':0}, 'RETRY':{'count':0,'size':0} }, 
+        'publications':{'DONE':{'count':0}, 'ACQUIRED':{'count':0}, 'NEW':{'count':0}, 'FAILED':{'count':0}, 'RETRY':{'count':0}}
+    }
+    status=tmp
 
-    status = {'transfers':{}, 'publications':{}}
-    tmp = {'transfers':{ 'DONE':0, 'ACQUIRED':0, 'SUBMITTED':0, 'FAILED':0, 'RETRY':0 }, 
-           'publications':{'DONE':0, 'ACQUIRED':0, 'NEW':0, 'FAILED':0, 'RETRY':0}}
-
-    #past = open("tmp_transfer")
-    #tmp = json.load(past)
-
-    for doc in results:
-        if doc['aso_worker']=="asodciangot1":
-            if 'transfers' in tmp and TRANSFERDB_STATES[doc['transfer_state']] in tmp['transfers']:
-                status['transfers'][TRANSFERDB_STATES[doc['transfer_state']]] = - tmp['transfers'][TRANSFERDB_STATES[doc['transfer_state']]] + doc['nt']
-                tmp['transfers'][TRANSFERDB_STATES[doc['transfer_state']]] = doc['nt']
-            else:
-                status['transfers'][TRANSFERDB_STATES[doc['transfer_state']]] = doc['nt']
-                tmp['transfers'][TRANSFERDB_STATES[doc['transfer_state']]] = doc['nt']
-
-    result = server.get('/crabserver/preprod/filetransfers',
-                        data=encodeRequest({'subresource': 'groupedPublishStatistics', 'grouping': 0}))
-
-    results = oracleOutputMapping(result)
 
     for doc in results:
-        if doc['aso_worker']=="asodciangot1":
-            if 'publications' in tmp and PUBLICATIONDB_STATES[doc['publication_state']] in tmp['publications']:
-                status['publications'][PUBLICATIONDB_STATES[doc['publication_state']]] = -tmp['publications'][PUBLICATIONDB_STATES[doc['publication_state']]] + doc['nt']
-                tmp['publications'][PUBLICATIONDB_STATES[doc['publication_state']]] = doc['nt']
-            else:
-                status['publications'][PUBLICATIONDB_STATES[doc['publication_state']]] = doc['nt']
-                tmp['publications'][PUBLICATIONDB_STATES[doc['publication_state']]] = doc['nt']
+        if doc['aso_worker']=="asoprod1":
+            status['transfers'][TRANSFERDB_STATES[doc['transfer_state']]]['count'] = doc['nt']
+            tmp['transfers'][TRANSFERDB_STATES[doc['transfer_state']]]['count'] = doc['nt']
+
+    #result = server.get('/crabserver/prod/filetransfers',
+    #                        data=encodeRequest({'subresource': 'groupedPublishStatistics', 'grouping': 0}))
+
+    #results = oracleOutputMapping(result)
+    #print(results)
+
+    #for doc in results:
+    #    if doc['aso_worker']=="asoprod1" and not PUBLICATIONDB_STATES[doc['publication_state']]=="NOT_REQUIRED":
+    #        status['publications'][PUBLICATIONDB_STATES[doc['publication_state']]]['count'] = doc['nt']
+    #        tmp['publications'][PUBLICATIONDB_STATES[doc['publication_state']]]['count'] = doc['nt']
 
     #past.close()
     while True:
@@ -153,9 +80,9 @@ if __name__ == "__main__":
             print(ex)
             continue
 
-    print (status)
-
-    generate_xml(tmp)
-
+    print (json.dumps([tmp]))
+    try:
+        send_and_check([tmp])
+    except Exception as ex:
+        print(ex)
     sys.exit(0)
-
