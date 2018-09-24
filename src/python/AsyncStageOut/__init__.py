@@ -4,7 +4,7 @@ import logging
 import hashlib
 import subprocess
 
-from WMCore.Services.SiteDB.SiteDB import SiteDBJSON
+from WMCore.Services.CRIC.CRIC import CRIC
 from WMCore.Credential.Proxy import Proxy
 
 __version__ = '1.0.3'
@@ -47,17 +47,19 @@ def execute_command(command):
 
 def getDNFromUserName(username, log, ckey = None, cert = None):
     """
-    Parse site string to know the fts server to use
+    beware that CRIC does not allow to pass key/cert in theconfig
+    need to set X509_USER_CERT/KEY as proper.
+    Maybe can use newX509env() from CRAB ServerUtilities.py ?
     """
     dn = ''
-    site_db = SiteDBJSON(config={'key': ckey, 'cert': cert})
+    cric = CRIC(logger=log)
     try:
        dn = site_db.userNameDn(username)
     except IndexError:
        log.error("user does not exist")
        return dn
     except RuntimeError:
-       log.error("SiteDB URL cannot be accessed")
+       log.error("CRIC URL cannot be accessed")
        return dn
     return dn
 
