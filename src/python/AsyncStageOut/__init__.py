@@ -4,8 +4,8 @@ import logging
 import hashlib
 import subprocess
 
-from WMCore.Services.SiteDB.SiteDB import SiteDBJSON
 from WMCore.Credential.Proxy import Proxy
+from AsyncStageout.CRICforASO import CRIC
 
 __version__ = '1.0.3'
 
@@ -50,9 +50,9 @@ def getDNFromUserName(username, log, ckey = None, cert = None):
     Parse site string to know the fts server to use
     """
     dn = ''
-    site_db = SiteDBJSON(config={'key': ckey, 'cert': cert})
+    resourceCatolog=CRIC()
     try:
-       dn = site_db.userNameDn(username)
+       dn = resourceCatalog.userNameDn(username)
     except IndexError:
        log.error("user does not exist")
        return dn
